@@ -24,7 +24,21 @@ export async function getAnnexes(
 
     const json = JSON.parse(jsonText)
 
-    const annexList = json?.별표서식 || []
+    // LexDiff 방식: licBylSearch 또는 admRulBylSearch 구조
+    const searchResult = json?.admRulBylSearch || json?.licBylSearch
+
+    if (!searchResult) {
+      return {
+        content: [{
+          type: "text",
+          text: `"${input.lawName}"에 대한 별표/서식이 없습니다.`
+        }]
+      }
+    }
+
+    // 법령 종류에 따라 배열 추출
+    // licbyl: 일반 법령, ordinbyl: 조례, admbyl: 행정규칙
+    const annexList = searchResult.licbyl || searchResult.ordinbyl || searchResult.admbyl || []
 
     if (!Array.isArray(annexList) || annexList.length === 0) {
       return {
@@ -49,9 +63,11 @@ export async function getAnnexes(
     for (let i = 0; i < maxItems; i++) {
       const annex = annexList[i]
 
-      const annexTitle = annex.별표서식명 || annex.제목 || "제목 없음"
-      const annexType = annex.구분 || ""
-      const annexNum = annex.번호 || ""
+      // LexDiff 필드명: 별표명, 별표번호, 별표종류
+      const annexTitle = annex.별표명 || annex.별표서식명 || annex.제목 || "제목 없음"
+      const annexType = annex.별표종류 || annex.구분 || ""
+      const annexNum = annex.별표번호 || annex.번호 || ""
+      const fileLink = annex.별표서식파일링크 || annex.별표서식PDF파일링크
 
       resultText += `${i + 1}. `
       if (annexNum) resultText += `[${annexNum}] `
@@ -59,20 +75,16 @@ export async function getAnnexes(
       if (annexType) resultText += ` (${annexType})`
       resultText += `\n`
 
-      // 내용 미리보기
-      if (annex.내용) {
-        const preview = annex.내용
-          .replace(/<[^>]+>/g, '')
-          .replace(/&nbsp;/g, ' ')
-          .replace(/&lt;/g, '<')
-          .replace(/&gt;/g, '>')
-          .replace(/&amp;/g, '&')
-          .trim()
-          .substring(0, 100)
+      // 파일 링크 표시
+      if (fileLink) {
+        resultText += `   📎 파일: ${fileLink}\n`
+      }
 
-        if (preview) {
-          resultText += `   ${preview}...\n`
-        }
+      // 관련 법령명 표시
+      const relatedLaw = annex.관련법령명 || annex.관련자치법규명 || annex.관련행정규칙명
+      if (relatedLaw) {
+        const cleanLawName = relatedLaw.replace(/<[^>]+>/g, '')
+        resultText += `   📚 관련법령: ${cleanLawName}\n`
       }
 
       resultText += `\n`
