@@ -21,6 +21,11 @@ import { getThreeTier, GetThreeTierSchema } from "./tools/three-tier.js"
 import { searchAdminRule, SearchAdminRuleSchema, getAdminRule, GetAdminRuleSchema } from "./tools/admin-rule.js"
 import { getAnnexes, GetAnnexesSchema } from "./tools/annex.js"
 import { getOrdinance, GetOrdinanceSchema } from "./tools/ordinance.js"
+import { searchOrdinance, SearchOrdinanceSchema } from "./tools/ordinance-search.js"
+import { compareArticles, CompareArticlesSchema } from "./tools/article-compare.js"
+import { getLawTree, GetLawTreeSchema } from "./tools/law-tree.js"
+import { searchAll, SearchAllSchema } from "./tools/search-all.js"
+import { suggestLawNames, SuggestLawNamesSchema } from "./tools/autocomplete.js"
 import { searchPrecedents, searchPrecedentsSchema, getPrecedentText, getPrecedentTextSchema } from "./tools/precedents.js"
 import { searchInterpretations, searchInterpretationsSchema, getInterpretationText, getInterpretationTextSchema } from "./tools/interpretations.js"
 import { startSSEServer } from "./server/sse-server.js"
@@ -240,6 +245,124 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         }
       },
       {
+        name: "search_ordinance",
+        description: "자치법규(조례, 규칙)를 검색합니다. 지역별, 키워드별로 검색 가능합니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "검색할 자치법규명 (예: '서울', '환경')"
+            },
+            display: {
+              type: "number",
+              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              default: 20
+            }
+          },
+          required: ["query"]
+        }
+      },
+      {
+        name: "compare_articles",
+        description: "두 법령의 특정 조문을 비교합니다. 법률 실무에서 유용하게 사용할 수 있습니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            law1: {
+              type: "object",
+              description: "첫 번째 법령 정보",
+              properties: {
+                mst: {
+                  type: "string",
+                  description: "법령일련번호"
+                },
+                lawId: {
+                  type: "string",
+                  description: "법령ID"
+                },
+                jo: {
+                  type: "string",
+                  description: "조문 번호 (예: '제38조')"
+                }
+              },
+              required: ["jo"]
+            },
+            law2: {
+              type: "object",
+              description: "두 번째 법령 정보",
+              properties: {
+                mst: {
+                  type: "string",
+                  description: "법령일련번호"
+                },
+                lawId: {
+                  type: "string",
+                  description: "법령ID"
+                },
+                jo: {
+                  type: "string",
+                  description: "조문 번호 (예: '제25조')"
+                }
+              },
+              required: ["jo"]
+            }
+          },
+          required: ["law1", "law2"]
+        }
+      },
+      {
+        name: "get_law_tree",
+        description: "법령의 트리 구조를 시각화합니다. 법률→시행령→시행규칙의 계층 관계를 보여줍니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            mst: {
+              type: "string",
+              description: "법령일련번호"
+            },
+            lawId: {
+              type: "string",
+              description: "법령ID"
+            }
+          },
+          required: []
+        }
+      },
+      {
+        name: "search_all",
+        description: "법령, 행정규칙, 자치법규를 한번에 통합 검색합니다. 여러 유형의 법령을 동시에 찾고 싶을 때 사용합니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "검색할 키워드"
+            },
+            maxResults: {
+              type: "number",
+              description: "각 유형별 최대 결과 개수 (기본값: 10)",
+              default: 10
+            }
+          },
+          required: ["query"]
+        }
+      },
+      {
+        name: "suggest_law_names",
+        description: "법령명 자동완성 제안. 부분 입력된 법령명으로 가능한 법령 목록을 제안합니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            partial: {
+              type: "string",
+              description: "부분 입력된 법령명 (예: '관세', '환경')"
+            }
+          },
+          required: ["partial"]
+        }
+      },
+      {
         name: "search_precedents",
         description: "판례를 검색합니다. 키워드, 법원명, 사건번호로 검색 가능합니다.",
         inputSchema: {
@@ -394,6 +517,31 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "get_ordinance": {
         const input = GetOrdinanceSchema.parse(args)
         return await getOrdinance(apiClient, input)
+      }
+
+      case "search_ordinance": {
+        const input = SearchOrdinanceSchema.parse(args)
+        return await searchOrdinance(apiClient, input)
+      }
+
+      case "compare_articles": {
+        const input = CompareArticlesSchema.parse(args)
+        return await compareArticles(apiClient, input)
+      }
+
+      case "get_law_tree": {
+        const input = GetLawTreeSchema.parse(args)
+        return await getLawTree(apiClient, input)
+      }
+
+      case "search_all": {
+        const input = SearchAllSchema.parse(args)
+        return await searchAll(apiClient, input)
+      }
+
+      case "suggest_law_names": {
+        const input = SuggestLawNamesSchema.parse(args)
+        return await suggestLawNames(apiClient, input)
       }
 
       case "search_precedents": {
