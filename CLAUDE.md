@@ -13,6 +13,8 @@ Korean Law MCP Server - 국가법령정보센터(법제처) API 기반 Model Con
 - Article text retrieval with automatic article number conversion (제38조 → 003800)
 - Old-new law comparison (신구법 대조)
 - Three-tier delegation mapping (법률→시행령→시행규칙)
+- Precedent search and retrieval (판례 검색 및 전문 조회)
+- Legal interpretation search and retrieval (법령해석례 검색 및 전문 조회)
 
 ## Development Commands
 
@@ -50,7 +52,7 @@ npx @modelcontextprotocol/inspector build/index.js
 ### Core Components
 
 **Entry Point** ([src/index.ts](src/index.ts)):
-- Initializes MCP server with 9 tools
+- Initializes MCP server with 13 tools
 - Supports dual transport modes: STDIO (local) and SSE (remote)
 - Parses CLI arguments to determine mode
 
@@ -68,6 +70,8 @@ npx @modelcontextprotocol/inspector build/index.js
 - `admin-rule.ts`: Administrative rule search and retrieval
 - `annex.ts`: Annexes and forms retrieval
 - `ordinance.ts`: Local ordinances retrieval
+- `precedents.ts`: Precedent (case law) search and full text retrieval
+- `interpretations.ts`: Legal interpretation search and full text retrieval
 - `utils.ts`: JO code conversion utility
 
 **Data Normalization** ([src/lib/](src/lib/)):
@@ -153,6 +157,10 @@ Add to `claude_desktop_config.json`:
 - `getLawText`: Returns JSON
 - `compareOldNew`: Returns XML
 - `getThreeTier`: Returns JSON
+- `searchPrecedents`: Returns XML (custom parser in precedents.ts)
+- `getPrecedentText`: Returns JSON
+- `searchInterpretations`: Returns XML (custom parser in interpretations.ts)
+- `getInterpretationText`: Returns JSON
 
 ### Error Handling
 - API client checks for HTML error pages disguised as responses

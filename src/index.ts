@@ -21,6 +21,8 @@ import { getThreeTier, GetThreeTierSchema } from "./tools/three-tier.js"
 import { searchAdminRule, SearchAdminRuleSchema, getAdminRule, GetAdminRuleSchema } from "./tools/admin-rule.js"
 import { getAnnexes, GetAnnexesSchema } from "./tools/annex.js"
 import { getOrdinance, GetOrdinanceSchema } from "./tools/ordinance.js"
+import { searchPrecedents, searchPrecedentsSchema, getPrecedentText, getPrecedentTextSchema } from "./tools/precedents.js"
+import { searchInterpretations, searchInterpretationsSchema, getInterpretationText, getInterpretationTextSchema } from "./tools/interpretations.js"
 import { startSSEServer } from "./server/sse-server.js"
 
 // 환경변수 확인
@@ -236,6 +238,108 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ["ordinSeq"]
         }
+      },
+      {
+        name: "search_precedents",
+        description: "판례를 검색합니다. 키워드, 법원명, 사건번호로 검색 가능합니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "검색 키워드 (예: '자동차', '담보권')"
+            },
+            court: {
+              type: "string",
+              description: "법원명 필터 (예: '대법원', '서울고등법원')"
+            },
+            caseNumber: {
+              type: "string",
+              description: "사건번호 (예: '2009느합133')"
+            },
+            display: {
+              type: "number",
+              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              default: 20
+            },
+            page: {
+              type: "number",
+              description: "페이지 번호 (기본값: 1)",
+              default: 1
+            },
+            sort: {
+              type: "string",
+              enum: ["lasc", "ldes", "dasc", "ddes", "nasc", "ndes"],
+              description: "정렬 옵션"
+            }
+          },
+          required: []
+        }
+      },
+      {
+        name: "get_precedent_text",
+        description: "판례의 전문을 조회합니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description: "판례일련번호 (search_precedents에서 획득)"
+            },
+            caseName: {
+              type: "string",
+              description: "판례명 (선택사항, 검증용)"
+            }
+          },
+          required: ["id"]
+        }
+      },
+      {
+        name: "search_interpretations",
+        description: "법령해석례를 검색합니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "검색 키워드 (예: '자동차', '근로기준법')"
+            },
+            display: {
+              type: "number",
+              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              default: 20
+            },
+            page: {
+              type: "number",
+              description: "페이지 번호 (기본값: 1)",
+              default: 1
+            },
+            sort: {
+              type: "string",
+              enum: ["lasc", "ldes", "dasc", "ddes", "nasc", "ndes"],
+              description: "정렬 옵션"
+            }
+          },
+          required: ["query"]
+        }
+      },
+      {
+        name: "get_interpretation_text",
+        description: "법령해석례의 전문을 조회합니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description: "법령해석례일련번호 (search_interpretations에서 획득)"
+            },
+            caseName: {
+              type: "string",
+              description: "안건명 (선택사항, 검증용)"
+            }
+          },
+          required: ["id"]
+        }
       }
     ]
   }
@@ -290,6 +394,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "get_ordinance": {
         const input = GetOrdinanceSchema.parse(args)
         return await getOrdinance(apiClient, input)
+      }
+
+      case "search_precedents": {
+        const input = searchPrecedentsSchema.parse(args)
+        return await searchPrecedents(apiClient, input)
+      }
+
+      case "get_precedent_text": {
+        const input = getPrecedentTextSchema.parse(args)
+        return await getPrecedentText(apiClient, input)
+      }
+
+      case "search_interpretations": {
+        const input = searchInterpretationsSchema.parse(args)
+        return await searchInterpretations(apiClient, input)
+      }
+
+      case "get_interpretation_text": {
+        const input = getInterpretationTextSchema.parse(args)
+        return await getInterpretationText(apiClient, input)
       }
 
       default:
