@@ -1,0 +1,50 @@
+{
+  "name": "korean-law-mcp",
+  "version": "1.0.0",
+  "description": "국가법령정보센터 API 기반 MCP 서버 - 한국 법령 조회·비교 도구",
+  "type": "module",
+  "main": "build/index.js",
+  "bin": {
+    "korean-law-mcp": "./build/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "start": "node build/index.js",
+    "start:sse": "node build/index.js --mode sse --port 3000",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "korean-law",
+    "법령",
+    "관세법",
+    "claude",
+    "model-context-protocol"
+  ],
+  "author": "Chris",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "@xmldom/xmldom": "^0.9.5",
+    "express": "^4.21.2",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3"
+  },
+  "files": [
+    "build",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/korean-law-mcp"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
