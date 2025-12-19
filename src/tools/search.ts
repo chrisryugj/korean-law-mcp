@@ -5,6 +5,7 @@
 import { z } from "zod"
 import { DOMParser } from "@xmldom/xmldom"
 import type { LawApiClient } from "../lib/api-client.js"
+import { lawCache } from "../lib/cache.js"
 
 export const SearchLawSchema = z.object({
   query: z.string().describe("검색할 법령명 (예: '관세법', 'fta특례법', '화관법')"),
@@ -18,6 +19,18 @@ export async function searchLaw(
   input: SearchLawInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
+    // Check cache first (search results cached for 1 hour)
+    const cacheKey = `search:${input.query.toLowerCase().trim()}:${input.maxResults}`
+    const cached = lawCache.get<string>(cacheKey)
+    if (cached) {
+      return {
+        content: [{
+          type: "text",
+          text: cached
+        }]
+      }
+    }
+
     const xmlText = await apiClient.searchLaw(input.query)
 
     const parser = new DOMParser()
@@ -55,6 +68,9 @@ export async function searchLaw(
     }
 
     resultText += `\n💡 특정 조문을 조회하려면 get_law_text Tool을 사용하세요.`
+
+    // Cache the result (1 hour TTL)
+    lawCache.set(cacheKey, resultText, 60 * 60 * 1000)
 
     return {
       content: [{

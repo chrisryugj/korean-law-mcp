@@ -1,5 +1,6 @@
 /**
- * get_law_text Tool - 법령 조문 조회
+ * get_batch_articles Tool - 여러 조문 한번에 조회
+ * 법령 전문을 가져온 뒤 여러 조문을 추출
  */
 
 import { z } from "zod"
@@ -7,61 +8,40 @@ import type { LawApiClient } from "../lib/api-client.js"
 import { buildJO } from "../lib/law-parser.js"
 import { lawCache } from "../lib/cache.js"
 
-export const GetLawTextSchema = z.object({
-  mst: z.string().optional().describe("법령일련번호 (search_law에서 획득)"),
-  lawId: z.string().optional().describe("법령ID (search_law에서 획득)"),
-  jo: z.string().optional().describe("조문 번호 (예: '제38조' 또는 '003800')"),
+export const GetBatchArticlesSchema = z.object({
+  mst: z.string().optional().describe("법령일련번호"),
+  lawId: z.string().optional().describe("법령ID"),
+  articles: z.array(z.string()).describe("조문 번호 배열 (예: ['제38조', '제39조', '제40조'])"),
   efYd: z.string().optional().describe("시행일자 (YYYYMMDD 형식)")
 }).refine(data => data.mst || data.lawId, {
   message: "mst 또는 lawId 중 하나는 필수입니다"
 })
 
-export type GetLawTextInput = z.infer<typeof GetLawTextSchema>
+export type GetBatchArticlesInput = z.infer<typeof GetBatchArticlesSchema>
 
-export async function getLawText(
+export async function getBatchArticles(
   apiClient: LawApiClient,
-  input: GetLawTextInput
+  input: GetBatchArticlesInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    // 조문 번호가 한글이면 JO 코드로 변환
-    let joCode = input.jo
-    if (joCode && /제\d+조/.test(joCode)) {
-      try {
-        joCode = buildJO(joCode)
-      } catch (e) {
-        return {
-          content: [{
-            type: "text",
-            text: `조문 번호 변환 실패: ${e instanceof Error ? e.message : String(e)}`
-          }],
-          isError: true
-        }
-      }
-    }
+    // 법령 전문 조회 (캐싱 활용)
+    const cacheKey = `lawtext:${input.mst || input.lawId}:full:${input.efYd || ''}`
+    let fullLawData: any
 
-    // Check cache first
-    const cacheKey = `lawtext:${input.mst || input.lawId}:${joCode || 'full'}:${input.efYd || ''}`
-    const cached = lawCache.get<string>(cacheKey)
+    const cached = lawCache.get<any>(cacheKey)
     if (cached) {
-      return {
-        content: [{
-          type: "text",
-          text: cached
-        }]
-      }
+      fullLawData = cached
+    } else {
+      const jsonText = await apiClient.getLawText({
+        mst: input.mst,
+        lawId: input.lawId,
+        efYd: input.efYd
+      })
+      fullLawData = JSON.parse(jsonText)
+      lawCache.set(cacheKey, fullLawData)
     }
 
-    const jsonText = await apiClient.getLawText({
-      mst: input.mst,
-      lawId: input.lawId,
-      jo: joCode,
-      efYd: input.efYd
-    })
-
-    const json = JSON.parse(jsonText)
-
-    // JSON 구조 파싱 (LexDiff 방식 적용)
-    const lawData = json?.법령
+    const lawData = fullLawData?.법령
     if (!lawData) {
       return {
         content: [{
@@ -74,35 +54,48 @@ export async function getLawText(
 
     const basicInfo = lawData.기본정보 || lawData
     const lawName = basicInfo?.법령명_한글 || basicInfo?.법령명한글 || basicInfo?.법령명 || "알 수 없음"
-    const promDate = basicInfo?.공포일자 || ""
-    const effDate = basicInfo?.시행일자 || basicInfo?.최종시행일자 || ""
 
-    let resultText = `법령명: ${lawName}\n`
-    if (promDate) resultText += `공포일: ${promDate}\n`
-    if (effDate) resultText += `시행일: ${effDate}\n`
-    resultText += `\n`
+    // 조문 번호를 JO 코드로 변환
+    const joCodes = new Set<string>()
+    for (const article of input.articles) {
+      try {
+        const joCode = buildJO(article)
+        joCodes.add(joCode)
+      } catch (e) {
+        return {
+          content: [{
+            type: "text",
+            text: `조문 번호 변환 실패 (${article}): ${e instanceof Error ? e.message : String(e)}`
+          }],
+          isError: true
+        }
+      }
+    }
 
-    // 조문 내용 추출 (정확한 경로: 법령.조문.조문단위)
-    // 주의: 조문단위는 배열 또는 객체일 수 있음
+    // 조문 추출
     const rawUnits = lawData.조문?.조문단위
     let articleUnits: any[] = []
 
     if (Array.isArray(rawUnits)) {
       articleUnits = rawUnits
     } else if (rawUnits && typeof rawUnits === 'object') {
-      articleUnits = [rawUnits]  // 단일 객체를 배열로 변환
+      articleUnits = [rawUnits]
     }
 
     if (articleUnits.length === 0) {
       return {
         content: [{
           type: "text",
-          text: resultText + "조문 내용을 찾을 수 없습니다."
-        }]
+          text: "조문 내용을 찾을 수 없습니다."
+        }],
+        isError: true
       }
     }
 
-    // Helper: 중첩 배열 평탄화 후 문자열 결합 (<img> 태그 제외)
+    let resultText = `법령명: ${lawName}\n`
+    resultText += `조회 조문: ${input.articles.join(', ')}\n\n`
+
+    // Helper functions (from law-text.ts)
     const flattenContent = (value: any): string => {
       if (typeof value === "string") return value
       if (!Array.isArray(value)) return ""
@@ -110,7 +103,6 @@ export async function getLawText(
       const result: string[] = []
       for (const item of value) {
         if (typeof item === "string") {
-          // <img> 태그만 제외 (표 테두리는 유지)
           if (!item.startsWith("<img") && !item.startsWith("</img")) {
             result.push(item)
           }
@@ -121,12 +113,10 @@ export async function getLawText(
       return result.join("\n")
     }
 
-    // Helper: 항 배열에서 내용 추출 (재귀적으로 호/목 처리)
     const extractHangContent = (hangArray: any[]): string => {
       let content = ""
 
       for (const hang of hangArray) {
-        // 항내용 추출
         if (hang.항내용) {
           const hangContent = flattenContent(hang.항내용)
           if (hangContent) {
@@ -134,7 +124,6 @@ export async function getLawText(
           }
         }
 
-        // 호 (items) 처리
         if (hang.호 && Array.isArray(hang.호)) {
           for (const ho of hang.호) {
             if (ho.호내용) {
@@ -144,7 +133,6 @@ export async function getLawText(
               }
             }
 
-            // 목 (sub-items) 처리
             if (ho.목 && Array.isArray(ho.목)) {
               for (const mok of ho.목) {
                 if (mok.목내용) {
@@ -162,7 +150,6 @@ export async function getLawText(
       return content
     }
 
-    // HTML 정리 함수
     const cleanHtml = (text: string): string => {
       return text
         .replace(/<[^>]+>/g, '')
@@ -174,12 +161,21 @@ export async function getLawText(
         .trim()
     }
 
+    // 요청된 조문만 필터링
+    let foundCount = 0
     for (const unit of articleUnits) {
-      // 조문 여부 확인
       if (unit.조문여부 !== "조문") continue
 
       const joNum = unit.조문번호 || ""
       const joBranch = unit.조문가지번호 || ""
+
+      // JO 코드 생성
+      const unitJoCode = joNum.padStart(4, '0') + (joBranch || '00').padStart(2, '0')
+
+      // 요청된 조문인지 확인
+      if (!joCodes.has(unitJoCode)) continue
+
+      foundCount++
       const joTitle = unit.조문제목 || ""
 
       // 조문 헤더 출력
@@ -190,14 +186,13 @@ export async function getLawText(
         resultText += `\n`
       }
 
-      // STEP 1: 조문내용 추출 (본문)
+      // 조문 내용 추출
       let mainContent = ""
       const rawContent = unit.조문내용
 
       if (rawContent) {
         const contentStr = flattenContent(rawContent)
         if (contentStr) {
-          // 제목 패턴 제거: 제X조(제목) 형식
           const headerMatch = contentStr.match(/^(제\d+조(?:의\d+)?\s*(?:\([^)]+\))?)[\s\S]*/)
           if (headerMatch) {
             const bodyPart = contentStr.substring(headerMatch[1].length).trim()
@@ -208,13 +203,13 @@ export async function getLawText(
         }
       }
 
-      // STEP 2: 항/호/목 내용 추출
+      // 항/호/목 내용 추출
       let paraContent = ""
       if (unit.항 && Array.isArray(unit.항)) {
         paraContent = extractHangContent(unit.항)
       }
 
-      // STEP 3: 본문 + 항/호/목 결합
+      // 본문 + 항/호/목 결합
       let finalContent = ""
       if (mainContent) {
         finalContent = mainContent
@@ -232,8 +227,11 @@ export async function getLawText(
       }
     }
 
-    // Cache the result
-    lawCache.set(cacheKey, resultText)
+    if (foundCount === 0) {
+      resultText += "요청한 조문을 찾을 수 없습니다."
+    } else if (foundCount < input.articles.length) {
+      resultText += `\n⚠️ ${input.articles.length}개 중 ${foundCount}개 조문만 찾았습니다.`
+    }
 
     return {
       content: [{

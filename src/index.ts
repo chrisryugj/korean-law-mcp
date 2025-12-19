@@ -28,6 +28,8 @@ import { searchAll, SearchAllSchema } from "./tools/search-all.js"
 import { suggestLawNames, SuggestLawNamesSchema } from "./tools/autocomplete.js"
 import { searchPrecedents, searchPrecedentsSchema, getPrecedentText, getPrecedentTextSchema } from "./tools/precedents.js"
 import { searchInterpretations, searchInterpretationsSchema, getInterpretationText, getInterpretationTextSchema } from "./tools/interpretations.js"
+import { getBatchArticles, GetBatchArticlesSchema } from "./tools/batch-articles.js"
+import { getArticleWithPrecedents, GetArticleWithPrecedentsSchema } from "./tools/article-with-precedents.js"
 import { startSSEServer } from "./server/sse-server.js"
 
 // 환경변수 확인
@@ -463,6 +465,66 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ["id"]
         }
+      },
+      {
+        name: "get_batch_articles",
+        description: "여러 조문을 한번에 조회합니다. 법령 전문을 가져온 뒤 지정한 조문들만 추출합니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            mst: {
+              type: "string",
+              description: "법령일련번호"
+            },
+            lawId: {
+              type: "string",
+              description: "법령ID"
+            },
+            articles: {
+              type: "array",
+              items: {
+                type: "string"
+              },
+              description: "조문 번호 배열 (예: ['제38조', '제39조', '제40조'])"
+            },
+            efYd: {
+              type: "string",
+              description: "시행일자 (YYYYMMDD 형식)"
+            }
+          },
+          required: ["articles"]
+        }
+      },
+      {
+        name: "get_article_with_precedents",
+        description: "조문 조회와 함께 관련 판례를 자동으로 조회합니다. 법률 실무에서 조문의 해석과 적용례를 함께 확인할 때 유용합니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            mst: {
+              type: "string",
+              description: "법령일련번호"
+            },
+            lawId: {
+              type: "string",
+              description: "법령ID"
+            },
+            jo: {
+              type: "string",
+              description: "조문 번호 (예: '제38조')"
+            },
+            efYd: {
+              type: "string",
+              description: "시행일자 (YYYYMMDD 형식)"
+            },
+            includePrecedents: {
+              type: "boolean",
+              description: "관련 판례 포함 여부 (기본값: true)",
+              default: true
+            }
+          },
+          required: ["jo"]
+        }
       }
     ]
   }
@@ -562,6 +624,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "get_interpretation_text": {
         const input = getInterpretationTextSchema.parse(args)
         return await getInterpretationText(apiClient, input)
+      }
+
+      case "get_batch_articles": {
+        const input = GetBatchArticlesSchema.parse(args)
+        return await getBatchArticles(apiClient, input)
+      }
+
+      case "get_article_with_precedents": {
+        const input = GetArticleWithPrecedentsSchema.parse(args)
+        return await getArticleWithPrecedents(apiClient, input)
       }
 
       default:
