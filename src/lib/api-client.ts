@@ -251,6 +251,31 @@ export class LawApiClient {
   }
 
   /**
+   * 자치법규 검색
+   */
+  async searchOrdinance(params: {
+    query: string
+    display?: number
+  }): Promise<string> {
+    const apiParams = new URLSearchParams({
+      target: "ordin",
+      OC: this.apiKey,
+      type: "XML",
+      query: params.query,
+      display: (params.display || 20).toString(),
+    })
+
+    const url = `${LAW_API_BASE}/lawSearch.do?${apiParams.toString()}`
+    const response = await fetch(url)
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`)
+    }
+
+    return await response.text()
+  }
+
+  /**
    * 자치법규 조회
    */
   async getOrdinance(ordinSeq: string): Promise<string> {
@@ -258,7 +283,7 @@ export class LawApiClient {
       target: "ordin",
       OC: this.apiKey,
       type: "JSON",
-      ordinSeq: ordinSeq,
+      MST: ordinSeq,  // ← 파라미터는 MST를 사용해야 함
     })
 
     const url = `${LAW_API_BASE}/lawService.do?${apiParams.toString()}`

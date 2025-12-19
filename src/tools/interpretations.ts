@@ -140,13 +140,24 @@ export async function getInterpretationText(
       throw new Error("Failed to parse JSON response from API");
     }
 
-    if (!data.LawExpcService || !data.LawExpcService[0]) {
+    if (!data.ExpcService) {
       throw new Error("Legal interpretation not found or invalid response format");
     }
 
-    const expc = data.LawExpcService[0];
-    const basic = expc.기본정보 || {};
-    const content = expc.해석내용 || {};
+    const expc = data.ExpcService;
+    // API returns fields directly in ExpcService, not nested
+    const basic = {
+      안건명: expc.안건명,
+      법령해석례번호: expc.법령해석례일련번호,
+      회신일자: expc.해석일자,
+      질의기관명: expc.질의기관명,
+      해석기관명: expc.해석기관명
+    };
+    const content = {
+      질의요지: expc.질의요지,
+      회신내용: expc.회답,
+      관계법령: expc.이유
+    };
 
     let output = `=== ${basic.안건명 || "해석례"} ===\n\n`;
 

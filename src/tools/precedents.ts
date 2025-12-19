@@ -144,13 +144,27 @@ export async function getPrecedentText(
     throw new Error("Failed to parse JSON response from API");
   }
 
-  if (!data.PrecService || !data.PrecService[0]) {
+  if (!data.PrecService) {
     throw new Error("Precedent not found or invalid response format");
   }
 
-  const prec = data.PrecService[0];
-  const basic = prec.기본정보 || {};
-  const content = prec.판례내용 || {};
+  const prec = data.PrecService;
+  // API returns fields directly in PrecService, not nested
+  const basic = {
+    판례명: prec.사건명,
+    사건번호: prec.사건번호,
+    법원명: prec.법원명,
+    선고일자: prec.선고일자,
+    사건종류명: prec.사건종류명,
+    판결유형: prec.판결유형
+  };
+  const content = {
+    판시사항: prec.판시사항,
+    판결요지: prec.판결요지,
+    참조조문: prec.참조조문,
+    참조판례: prec.참조판례,
+    전문: prec.판례내용
+  };
 
   let output = `=== ${basic.판례명 || "Precedent"} ===\n\n`;
 

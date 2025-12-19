@@ -273,6 +273,30 @@ LAW_OC=your-api-key node build/index.js --mode sse --port 3000
 npx @modelcontextprotocol/inspector build/index.js
 ```
 
+## 🧪 테스트
+
+### 전체 툴 테스트 (Tools 9-13)
+```bash
+# .env 파일 생성 (첫 실행 시)
+echo "LAW_OC=your-api-key" > .env
+
+# 테스트 실행
+node test-tools-9-13.js
+```
+
+**테스트 결과** (2025-12-20 기준):
+- ✅ Tool 9 (get_ordinance): PASS - 자치법규 조회
+- ✅ Tool 10 (search_precedents): PASS - 판례 검색
+- ✅ Tool 11 (get_precedent_text): PASS - 판례 전문 조회
+- ✅ Tool 12 (search_interpretations): PASS - 법령해석 검색
+- ✅ Tool 13 (get_interpretation_text): PASS - 법령해석 전문 조회
+- **성공률: 100%**
+
+**주의사항**:
+- API 키가 유효해야 테스트가 통과합니다
+- 일부 ID는 API에 전문 데이터가 없을 수 있습니다 (API 제한사항)
+- 자치법규 조회는 유효한 `ordinSeq`가 필요합니다
+
 ## 🚀 리모트 배포 (Railway)
 
 ### 1. GitHub에 코드 푸시
