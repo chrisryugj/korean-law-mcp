@@ -28,7 +28,7 @@ export async function searchAdminRule(
     const parser = new DOMParser()
     const doc = parser.parseFromString(xmlText, "text/xml")
 
-    const rules = doc.getElementsByTagName("행정규칙")
+    const rules = doc.getElementsByTagName("admrul")
 
     if (rules.length === 0) {
       return {
@@ -48,9 +48,9 @@ export async function searchAdminRule(
 
       const ruleName = rule.getElementsByTagName("행정규칙명")[0]?.textContent || "알 수 없음"
       const ruleId = rule.getElementsByTagName("행정규칙ID")[0]?.textContent || ""
-      const promDate = rule.getElementsByTagName("공포일자")[0]?.textContent || ""
-      const ruleType = rule.getElementsByTagName("행정규칙구분")[0]?.textContent || ""
-      const orgName = rule.getElementsByTagName("소관부처")[0]?.textContent || ""
+      const promDate = rule.getElementsByTagName("발령일자")[0]?.textContent || ""
+      const ruleType = rule.getElementsByTagName("행정규칙종류")[0]?.textContent || ""
+      const orgName = rule.getElementsByTagName("소관부처명")[0]?.textContent || ""
 
       resultText += `${i + 1}. ${ruleName}\n`
       resultText += `   - 행정규칙ID: ${ruleId}\n`
