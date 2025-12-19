@@ -131,4 +131,110 @@ export class LawApiClient {
 
     return await response.text()
   }
+
+  /**
+   * 행정규칙 검색
+   */
+  async searchAdminRule(params: {
+    query: string
+    knd?: string
+  }): Promise<string> {
+    const apiParams = new URLSearchParams({
+      OC: this.apiKey,
+      type: "XML",
+      target: "admrul",
+      query: params.query,
+    })
+
+    if (params.knd) apiParams.append("knd", params.knd)
+
+    const url = `${LAW_API_BASE}/lawSearch.do?${apiParams.toString()}`
+    const response = await fetch(url)
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`)
+    }
+
+    return await response.text()
+  }
+
+  /**
+   * 행정규칙 조회
+   */
+  async getAdminRule(id: string): Promise<string> {
+    const apiParams = new URLSearchParams({
+      target: "admrul",
+      OC: this.apiKey,
+      type: "JSON",
+      ID: id,
+    })
+
+    const url = `${LAW_API_BASE}/lawService.do?${apiParams.toString()}`
+    const response = await fetch(url)
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`)
+    }
+
+    const text = await response.text()
+
+    if (text.includes("<!DOCTYPE html") || text.includes("<html")) {
+      throw new Error("행정규칙을 찾을 수 없습니다. ID를 확인해주세요.")
+    }
+
+    return text
+  }
+
+  /**
+   * 별표/서식 조회
+   */
+  async getAnnexes(params: {
+    lawName: string
+    knd?: "1" | "2" | "3" | "4" | "5"
+  }): Promise<string> {
+    const apiParams = new URLSearchParams({
+      target: "annex",
+      OC: this.apiKey,
+      type: "JSON",
+      lawNm: params.lawName,
+    })
+
+    if (params.knd) apiParams.append("knd", params.knd)
+
+    const url = `${LAW_API_BASE}/lawService.do?${apiParams.toString()}`
+    const response = await fetch(url)
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`)
+    }
+
+    return await response.text()
+  }
+
+  /**
+   * 자치법규 조회
+   */
+  async getOrdinance(ordinSeq: string): Promise<string> {
+    const apiParams = new URLSearchParams({
+      target: "ordin",
+      OC: this.apiKey,
+      type: "JSON",
+      ordinSeq: ordinSeq,
+    })
+
+    const url = `${LAW_API_BASE}/lawService.do?${apiParams.toString()}`
+    const response = await fetch(url)
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`)
+    }
+
+    const text = await response.text()
+
+    if (text.includes("<!DOCTYPE html") || text.includes("<html")) {
+      throw new Error("자치법규를 찾을 수 없습니다. ordinSeq를 확인해주세요.")
+    }
+
+    return text
+  }
 }

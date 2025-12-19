@@ -18,6 +18,9 @@ import { getLawText, GetLawTextSchema } from "./tools/law-text.js"
 import { parseJoCode, ParseJoCodeSchema } from "./tools/utils.js"
 import { compareOldNew, CompareOldNewSchema } from "./tools/comparison.js"
 import { getThreeTier, GetThreeTierSchema } from "./tools/three-tier.js"
+import { searchAdminRule, SearchAdminRuleSchema, getAdminRule, GetAdminRuleSchema } from "./tools/admin-rule.js"
+import { getAnnexes, GetAnnexesSchema } from "./tools/annex.js"
+import { getOrdinance, GetOrdinanceSchema } from "./tools/ordinance.js"
 import { startSSEServer } from "./server/sse-server.js"
 
 // 환경변수 확인
@@ -163,6 +166,76 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: []
         }
+      },
+      {
+        name: "search_admin_rule",
+        description: "행정규칙(훈령, 예규, 고시 등)을 검색합니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "검색할 행정규칙명"
+            },
+            knd: {
+              type: "string",
+              description: "행정규칙 종류 (1=훈령, 2=예규, 3=고시, 4=공고, 5=일반)"
+            },
+            maxResults: {
+              type: "number",
+              description: "최대 결과 개수 (기본값: 20)",
+              default: 20
+            }
+          },
+          required: ["query"]
+        }
+      },
+      {
+        name: "get_admin_rule",
+        description: "행정규칙의 상세 내용을 조회합니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description: "행정규칙ID (search_admin_rule에서 획득)"
+            }
+          },
+          required: ["id"]
+        }
+      },
+      {
+        name: "get_annexes",
+        description: "법령의 별표 및 서식을 조회합니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            lawName: {
+              type: "string",
+              description: "법령명 (예: '관세법')"
+            },
+            knd: {
+              type: "string",
+              enum: ["1", "2", "3", "4", "5"],
+              description: "1=별표, 2=서식, 3=부칙별표, 4=부칙서식, 5=전체"
+            }
+          },
+          required: ["lawName"]
+        }
+      },
+      {
+        name: "get_ordinance",
+        description: "자치법규(조례, 규칙)를 조회합니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            ordinSeq: {
+              type: "string",
+              description: "자치법규 일련번호"
+            }
+          },
+          required: ["ordinSeq"]
+        }
       }
     ]
   }
@@ -197,6 +270,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "get_three_tier": {
         const input = GetThreeTierSchema.parse(args)
         return await getThreeTier(apiClient, input)
+      }
+
+      case "search_admin_rule": {
+        const input = SearchAdminRuleSchema.parse(args)
+        return await searchAdminRule(apiClient, input)
+      }
+
+      case "get_admin_rule": {
+        const input = GetAdminRuleSchema.parse(args)
+        return await getAdminRule(apiClient, input)
+      }
+
+      case "get_annexes": {
+        const input = GetAnnexesSchema.parse(args)
+        return await getAnnexes(apiClient, input)
+      }
+
+      case "get_ordinance": {
+        const input = GetOrdinanceSchema.parse(args)
+        return await getOrdinance(apiClient, input)
       }
 
       default:

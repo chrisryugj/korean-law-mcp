@@ -42,7 +42,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/korean-law-mcp"
+    "url": "https://github.com/chrisryugj/korean-law-mcp"
   },
   "engines": {
     "node": ">=18.0.0"
