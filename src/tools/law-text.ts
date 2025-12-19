@@ -69,10 +69,18 @@ export async function getLawText(
     if (effDate) resultText += `시행일: ${effDate}\n`
     resultText += `\n`
 
-    // 조문 내용 추출 (정확한 경로: 법령.조문.조문단위[])
-    const articleUnits = lawData.조문?.조문단위 || []
+    // 조문 내용 추출 (정확한 경로: 법령.조문.조문단위)
+    // 주의: 조문단위는 배열 또는 객체일 수 있음
+    const rawUnits = lawData.조문?.조문단위
+    let articleUnits: any[] = []
 
-    if (!Array.isArray(articleUnits) || articleUnits.length === 0) {
+    if (Array.isArray(rawUnits)) {
+      articleUnits = rawUnits
+    } else if (rawUnits && typeof rawUnits === 'object') {
+      articleUnits = [rawUnits]  // 단일 객체를 배열로 변환
+    }
+
+    if (articleUnits.length === 0) {
       return {
         content: [{
           type: "text",
