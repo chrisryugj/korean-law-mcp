@@ -1114,12 +1114,12 @@ async function main() {
   const portIndex = args.indexOf("--port")
 
   const mode = modeIndex >= 0 ? args[modeIndex + 1] : "stdio"
-  const port = process.env.PORT ? parseInt(process.env.PORT) : (portIndex >= 0 ? parseInt(args[portIndex + 1]) : 3000)
+  const port = portIndex >= 0 ? parseInt(args[portIndex + 1]) : 3000
 
   if (mode === "sse") {
-    // SSE 모드 (리모트 배포용)
+    // SSE 모드 (리모트 배포용) - MCP Hosting은 포트 8000 필수
     console.error("Starting Korean Law MCP server in SSE mode...")
-    await startSSEServer(server, port)
+    await startSSEServer(server, 8000)
   } else {
     // STDIO 모드 (로컬 Claude Desktop용)
     const transport = new StdioServerTransport()
