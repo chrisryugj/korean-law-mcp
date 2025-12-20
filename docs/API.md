@@ -321,47 +321,97 @@
 
 ### 8. parse_jo_code
 
-**기능**: 조문번호 ↔ JO 코드 양방향 변환
+**기능**: 조문번호 ↔ JO 코드 양방향 변환 (법률/시행령/시행규칙 및 자치법규 모두 지원)
 
 **파라미터**:
 ```typescript
 {
-  joText: string                  // 변환할 문자열
-  direction: "to_code" | "to_text"  // 변환 방향
+  joText: string                     // 변환할 문자열
+  direction: "to_code" | "to_text"   // 변환 방향 (기본값: "to_code")
+  lawType: "law" | "ordinance"       // 법령 유형 (기본값: "law")
+                                     // law: 법률/시행령/시행규칙 (AAAABB 형식)
+                                     // ordinance: 자치법규 (AABBCC 형식)
 }
 ```
+
+**코드 형식**:
+- **법률/시행령/시행규칙**: `AAAABB` (6자리)
+  - AAAA: 조문번호 (0001-9999)
+  - BB: 지번 (의X, 00-99)
+- **자치법규**: `AABBCC` (6자리)
+  - AA: 조문번호 (01-99)
+  - BB: 지번 (의X, 00-99)
+  - CC: 서브번호 (00-99)
+- **레거시**: `AAAABBCC` (8자리) - 자동 인식
 
 **응답 형식**:
 ```json
 {
   "input": "제38조",
   "output": "003800",
-  "direction": "to_code"
+  "direction": "to_code",
+  "lawType": "law",
+  "format": "AAAABB (AAAA=조문, BB=의X)"
 }
 ```
 
 **예제**:
+
 ```javascript
-// 한글 → 코드
+// 1. 법률 - 한글 → 코드
 {
   "joText": "제38조",
-  "direction": "to_code"
+  "direction": "to_code",
+  "lawType": "law"
 }
-// → { "input": "제38조", "output": "003800", "direction": "to_code" }
+// → { "output": "003800", "format": "AAAABB (AAAA=조문, BB=의X)" }
 
-// 코드 → 한글
+// 2. 법률 - 코드 → 한글
 {
   "joText": "003800",
-  "direction": "to_text"
+  "direction": "to_text",
+  "lawType": "law"
 }
-// → { "input": "003800", "output": "제38조", "direction": "to_text" }
+// → { "output": "제38조" }
 
-// 지조 처리
+// 3. 법률 - 지조 처리
 {
   "joText": "제10조의2",
-  "direction": "to_code"
+  "direction": "to_code",
+  "lawType": "law"
 }
-// → { "input": "제10조의2", "output": "001002", "direction": "to_code" }
+// → { "output": "001002" }
+
+// 4. 자치법규 - 한글 → 코드
+{
+  "joText": "제1조",
+  "direction": "to_code",
+  "lawType": "ordinance"
+}
+// → { "output": "010000", "format": "AABBCC (AA=조문, BB=의X, CC=서브)" }
+
+// 5. 자치법규 - 지조 처리
+{
+  "joText": "제10조의2",
+  "direction": "to_code",
+  "lawType": "ordinance"
+}
+// → { "output": "100200" }
+
+// 6. 자치법규 - 코드 → 한글
+{
+  "joText": "010100",
+  "direction": "to_text",
+  "lawType": "ordinance"
+}
+// → { "output": "제1조의1" }
+
+// 7. 레거시 8자리 코드 → 한글 (자동 인식)
+{
+  "joText": "00380001",
+  "direction": "to_text"
+}
+// → { "output": "제38조-1" }
 ```
 
 ---

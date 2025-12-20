@@ -65,7 +65,8 @@ function formatArticleLabel({ articleNumber, branchNumber }: ArticleComponents):
 }
 
 /**
- * Converts Korean law article notation to 6-digit JO code
+ * Converts Korean law article notation to 6-digit JO code (법률/시행령/시행규칙용)
+ * Format: AAAABB (AAAA=article, BB=branch)
  * Examples:
  *   "38조" → "003800"
  *   "10조의2" → "001002"
@@ -79,12 +80,28 @@ export function buildJO(input: string): string {
 }
 
 /**
+ * Converts Korean ordinance article notation to 6-digit JO code (자치법규용)
+ * Format: AABBCC (AA=article, BB=branch, CC=sub)
+ * Examples:
+ *   "제1조" → "010000"
+ *   "제1조의1" → "010100"
+ *   "제10조의2" → "100200"
+ */
+export function buildOrdinanceJO(input: string): string {
+  const components = parseArticleComponents(input)
+  const articleNum = components.articleNumber.toString().padStart(2, "0")
+  const branchNum = components.branchNumber.toString().padStart(2, "0")
+  return `${articleNum}${branchNum}00`
+}
+
+/**
  * Formats JO code back to readable Korean
  * Examples:
- *   "003800" → "제38조"
- *   "001002" → "제10조의2"
+ *   Law format (AAAABB): "003800" → "제38조", "001002" → "제10조의2"
+ *   Ordinance format (AABBCC): "010000" → "제1조", "010100" → "제1조의1"
+ *   Legacy 8-digit (AAAABBCC): "00380001" → "제38조-1"
  */
-export function formatJO(jo: string): string {
+export function formatJO(jo: string, isOrdinance = false): string {
   if (!jo) return ""
 
   if (jo.startsWith("제") && jo.includes("조")) {
@@ -99,7 +116,20 @@ export function formatJO(jo: string): string {
     return jo
   }
 
-  if (jo.length === 6) {
+  // Ordinance format: AABBCC (AA=article, BB=branch, CC=sub)
+  if (isOrdinance && jo.length === 6 && /^\d{6}$/.test(jo)) {
+    const articleNum = Number.parseInt(jo.substring(0, 2), 10)
+    const branchNum = Number.parseInt(jo.substring(2, 4), 10)
+    const subNum = Number.parseInt(jo.substring(4, 6), 10)
+
+    let result = `제${articleNum}조`
+    if (branchNum > 0) result += `의${branchNum}`
+    if (subNum > 0) result += `-${subNum}`
+    return result
+  }
+
+  // Law format: AAAABB (AAAA=article, BB=branch)
+  if (!isOrdinance && jo.length === 6 && /^\d{6}$/.test(jo)) {
     const articleNum = Number.parseInt(jo.substring(0, 4), 10)
     const branchNum = Number.parseInt(jo.substring(4, 6), 10)
 
@@ -108,6 +138,18 @@ export function formatJO(jo: string): string {
     }
 
     return `제${articleNum}조의${branchNum}`
+  }
+
+  // Legacy 8-digit format: AAAABBCC (AAAA=article, BB=branch, CC=sub)
+  if (jo.length === 8 && /^\d{8}$/.test(jo)) {
+    const articleNum = Number.parseInt(jo.substring(0, 4), 10)
+    const branchNum = Number.parseInt(jo.substring(4, 6), 10)
+    const subNum = Number.parseInt(jo.substring(6, 8), 10)
+
+    let result = `제${articleNum}조`
+    if (branchNum > 0) result += `의${branchNum}`
+    if (subNum > 0) result += `-${subNum}`
+    return result
   }
 
   return jo
