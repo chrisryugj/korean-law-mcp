@@ -25,7 +25,7 @@ export async function startSSEServer(server: Server, port: number) {
     res.header("Access-Control-Allow-Origin", "*")
     res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS, HEAD")
     res.header("Access-Control-Allow-Headers",
-      "Content-Type, Accept, Authorization, Mcp-Protocol-Version, Mcp-Session-Id, Last-Event-ID, Traceparent, Tracestate"
+      "Content-Type, Accept, Authorization, Mcp-Protocol-Version, mcp-protocol-version, Mcp-Session-Id, mcp-session-id, Last-Event-ID, last-event-id, Traceparent, Tracestate"
     )
     res.header("Access-Control-Expose-Headers",
       "Mcp-Session-Id, Content-Type, Mcp-Protocol-Version, Traceparent, Tracestate"
