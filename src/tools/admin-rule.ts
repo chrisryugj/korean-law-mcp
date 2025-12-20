@@ -47,12 +47,14 @@ export async function searchAdminRule(
       const rule = rules[i]
 
       const ruleName = rule.getElementsByTagName("행정규칙명")[0]?.textContent || "알 수 없음"
+      const ruleSeq = rule.getElementsByTagName("행정규칙일련번호")[0]?.textContent || ""
       const ruleId = rule.getElementsByTagName("행정규칙ID")[0]?.textContent || ""
       const promDate = rule.getElementsByTagName("발령일자")[0]?.textContent || ""
       const ruleType = rule.getElementsByTagName("행정규칙종류")[0]?.textContent || ""
       const orgName = rule.getElementsByTagName("소관부처명")[0]?.textContent || ""
 
       resultText += `${i + 1}. ${ruleName}\n`
+      resultText += `   - 행정규칙일련번호: ${ruleSeq}\n`
       resultText += `   - 행정규칙ID: ${ruleId}\n`
       resultText += `   - 공포일: ${promDate}\n`
       resultText += `   - 구분: ${ruleType}\n`
@@ -90,64 +92,126 @@ export async function getAdminRule(
   input: GetAdminRuleInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const jsonText = await apiClient.getAdminRule(input.id)
-    const json = JSON.parse(jsonText)
+    const xmlText = await apiClient.getAdminRule(input.id)
 
-    const rule = json?.행정규칙
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(xmlText, "text/xml")
 
-    if (!rule) {
+    // 행정규칙 정보 추출
+    const ruleName = doc.getElementsByTagName("행정규칙명")[0]?.textContent || "알 수 없음"
+    const promDate = doc.getElementsByTagName("공포일자")[0]?.textContent || ""
+    const orgName = doc.getElementsByTagName("소관부처")[0]?.textContent || ""
+    const ruleType = doc.getElementsByTagName("행정규칙종류")[0]?.textContent || ""
+
+    let resultText = `행정규칙명: ${ruleName}\n`
+    if (promDate) resultText += `공포일: ${promDate}\n`
+    if (ruleType) resultText += `종류: ${ruleType}\n`
+    if (orgName) resultText += `소관부처: ${orgName}\n`
+    resultText += `\n━━━━━━━━━━━━━━━━━━━━━━\n\n`
+
+    // 조문 추출 - <조문내용> 태그 사용
+    const joContents = doc.getElementsByTagName("조문내용")
+
+    if (joContents.length === 0) {
+      // 첨부파일 확인
+      const attachments = doc.getElementsByTagName("첨부파일링크")
+      if (attachments.length > 0) {
+        resultText += "⚠️  이 행정규칙은 조문 형식이 아닌 첨부파일로 제공됩니다.\n\n"
+        resultText += "📎 첨부파일:\n"
+        for (let i = 0; i < attachments.length; i++) {
+          const link = attachments[i].textContent || ""
+          if (link) {
+            resultText += `   ${i + 1}. ${link}\n`
+          }
+        }
+        return {
+          content: [{
+            type: "text",
+            text: resultText
+          }]
+        }
+      }
+
       return {
         content: [{
           type: "text",
-          text: "행정규칙 데이터를 찾을 수 없습니다."
+          text: "행정규칙 전문을 조회할 수 없습니다.\n\n" +
+                "⚠️  법제처 API 제한: 일부 행정규칙은 전문 조회가 지원되지 않습니다.\n" +
+                "💡 대안: search_admin_rule 결과의 '행정규칙상세링크'를 통해 웹에서 확인하세요."
         }],
         isError: true
       }
     }
 
-    let resultText = `행정규칙명: ${rule.행정규칙명 || "알 수 없음"}\n`
-    resultText += `공포일: ${rule.공포일자 || ""}\n`
-    resultText += `소관부처: ${rule.소관부처 || ""}\n`
-    resultText += `\n━━━━━━━━━━━━━━━━━━━━━━\n\n`
+    // 조문내용이 비어있는지 확인
+    let hasContent = false
+    for (let i = 0; i < joContents.length; i++) {
+      const content = joContents[i].textContent?.trim() || ""
+      if (content.length > 0) {
+        hasContent = true
+        break
+      }
+    }
 
-    // 조문 내용
-    const articles = rule.조문 || []
-
-    if (Array.isArray(articles)) {
-      const maxArticles = Math.min(articles.length, 10)
-
-      for (let i = 0; i < maxArticles; i++) {
-        const article = articles[i]
-
-        if (article.조문번호) {
-          resultText += `${article.조문번호}`
+    if (!hasContent) {
+      // 첨부파일 확인
+      const attachments = doc.getElementsByTagName("첨부파일링크")
+      if (attachments.length > 0) {
+        resultText += "⚠️  이 행정규칙은 조문 형식이 아닌 첨부파일로 제공됩니다.\n\n"
+        resultText += "📎 첨부파일:\n"
+        for (let i = 0; i < attachments.length; i++) {
+          const link = attachments[i].textContent || ""
+          if (link) {
+            resultText += `   ${i + 1}. ${link}\n`
+          }
         }
-        if (article.조문제목) {
-          resultText += ` ${article.조문제목}`
-        }
-        resultText += `\n`
+      } else {
+        resultText += "⚠️  이 행정규칙은 조문 내용이 비어있습니다."
+      }
+      return {
+        content: [{
+          type: "text",
+          text: resultText
+        }]
+      }
+    }
 
-        if (article.조문내용) {
-          const content = article.조문내용
-            .replace(/<[^>]+>/g, '')
-            .replace(/&nbsp;/g, ' ')
-            .trim()
+    // 조문 내용 출력
+    for (let i = 0; i < joContents.length; i++) {
+      const joContent = joContents[i].textContent?.trim() || ""
 
+      if (joContent.length > 0) {
+        resultText += `${joContent}\n\n`
+      }
+    }
+
+    // 부칙 추가
+    const addendums = doc.getElementsByTagName("부칙내용")
+    if (addendums.length > 0) {
+      resultText += `\n━━━━━━━━━━━━━━━━━━━━━━\n부칙\n━━━━━━━━━━━━━━━━━━━━━━\n\n`
+      for (let i = 0; i < addendums.length; i++) {
+        const content = addendums[i].textContent?.trim() || ""
+        if (content.length > 0) {
           resultText += `${content}\n\n`
         }
       }
+    }
 
-      if (articles.length > maxArticles) {
-        resultText += `\n... 외 ${articles.length - maxArticles}개 조문 (생략)\n`
+    // 별표 추가
+    const annexes = doc.getElementsByTagName("별표내용")
+    if (annexes.length > 0) {
+      resultText += `\n━━━━━━━━━━━━━━━━━━━━━━\n별표\n━━━━━━━━━━━━━━━━━━━━━━\n\n`
+      for (let i = 0; i < annexes.length; i++) {
+        const title = doc.getElementsByTagName("별표제목")[i]?.textContent?.trim() || ""
+        const content = annexes[i].textContent?.trim() || ""
+
+        if (title) {
+          resultText += `[${title}]\n`
+        }
+        if (content.length > 0) {
+          resultText += `${content}\n\n`
+        }
       }
-    } else if (typeof rule.조문내용 === 'string') {
-      // 단일 조문인 경우
-      const content = rule.조문내용
-        .replace(/<[^>]+>/g, '')
-        .replace(/&nbsp;/g, ' ')
-        .trim()
-
-      resultText += `${content}\n`
     }
 
     return {

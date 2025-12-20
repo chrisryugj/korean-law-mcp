@@ -30,6 +30,15 @@ import { searchPrecedents, searchPrecedentsSchema, getPrecedentText, getPreceden
 import { searchInterpretations, searchInterpretationsSchema, getInterpretationText, getInterpretationTextSchema } from "./tools/interpretations.js"
 import { getBatchArticles, GetBatchArticlesSchema } from "./tools/batch-articles.js"
 import { getArticleWithPrecedents, GetArticleWithPrecedentsSchema } from "./tools/article-with-precedents.js"
+import { getArticleHistory, ArticleHistorySchema } from "./tools/article-history.js"
+import { getLawHistory, LawHistorySchema } from "./tools/law-history.js"
+import { summarizePrecedent, SummarizePrecedentSchema } from "./tools/precedent-summary.js"
+import { extractPrecedentKeywords, ExtractKeywordsSchema } from "./tools/precedent-keywords.js"
+import { findSimilarPrecedents, FindSimilarPrecedentsSchema } from "./tools/similar-precedents.js"
+import { getLawStatistics, LawStatisticsSchema } from "./tools/law-statistics.js"
+import { parseArticleLinks, ParseArticleLinksSchema } from "./tools/article-link-parser.js"
+import { getExternalLinks, ExternalLinksSchema } from "./tools/external-links.js"
+import { advancedSearch, AdvancedSearchSchema } from "./tools/advanced-search.js"
 import { startSSEServer } from "./server/sse-server.js"
 
 // 환경변수 확인
@@ -48,7 +57,7 @@ const apiClient = new LawApiClient({ apiKey: LAW_OC })
 const server = new Server(
   {
     name: "korean-law",
-    version: "1.0.0",
+    version: "1.3.0",
   },
   {
     capabilities: {
@@ -525,6 +534,255 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ["jo"]
         }
+      },
+      {
+        name: "get_article_history",
+        description: "일자별 조문 개정 이력을 조회합니다. 특정 조문의 시간에 따른 변화를 추적할 때 유용합니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            lawId: {
+              type: "string",
+              description: "법령ID (선택)"
+            },
+            jo: {
+              type: "string",
+              description: "조문번호 (예: '제38조', 선택)"
+            },
+            regDt: {
+              type: "string",
+              description: "조문 개정일 (YYYYMMDD, 선택)"
+            },
+            fromRegDt: {
+              type: "string",
+              description: "조회기간 시작일 (YYYYMMDD, 선택)"
+            },
+            toRegDt: {
+              type: "string",
+              description: "조회기간 종료일 (YYYYMMDD, 선택)"
+            },
+            org: {
+              type: "string",
+              description: "소관부처코드 (선택)"
+            },
+            page: {
+              type: "number",
+              description: "페이지 번호 (기본값: 1)",
+              default: 1
+            }
+          },
+          required: []
+        }
+      },
+      {
+        name: "get_law_history",
+        description: "특정 날짜에 변경된 법령의 이력을 조회합니다. 법령 개정 트렌드 분석에 유용합니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            regDt: {
+              type: "string",
+              description: "법령 변경일자 (YYYYMMDD, 예: '20240101')"
+            },
+            org: {
+              type: "string",
+              description: "소관부처코드 (선택)"
+            },
+            display: {
+              type: "number",
+              description: "결과 개수 (기본값: 20, 최대: 100)",
+              default: 20
+            },
+            page: {
+              type: "number",
+              description: "페이지 번호 (기본값: 1)",
+              default: 1
+            }
+          },
+          required: ["regDt"]
+        }
+      },
+      {
+        name: "summarize_precedent",
+        description: "판례를 요약합니다. 판시사항, 판결요지, 주문 등 핵심 내용을 추출합니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description: "판례일련번호"
+            },
+            maxLength: {
+              type: "number",
+              description: "요약 최대 길이 (기본값: 500자)",
+              default: 500
+            }
+          },
+          required: ["id"]
+        }
+      },
+      {
+        name: "extract_precedent_keywords",
+        description: "판례에서 핵심 키워드를 추출합니다. 법률 용어, 조문 번호 등을 빈도 기반으로 추출합니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description: "판례일련번호"
+            },
+            maxKeywords: {
+              type: "number",
+              description: "최대 키워드 개수 (기본값: 10)",
+              default: 10
+            }
+          },
+          required: ["id"]
+        }
+      },
+      {
+        name: "find_similar_precedents",
+        description: "유사 판례를 검색합니다. 키워드 기반 유사도 계산으로 관련 판례를 찾습니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "검색 키워드 또는 판례 내용"
+            },
+            maxResults: {
+              type: "number",
+              description: "최대 결과 개수 (기본값: 5)",
+              default: 5
+            }
+          },
+          required: ["query"]
+        }
+      },
+      {
+        name: "get_law_statistics",
+        description: "법령 통계를 조회합니다. 최근 개정 법령, 소관부처별/연도별 통계를 제공합니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            analysisType: {
+              type: "string",
+              enum: ["recent_changes", "by_department", "by_year"],
+              description: "통계 유형: recent_changes (최근 개정), by_department (소관부처별), by_year (제정년도별)"
+            },
+            days: {
+              type: "number",
+              description: "최근 변경 분석 기간 (일 단위, 기본값: 30)",
+              default: 30
+            },
+            limit: {
+              type: "number",
+              description: "결과 개수 제한 (기본값: 10)",
+              default: 10
+            }
+          },
+          required: ["analysisType"]
+        }
+      },
+      {
+        name: "parse_article_links",
+        description: "조문 내 다른 조문 참조를 파싱합니다. '제X조', '같은 조', '전항' 등을 자동 인식합니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            mst: {
+              type: "string",
+              description: "법령일련번호"
+            },
+            lawId: {
+              type: "string",
+              description: "법령ID"
+            },
+            jo: {
+              type: "string",
+              description: "조문 번호 (예: '제38조')"
+            },
+            efYd: {
+              type: "string",
+              description: "시행일자 (YYYYMMDD)"
+            }
+          },
+          required: ["jo"]
+        }
+      },
+      {
+        name: "get_external_links",
+        description: "법령, 판례, 해석례의 외부 링크를 생성합니다 (법제처, 법원도서관 등).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            linkType: {
+              type: "string",
+              enum: ["law", "precedent", "interpretation"],
+              description: "링크 유형: law (법령), precedent (판례), interpretation (해석례)"
+            },
+            lawId: {
+              type: "string",
+              description: "법령ID (법령 링크 생성 시)"
+            },
+            mst: {
+              type: "string",
+              description: "법령일련번호 (법령 링크 생성 시)"
+            },
+            precedentId: {
+              type: "string",
+              description: "판례일련번호 (판례 링크 생성 시)"
+            },
+            interpretationId: {
+              type: "string",
+              description: "법령해석례일련번호 (해석례 링크 생성 시)"
+            }
+          },
+          required: ["linkType"]
+        }
+      },
+      {
+        name: "advanced_search",
+        description: "고급 검색 기능. 기간 필터링, 소관부처 필터링, AND/OR 복합 검색을 지원합니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "검색 키워드"
+            },
+            searchType: {
+              type: "string",
+              enum: ["law", "admin_rule", "ordinance", "all"],
+              description: "검색 대상: law (법령), admin_rule (행정규칙), ordinance (자치법규), all (전체)",
+              default: "law"
+            },
+            fromDate: {
+              type: "string",
+              description: "제정일 시작 (YYYYMMDD)"
+            },
+            toDate: {
+              type: "string",
+              description: "제정일 종료 (YYYYMMDD)"
+            },
+            org: {
+              type: "string",
+              description: "소관부처코드"
+            },
+            operator: {
+              type: "string",
+              enum: ["AND", "OR"],
+              description: "키워드 결합 연산자",
+              default: "AND"
+            },
+            maxResults: {
+              type: "number",
+              description: "최대 결과 개수 (기본값: 20)",
+              default: 20
+            }
+          },
+          required: ["query"]
+        }
       }
     ]
   }
@@ -634,6 +892,51 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "get_article_with_precedents": {
         const input = GetArticleWithPrecedentsSchema.parse(args)
         return await getArticleWithPrecedents(apiClient, input)
+      }
+
+      case "get_article_history": {
+        const input = ArticleHistorySchema.parse(args)
+        return await getArticleHistory(apiClient, input)
+      }
+
+      case "get_law_history": {
+        const input = LawHistorySchema.parse(args)
+        return await getLawHistory(apiClient, input)
+      }
+
+      case "summarize_precedent": {
+        const input = SummarizePrecedentSchema.parse(args)
+        return await summarizePrecedent(apiClient, input)
+      }
+
+      case "extract_precedent_keywords": {
+        const input = ExtractKeywordsSchema.parse(args)
+        return await extractPrecedentKeywords(apiClient, input)
+      }
+
+      case "find_similar_precedents": {
+        const input = FindSimilarPrecedentsSchema.parse(args)
+        return await findSimilarPrecedents(apiClient, input)
+      }
+
+      case "get_law_statistics": {
+        const input = LawStatisticsSchema.parse(args)
+        return await getLawStatistics(apiClient, input)
+      }
+
+      case "parse_article_links": {
+        const input = ParseArticleLinksSchema.parse(args)
+        return await parseArticleLinks(apiClient, input)
+      }
+
+      case "get_external_links": {
+        const input = ExternalLinksSchema.parse(args)
+        return await getExternalLinks(input)
+      }
+
+      case "advanced_search": {
+        const input = AdvancedSearchSchema.parse(args)
+        return await advancedSearch(apiClient, input)
       }
 
       default:

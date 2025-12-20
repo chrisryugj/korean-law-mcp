@@ -93,8 +93,8 @@ function parseOrdinanceXML(xml: string): any {
   obj.OrdinSearch.totalCnt = totalCntMatch ? totalCntMatch[1] : "0"
   obj.OrdinSearch.page = pageMatch ? pageMatch[1] : "1"
 
-  // Extract ordin items
-  const ordinMatches = content.matchAll(/<ordin[^>]*>([\s\S]*?)<\/ordin>/g)
+  // Extract law items (자치법규는 <law> 태그로 반환됨)
+  const ordinMatches = content.matchAll(/<law[^>]*>([\s\S]*?)<\/law>/g)
   obj.OrdinSearch.ordin = []
 
   for (const match of ordinMatches) {

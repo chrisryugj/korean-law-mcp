@@ -1,6 +1,6 @@
 {
   "name": "korean-law-mcp",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "국가법령정보센터 API 기반 MCP 서버 - 한국 법령 조회·비교 도구",
   "type": "module",
   "main": "build/index.js",

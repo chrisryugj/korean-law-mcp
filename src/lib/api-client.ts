@@ -165,8 +165,8 @@ export class LawApiClient {
     const apiParams = new URLSearchParams({
       target: "admrul",
       OC: this.apiKey,
-      type: "JSON",
-      ID: id,
+      type: "XML",  // 행정규칙은 XML만 지원
+      ID: id,  // 행정규칙일련번호 사용
     })
 
     const url = `${LAW_API_BASE}/lawService.do?${apiParams.toString()}`
@@ -300,5 +300,71 @@ export class LawApiClient {
     }
 
     return text
+  }
+
+  /**
+   * 일자별 조문 개정 이력 조회
+   */
+  async getArticleHistory(params: {
+    lawId?: string
+    jo?: string
+    regDt?: string
+    fromRegDt?: string
+    toRegDt?: string
+    org?: string
+    page?: number
+  }): Promise<string> {
+    const apiParams = new URLSearchParams({
+      target: "lsJoHstInf",
+      OC: this.apiKey,
+      type: "XML",
+    })
+
+    if (params.lawId) apiParams.append("ID", params.lawId)
+    if (params.jo) apiParams.append("JO", params.jo)
+    if (params.regDt) apiParams.append("regDt", params.regDt)
+    if (params.fromRegDt) apiParams.append("fromRegDt", params.fromRegDt)
+    if (params.toRegDt) apiParams.append("toRegDt", params.toRegDt)
+    if (params.org) apiParams.append("org", params.org)
+    if (params.page) apiParams.append("page", params.page.toString())
+
+    const url = `${LAW_API_BASE}/lawSearch.do?${apiParams.toString()}`
+    const response = await fetch(url)
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`)
+    }
+
+    return await response.text()
+  }
+
+  /**
+   * 법령 변경이력 목록 조회
+   */
+  async getLawHistory(params: {
+    regDt: string
+    org?: string
+    display?: number
+    page?: number
+  }): Promise<string> {
+    const apiParams = new URLSearchParams({
+      target: "lsHstInf",
+      OC: this.apiKey,
+      type: "XML",
+      regDt: params.regDt,
+    })
+
+    if (params.org) apiParams.append("org", params.org)
+    if (params.display) apiParams.append("display", params.display.toString())
+    if (params.page) apiParams.append("page", params.page.toString())
+
+    const url = `${LAW_API_BASE}/lawSearch.do?${apiParams.toString()}`
+    const response = await fetch(url)
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`)
+    }
+
+    return await response.text()
   }
 }

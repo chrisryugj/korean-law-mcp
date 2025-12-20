@@ -15,6 +15,13 @@ Korean Law MCP Server - 국가법령정보센터(법제처) API 기반 Model Con
 - Three-tier delegation mapping (법률→시행령→시행규칙)
 - Precedent search and retrieval (판례 검색 및 전문 조회)
 - Legal interpretation search and retrieval (법령해석례 검색 및 전문 조회)
+- **[v1.3.0]** Article history tracking (조문 연혁 추적)
+- **[v1.3.0]** Law change history (법령 변경이력)
+- **[v1.3.0]** Precedent analysis (판례 분석: 요약, 키워드, 유사 판례)
+- **[v1.3.0]** Law statistics (법령 통계)
+- **[v1.3.0]** Article link parsing (조문 참조 파싱)
+- **[v1.3.0]** External links generation (외부 링크 생성)
+- **[v1.3.0]** Advanced search (고급 검색)
 
 ## Development Commands
 
@@ -52,7 +59,7 @@ npx @modelcontextprotocol/inspector build/index.js
 ### Core Components
 
 **Entry Point** ([src/index.ts](src/index.ts)):
-- Initializes MCP server with 13 tools
+- Initializes MCP server with 29 tools (v1.3.0)
 - Supports dual transport modes: STDIO (local) and SSE (remote)
 - Parses CLI arguments to determine mode
 
@@ -61,18 +68,37 @@ npx @modelcontextprotocol/inspector build/index.js
 - All API calls go through this class
 - Handles URL construction and error responses
 
-**Tools** ([src/tools/](src/tools/)):
+**Tools** ([src/tools/](src/tools/)) - 29 tools total:
 - Each tool is a separate module with Zod schema validation
-- `search.ts`: Law search with abbreviation resolution
-- `law-text.ts`: Article text retrieval
-- `comparison.ts`: Old-new law comparison
-- `three-tier.ts`: Delegation relationship mapping
-- `admin-rule.ts`: Administrative rule search and retrieval
-- `annex.ts`: Annexes and forms retrieval
-- `ordinance.ts`: Local ordinances retrieval
-- `precedents.ts`: Precedent (case law) search and full text retrieval
-- `interpretations.ts`: Legal interpretation search and full text retrieval
-- `utils.ts`: JO code conversion utility
+- **Core Tools (1-14)**:
+  - `search.ts`: Law search with abbreviation resolution
+  - `law-text.ts`: Article text retrieval
+  - `comparison.ts`: Old-new law comparison
+  - `three-tier.ts`: Delegation relationship mapping
+  - `admin-rule.ts`: Administrative rule search and retrieval
+  - `annex.ts`: Annexes and forms retrieval
+  - `ordinance.ts`: Local ordinances retrieval
+  - `precedents.ts`: Precedent search and full text retrieval
+  - `interpretations.ts`: Legal interpretation search and full text retrieval
+  - `utils.ts`: JO code conversion utility
+- **Analysis Tools (15-20, v1.2.0)**:
+  - `ordinance-search.ts`: Ordinance search
+  - `article-compare.ts`: Article comparison
+  - `law-tree.ts`: Law tree view
+  - `search-all.ts`: Unified search
+  - `autocomplete.ts`: Law name autocomplete
+  - `batch-articles.ts`: Batch article retrieval
+  - `article-with-precedents.ts`: Article + precedents integration
+- **Advanced Tools (21-29, v1.3.0)**:
+  - `article-history.ts`: Article revision history
+  - `law-history.ts`: Law change history
+  - `precedent-summary.ts`: Precedent summarization
+  - `precedent-keywords.ts`: Keyword extraction from precedents
+  - `similar-precedents.ts`: Similar precedent search
+  - `law-statistics.ts`: Law statistics
+  - `article-link-parser.ts`: Article reference parsing
+  - `external-links.ts`: External link generation
+  - `advanced-search.ts`: Advanced search with filters
 
 **Data Normalization** ([src/lib/](src/lib/)):
 - `search-normalizer.ts`: Law name abbreviation resolution (imported from LexDiff project)
