@@ -65,10 +65,10 @@ export async function startSSEServer(server: Server, port: number) {
     res.sendStatus(200)
   })
 
-  // 서버 시작
-  app.listen(port, () => {
+  // 서버 시작 (0.0.0.0으로 바인딩하여 외부 접속 허용)
+  app.listen(port, "0.0.0.0", () => {
     console.error(`✓ Korean Law MCP server (SSE mode) listening on port ${port}`)
-    console.error(`✓ SSE endpoint: http://localhost:${port}/sse`)
-    console.error(`✓ Health check: http://localhost:${port}/health`)
+    console.error(`✓ SSE endpoint: http://0.0.0.0:${port}/sse`)
+    console.error(`✓ Health check: http://0.0.0.0:${port}/health`)
   })
 }
