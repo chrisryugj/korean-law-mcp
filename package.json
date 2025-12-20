@@ -5,7 +5,7 @@
   "type": "module",
   "main": "build/index.js",
   "bin": {
-    "korean-law-mcp": "./build/index.js"
+    "korean-law-mcp": "build/index.js"
   },
   "scripts": {
     "build": "tsc",
@@ -42,7 +42,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/chrisryugj/korean-law-mcp"
+    "url": "git+https://github.com/chrisryugj/korean-law-mcp.git"
   },
   "engines": {
     "node": ">=18.0.0"

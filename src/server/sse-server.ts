@@ -30,7 +30,7 @@ export async function startSSEServer(server: Server, port: number) {
       version: "1.0.0",
       status: "running",
       endpoints: {
-        sse: "/sse",
+        mcp: "/mcp",
         health: "/health"
       }
     })
@@ -40,8 +40,8 @@ export async function startSSEServer(server: Server, port: number) {
     res.json({ status: "ok", timestamp: new Date().toISOString() })
   })
 
-  // SSE 엔드포인트
-  app.get("/sse", async (req, res) => {
+  // MCP SSE 엔드포인트
+  app.get("/mcp", async (req, res) => {
     console.error("SSE connection established")
 
     // SSE 헤더 설정
@@ -68,7 +68,7 @@ export async function startSSEServer(server: Server, port: number) {
   // 서버 시작 (0.0.0.0으로 바인딩하여 외부 접속 허용)
   app.listen(port, "0.0.0.0", () => {
     console.error(`✓ Korean Law MCP server (SSE mode) listening on port ${port}`)
-    console.error(`✓ SSE endpoint: http://0.0.0.0:${port}/sse`)
+    console.error(`✓ MCP endpoint: http://0.0.0.0:${port}/mcp`)
     console.error(`✓ Health check: http://0.0.0.0:${port}/health`)
   })
 }
