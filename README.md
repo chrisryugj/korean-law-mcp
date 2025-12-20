@@ -133,6 +133,137 @@ VS Code 설정 (`settings.json`):
 }
 ```
 
+##### Cursor
+
+`.cursor/mcp.json`:
+```json
+{
+  "mcpServers": {
+    "korean-law": {
+      "command": "korean-law-mcp",
+      "env": {
+        "LAW_OC": "your-api-key-here"
+      }
+    }
+  }
+}
+```
+
+##### VS Code (Claude Code Extension)
+
+VS Code 설정 (`settings.json`):
+```json
+{
+  "claude.mcpServers": {
+    "korean-law": {
+      "command": "korean-law-mcp",
+      "env": {
+        "LAW_OC": "your-api-key-here"
+      }
+    }
+  }
+}
+```
+
+또는 `.vscode/mcp.json` (프로젝트별 설정):
+```json
+{
+  "mcpServers": {
+    "korean-law": {
+      "command": "korean-law-mcp",
+      "env": {
+        "LAW_OC": "your-api-key-here"
+      }
+    }
+  }
+}
+```
+
+##### Windsurf
+
+`.windsurf/mcp.json`:
+```json
+{
+  "mcpServers": {
+    "korean-law": {
+      "command": "korean-law-mcp",
+      "env": {
+        "LAW_OC": "your-api-key-here"
+      }
+    }
+  }
+}
+```
+
+##### Roo Cline
+
+VS Code 설정 (`settings.json`):
+```json
+{
+  "roo-cline.mcpServers": {
+    "korean-law": {
+      "command": "korean-law-mcp",
+      "env": {
+        "LAW_OC": "your-api-key-here"
+      }
+    }
+  }
+}
+```
+
+##### Sourcegraph Cody
+
+`.cody/mcp.json`:
+```json
+{
+  "mcpServers": {
+    "korean-law": {
+      "command": "korean-law-mcp",
+      "env": {
+        "LAW_OC": "your-api-key-here"
+      }
+    }
+  }
+}
+```
+
+##### LLM CLI
+
+`~/.config/llm/config.json`:
+```json
+{
+  "mcp": {
+    "servers": {
+      "korean-law": {
+        "command": "korean-law-mcp",
+        "env": {
+          "LAW_OC": "your-api-key-here"
+        }
+      }
+    }
+  }
+}
+```
+
+또는 명령줄에서 직접 실행:
+```bash
+export LAW_OC=your-api-key
+llm mcp korean-law-mcp
+```
+
+##### Raycast AI
+
+Raycast 설정에서 Extensions → AI → MCP Servers 추가:
+```json
+{
+  "name": "korean-law",
+  "command": "korean-law-mcp",
+  "env": {
+    "LAW_OC": "your-api-key-here"
+  }
+}
+```
+
 3. **클라이언트 재시작** 후 법령 질문을 시작하세요!
 
 #### **Option 2: Remote Deployment (Railway/Render)**
