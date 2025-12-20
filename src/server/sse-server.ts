@@ -12,11 +12,19 @@ export async function startSSEServer(server: Server, port: number) {
   // JSON 파싱 미들웨어
   app.use(express.json())
 
-  // CORS 설정 (모든 도메인 허용)
+  // CORS 설정 (MCP Streamable HTTP 스펙 준수)
   app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*")
-    res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-    res.header("Access-Control-Allow-Headers", "Content-Type, mcp-session-id, last-event-id")
+    res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS, HEAD")
+    res.header("Access-Control-Allow-Headers",
+      "Content-Type, Accept, Authorization, Mcp-Protocol-Version, Mcp-Session-Id, Last-Event-ID, Traceparent, Tracestate"
+    )
+    res.header("Access-Control-Expose-Headers",
+      "Mcp-Session-Id, Content-Type, Mcp-Protocol-Version, Traceparent, Tracestate"
+    )
+    res.header("Access-Control-Max-Age", "86400")
+    res.header("Mcp-Protocol-Version", "2025-03-26")
+
     if (req.method === "OPTIONS") {
       return res.sendStatus(200)
     }
