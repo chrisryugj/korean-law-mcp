@@ -5,13 +5,17 @@
 import { z } from "zod"
 
 export const ExternalLinksSchema = z.object({
-  linkType: z.enum(["law", "precedent", "interpretation"]).describe(
-    "링크 유형: law (법령), precedent (판례), interpretation (해석례)"
+  linkType: z.enum(["law", "precedent", "interpretation", "ordinance", "admin_rule"]).describe(
+    "링크 유형: law (법령), precedent (판례), interpretation (해석례), ordinance (자치법규), admin_rule (행정규칙)"
   ),
   lawId: z.string().optional().describe("법령ID (법령 링크 생성 시)"),
-  mst: z.string().optional().describe("법령일련번호 (법령 링크 생성 시)"),
+  mst: z.string().optional().describe("법령일련번호 (법령/자치법규 링크 생성 시)"),
+  lawName: z.string().optional().describe("법령명 (한글 URL 생성용, 예: '관세법')"),
+  jo: z.string().optional().describe("조문 번호 (한글 URL 생성용, 예: '제38조')"),
   precedentId: z.string().optional().describe("판례일련번호 (판례 링크 생성 시)"),
-  interpretationId: z.string().optional().describe("법령해석례일련번호 (해석례 링크 생성 시)")
+  interpretationId: z.string().optional().describe("법령해석례일련번호 (해석례 링크 생성 시)"),
+  adminRuleId: z.string().optional().describe("행정규칙일련번호 (행정규칙 링크 생성 시)"),
+  ordinanceId: z.string().optional().describe("자치법규ID (자치법규 링크 생성 시)")
 })
 
 export type ExternalLinksInput = z.infer<typeof ExternalLinksSchema>
@@ -24,17 +28,17 @@ export async function getExternalLinks(
 
     switch (input.linkType) {
       case "law": {
-        if (!input.lawId && !input.mst) {
+        if (!input.lawId && !input.mst && !input.lawName) {
           return {
             content: [{
               type: "text",
-              text: "법령 링크 생성을 위해 lawId 또는 mst가 필요합니다."
+              text: "법령 링크 생성을 위해 lawId, mst 또는 lawName이 필요합니다."
             }],
             isError: true
           }
         }
 
-        const lawLinks = generateLawLinks(input.lawId, input.mst)
+        const lawLinks = generateLawLinks(input.lawId, input.mst, input.lawName, input.jo)
         resultText += lawLinks
         break
       }
@@ -71,6 +75,38 @@ export async function getExternalLinks(
         break
       }
 
+      case "ordinance": {
+        if (!input.ordinanceId && !input.mst && !input.lawName) {
+          return {
+            content: [{
+              type: "text",
+              text: "자치법규 링크 생성을 위해 ordinanceId, mst 또는 lawName이 필요합니다."
+            }],
+            isError: true
+          }
+        }
+
+        const ordinanceLinks = generateOrdinanceLinks(input.ordinanceId, input.mst, input.lawName, input.jo)
+        resultText += ordinanceLinks
+        break
+      }
+
+      case "admin_rule": {
+        if (!input.adminRuleId) {
+          return {
+            content: [{
+              type: "text",
+              text: "행정규칙 링크 생성을 위해 adminRuleId가 필요합니다."
+            }],
+            isError: true
+          }
+        }
+
+        const adminRuleLinks = generateAdminRuleLinks(input.adminRuleId)
+        resultText += adminRuleLinks
+        break
+      }
+
       default:
         return {
           content: [{
@@ -101,24 +137,38 @@ export async function getExternalLinks(
 /**
  * 법령 외부 링크 생성
  */
-function generateLawLinks(lawId?: string, mst?: string): string {
+function generateLawLinks(lawId?: string, mst?: string, lawName?: string, jo?: string): string {
   let links = "📜 법령 관련 링크:\n\n"
+  let linkNum = 1
 
-  // 법제처 국가법령정보센터
-  if (lawId) {
-    links += `1. 법제처 법령 상세:\n`
-    links += `   https://www.law.go.kr/법령/${lawId}\n\n`
-
-    links += `2. 법령 전문 (영문):\n`
-    links += `   https://www.law.go.kr/eng/법령/${lawId}\n\n`
+  // 1. 한글 URL (법령명 기반) - 우선순위 최상위
+  if (lawName) {
+    if (jo) {
+      links += `${linkNum++}. 법제처 조문 직접 링크 (한글 URL):\n`
+      links += `   https://www.law.go.kr/법령/${lawName}/${jo}\n\n`
+    } else {
+      links += `${linkNum++}. 법제처 법령 직접 링크 (한글 URL):\n`
+      links += `   https://www.law.go.kr/법령/${lawName}\n\n`
+    }
   }
 
+  // 2. 법령ID 기반 링크 (쿼리 파라미터)
+  if (lawId) {
+    links += `${linkNum++}. 법제처 법령 상세 (ID):\n`
+    links += `   https://www.law.go.kr/LSW/lawLsInfoP.do?lsiSeq=${lawId}\n\n`
+
+    links += `${linkNum++}. 법령 전문 (영문):\n`
+    links += `   https://www.law.go.kr/eng/LSW/lawLsInfoP.do?lsiSeq=${lawId}\n\n`
+  }
+
+  // 3. 법령 연혁
   if (mst) {
-    links += `3. 법령 연혁:\n`
+    links += `${linkNum++}. 법령 연혁:\n`
     links += `   https://www.law.go.kr/LSW/lsStmdInfoP.do?lsiSeq=${mst}\n\n`
   }
 
-  links += `4. 법제처 홈페이지:\n`
+  // 4. 법제처 홈페이지
+  links += `${linkNum}. 법제처 홈페이지:\n`
   links += `   https://www.law.go.kr/\n\n`
 
   return links
@@ -154,6 +204,65 @@ function generateInterpretationLinks(interpretationId: string): string {
 
   links += `2. 법제처 법령해석:\n`
   links += `   https://www.moleg.go.kr/\n\n`
+
+  return links
+}
+
+/**
+ * 자치법규 외부 링크 생성
+ */
+function generateOrdinanceLinks(ordinanceId?: string, mst?: string, lawName?: string, jo?: string): string {
+  let links = "🏛️ 자치법규 관련 링크:\n\n"
+  let linkNum = 1
+
+  // 1. 한글 URL (법령명 기반)
+  if (lawName) {
+    if (jo) {
+      links += `${linkNum++}. 법제처 조문 직접 링크 (한글 URL):\n`
+      links += `   https://www.law.go.kr/자치법규/${lawName}/${jo}\n\n`
+    } else {
+      links += `${linkNum++}. 법제처 자치법규 직접 링크 (한글 URL):\n`
+      links += `   https://www.law.go.kr/자치법규/${lawName}\n\n`
+    }
+  }
+
+  // 2. 자치법규ID 기반 링크
+  if (ordinanceId) {
+    links += `${linkNum++}. 법제처 자치법규 상세 (ID):\n`
+    links += `   https://www.law.go.kr/LSW/ordinInfoP.do?ordinSeq=${ordinanceId}\n\n`
+  }
+
+  // 3. 자치법규 연혁
+  if (mst) {
+    links += `${linkNum++}. 자치법규 연혁:\n`
+    links += `   https://www.law.go.kr/LSW/lsStmdInfoP.do?lsiSeq=${mst}\n\n`
+  }
+
+  // 4. 국가법령정보센터 자치법규
+  links += `${linkNum++}. 국가법령정보센터 자치법규:\n`
+  links += `   https://www.law.go.kr/LSW/lsRvsRqInfoListP.do\n\n`
+
+  // 5. 자치법규정보시스템 (ELIS)
+  links += `${linkNum}. 자치법규정보시스템 (ELIS):\n`
+  links += `   https://www.elis.go.kr/\n\n`
+
+  return links
+}
+
+/**
+ * 행정규칙 외부 링크 생성
+ */
+function generateAdminRuleLinks(adminRuleId: string): string {
+  let links = "📋 행정규칙 관련 링크:\n\n"
+
+  links += `1. 법제처 행정규칙 상세:\n`
+  links += `   https://www.law.go.kr/LSW/admRulInfoP.do?admRulSeq=${adminRuleId}\n\n`
+
+  links += `2. 국가법령정보센터 행정규칙:\n`
+  links += `   https://www.law.go.kr/LSW/admRulLsInfoP.do\n\n`
+
+  links += `3. 법제처 홈페이지:\n`
+  links += `   https://www.law.go.kr/\n\n`
 
   return links
 }

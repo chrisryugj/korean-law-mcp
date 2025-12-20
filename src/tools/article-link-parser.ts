@@ -11,6 +11,8 @@ export const ParseArticleLinksSchema = z.object({
   lawId: z.string().optional().describe("법령ID"),
   jo: z.string().describe("조문 번호 (예: '제38조')"),
   efYd: z.string().optional().describe("시행일자 (YYYYMMDD)")
+}).refine(data => data.mst || data.lawId, {
+  message: "mst 또는 lawId 중 하나는 필수입니다"
 })
 
 export type ParseArticleLinksInput = z.infer<typeof ParseArticleLinksSchema>

@@ -1,6 +1,6 @@
 # Korean Law MCP - System Architecture
 
-> **v1.3.0** | Last Updated: December 2025
+> **v1.4.0** | Last Updated: December 2025
 
 This document provides a comprehensive technical overview of the Korean Law MCP Server's architecture, data flows, and design decisions.
 
@@ -37,12 +37,13 @@ This document provides a comprehensive technical overview of the Korean Law MCP 
                      ├────────────────────┤
                      │                    │
 ┌────────────────────▼────────────────────▼────────────────────┐
-│               Korean Law MCP Server (v1.3.0)                  │
+│               Korean Law MCP Server (v1.4.0)                  │
 │                                                               │
 │  ┌───────────────────────────────────────────────────────┐   │
-│  │           Tool Layer (29 Zod-Validated Tools)         │   │
+│  │           Tool Layer (33 Zod-Validated Tools)         │   │
 │  ├───────────────────────────────────────────────────────┤   │
 │  │  Search (11)  │  Retrieval (9)  │  Analysis (9)       │   │
+│  │  Specialized (4) - Tax Tribunal & Customs             │   │
 │  └───────────────────────────────────────────────────────┘   │
 │                             ▲                                 │
 │                             │                                 │

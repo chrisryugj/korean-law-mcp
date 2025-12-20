@@ -22,6 +22,8 @@ Korean Law MCP Server - 국가법령정보센터(법제처) API 기반 Model Con
 - **[v1.3.0]** Article link parsing (조문 참조 파싱)
 - **[v1.3.0]** External links generation (외부 링크 생성)
 - **[v1.3.0]** Advanced search (고급 검색)
+- **[v1.4.0]** Tax tribunal decisions (조세심판원 재결례 검색 및 전문 조회)
+- **[v1.4.0]** Customs interpretations (관세청 법령해석 검색 및 전문 조회)
 
 ## Development Commands
 
@@ -59,7 +61,7 @@ npx @modelcontextprotocol/inspector build/index.js
 ### Core Components
 
 **Entry Point** ([src/index.ts](src/index.ts)):
-- Initializes MCP server with 29 tools (v1.3.0)
+- Initializes MCP server with 33 tools (v1.4.0)
 - Supports dual transport modes: STDIO (local) and SSE (remote)
 - Parses CLI arguments to determine mode
 
@@ -68,7 +70,7 @@ npx @modelcontextprotocol/inspector build/index.js
 - All API calls go through this class
 - Handles URL construction and error responses
 
-**Tools** ([src/tools/](src/tools/)) - 29 tools total:
+**Tools** ([src/tools/](src/tools/)) - 33 tools total:
 - Each tool is a separate module with Zod schema validation
 - **Core Tools (1-14)**:
   - `search.ts`: Law search with abbreviation resolution
@@ -99,6 +101,9 @@ npx @modelcontextprotocol/inspector build/index.js
   - `article-link-parser.ts`: Article reference parsing
   - `external-links.ts`: External link generation
   - `advanced-search.ts`: Advanced search with filters
+- **Specialized Tools (30-33, v1.4.0)**:
+  - `tax-tribunal-decisions.ts`: Tax tribunal decision search and full text retrieval
+  - `customs-interpretations.ts`: Customs interpretation search and full text retrieval
 
 **Data Normalization** ([src/lib/](src/lib/)):
 - `search-normalizer.ts`: Law name abbreviation resolution (imported from LexDiff project)

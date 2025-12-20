@@ -39,6 +39,8 @@ import { getLawStatistics, LawStatisticsSchema } from "./tools/law-statistics.js
 import { parseArticleLinks, ParseArticleLinksSchema } from "./tools/article-link-parser.js"
 import { getExternalLinks, ExternalLinksSchema } from "./tools/external-links.js"
 import { advancedSearch, AdvancedSearchSchema } from "./tools/advanced-search.js"
+import { searchTaxTribunalDecisions, searchTaxTribunalDecisionsSchema, getTaxTribunalDecisionText, getTaxTribunalDecisionTextSchema } from "./tools/tax-tribunal-decisions.js"
+import { searchCustomsInterpretations, searchCustomsInterpretationsSchema, getCustomsInterpretationText, getCustomsInterpretationTextSchema } from "./tools/customs-interpretations.js"
 import { startSSEServer } from "./server/sse-server.js"
 
 // 환경변수 확인
@@ -783,6 +785,132 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ["query"]
         }
+      },
+      {
+        name: "search_tax_tribunal_decisions",
+        description: "조세심판원 특별행정심판재결례를 검색합니다. 키워드, 재결구분, 일자별로 검색 가능합니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "검색 키워드 (예: '자동차', '부가가치세')"
+            },
+            display: {
+              type: "number",
+              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              default: 20
+            },
+            page: {
+              type: "number",
+              description: "페이지 번호 (기본값: 1)",
+              default: 1
+            },
+            cls: {
+              type: "string",
+              description: "재결구분코드"
+            },
+            gana: {
+              type: "string",
+              description: "사전식 검색 (ga, na, da 등)"
+            },
+            dpaYd: {
+              type: "string",
+              description: "처분일자 범위 (YYYYMMDD~YYYYMMDD, 예: '20200101~20201231')"
+            },
+            rslYd: {
+              type: "string",
+              description: "의결일자 범위 (YYYYMMDD~YYYYMMDD, 예: '20200101~20201231')"
+            },
+            sort: {
+              type: "string",
+              enum: ["lasc", "ldes", "dasc", "ddes", "nasc", "ndes"],
+              description: "정렬 옵션"
+            }
+          },
+          required: []
+        }
+      },
+      {
+        name: "get_tax_tribunal_decision_text",
+        description: "조세심판원 재결례의 전문을 조회합니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description: "특별행정심판재결례일련번호 (search_tax_tribunal_decisions에서 획득)"
+            },
+            decisionName: {
+              type: "string",
+              description: "재결례명 (선택사항, 검증용)"
+            }
+          },
+          required: ["id"]
+        }
+      },
+      {
+        name: "search_customs_interpretations",
+        description: "관세청 법령해석을 검색합니다. 키워드, 질의기관, 해석기관별로 검색 가능합니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "검색 키워드 (예: '거래명세서', '세금')"
+            },
+            display: {
+              type: "number",
+              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              default: 20
+            },
+            page: {
+              type: "number",
+              description: "페이지 번호 (기본값: 1)",
+              default: 1
+            },
+            inq: {
+              type: "number",
+              description: "질의기관코드"
+            },
+            rpl: {
+              type: "number",
+              description: "해석기관코드"
+            },
+            gana: {
+              type: "string",
+              description: "사전식 검색 (ga, na, da 등)"
+            },
+            explYd: {
+              type: "string",
+              description: "해석일자 범위 (YYYYMMDD~YYYYMMDD, 예: '20200101~20201231')"
+            },
+            sort: {
+              type: "string",
+              enum: ["lasc", "ldes", "dasc", "ddes"],
+              description: "정렬 옵션"
+            }
+          },
+          required: []
+        }
+      },
+      {
+        name: "get_customs_interpretation_text",
+        description: "관세청 법령해석의 전문을 조회합니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description: "법령해석일련번호 (search_customs_interpretations에서 획득)"
+            },
+            interpretationName: {
+              type: "string",
+              description: "해석명 (선택사항, 검증용)"
+            }
+          },
+          required: ["id"]
+        }
       }
     ]
   }
@@ -937,6 +1065,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "advanced_search": {
         const input = AdvancedSearchSchema.parse(args)
         return await advancedSearch(apiClient, input)
+      }
+
+      case "search_tax_tribunal_decisions": {
+        const input = searchTaxTribunalDecisionsSchema.parse(args)
+        return await searchTaxTribunalDecisions(apiClient, input)
+      }
+
+      case "get_tax_tribunal_decision_text": {
+        const input = getTaxTribunalDecisionTextSchema.parse(args)
+        return await getTaxTribunalDecisionText(apiClient, input)
+      }
+
+      case "search_customs_interpretations": {
+        const input = searchCustomsInterpretationsSchema.parse(args)
+        return await searchCustomsInterpretations(apiClient, input)
+      }
+
+      case "get_customs_interpretation_text": {
+        const input = getCustomsInterpretationTextSchema.parse(args)
+        return await getCustomsInterpretationText(apiClient, input)
       }
 
       default:

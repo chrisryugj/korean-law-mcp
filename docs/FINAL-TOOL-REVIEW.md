@@ -1,10 +1,10 @@
-# 최종 도구 검토 결과 (v1.3.0)
+# 최종 도구 검토 결과 (v1.4.0)
 
 ## 📊 전체 요약
 
-- **총 도구 개수**: 29개
-- **완전 정상 작동**: 29개 ✅
-- **테스트 통과율**: 100% (29/29)
+- **총 도구 개수**: 33개
+- **완전 정상 작동**: 33개 ✅
+- **테스트 통과율**: 100% (33/33)
 
 ## ✅ MCP 실사용 적합성 평가
 
@@ -25,7 +25,7 @@
    - 행정규칙: `[2100000261222]` → get_admin_rule(id="2100000261222")
 
 3. **독립 실행 가능 도구 다수**
-   - 29개 중 11개는 즉시 사용 가능 (search 계열)
+   - 33개 중 15개는 즉시 사용 가능 (search 계열 + specialized 4개)
    - 사용자가 직접 호출하기 쉬움
    - 최소한의 파라미터로 유용한 결과 제공
 
@@ -33,7 +33,7 @@
 
 ## 🔍 도구별 상세 분석
 
-### 🟢 Tier 1: 독립 실행 가능 (11개)
+### 🟢 Tier 1: 독립 실행 가능 (15개)
 
 사용자 입력만으로 즉시 작동하는 도구들:
 
@@ -50,6 +50,12 @@
 | 9 | `get_law_history` | 날짜별 법령 변경이력 | 날짜 (YYYYMMDD) | - |
 | 10 | `get_annexes` | 별표/서식 조회 | 법령명 + 유형 | - |
 | 11 | `advanced_search` | 고급 검색 (기간/부처 필터) | 키워드 + 필터 | - |
+| 12 | `search_tax_tribunal_decisions` ⭐ | 조세심판원 재결례 검색 | 키워드 | - |
+| 13 | `get_tax_tribunal_decision` ⭐ | 재결례 전문 조회 | 결정번호 | - |
+| 14 | `search_customs_interpretations` ⭐ | 관세청 법령해석 검색 | 키워드 | - |
+| 15 | `get_customs_interpretation` ⭐ | 법령해석 전문 조회 | 해석번호 | - |
+
+⭐ v1.4.0 신규 추가
 
 ---
 
@@ -59,15 +65,15 @@
 
 | # | 도구 이름 | 필요 데이터 | 획득 방법 | Claude 워크플로우 |
 |---|----------|------------|-----------|------------------|
-| 12 | `get_law_text` | mst/lawId + jo (선택) | search_law | ✅ 자동 |
-| 13 | `compare_old_new` | mst/lawId | search_law | ✅ 자동 |
-| 14 | `get_three_tier` | mst/lawId + knd | search_law | ✅ 자동 |
-| 15 | `compare_articles` | 2개 mst/lawId + jo | search_law (2회) | ✅ 자동 |
-| 16 | `get_law_tree` | mst/lawId | search_law | ✅ 자동 |
-| 17 | `get_batch_articles` | mst + 조문 배열 | search_law | ✅ 자동 |
-| 18 | `get_article_with_precedents` | mst + jo | search_law | ✅ 자동 |
-| 19 | `parse_article_links` | mst + jo | search_law | ✅ 자동 |
-| 20 | `get_external_links` | 법령명/ID | search_law | ✅ 자동 |
+| 16 | `get_law_text` | mst/lawId + jo (선택) | search_law | ✅ 자동 |
+| 17 | `compare_old_new` | mst/lawId | search_law | ✅ 자동 |
+| 18 | `get_three_tier` | mst/lawId + knd | search_law | ✅ 자동 |
+| 19 | `compare_articles` | 2개 mst/lawId + jo | search_law (2회) | ✅ 자동 |
+| 20 | `get_law_tree` | mst/lawId | search_law | ✅ 자동 |
+| 21 | `get_batch_articles` | mst + 조문 배열 | search_law | ✅ 자동 |
+| 22 | `get_article_with_precedents` | mst + jo | search_law | ✅ 자동 |
+| 23 | `parse_article_links` | mst + jo | search_law | ✅ 자동 |
+| 24 | `get_external_links` | 법령명/ID | search_law | ✅ 자동 |
 
 **워크플로우 예시**:
 ```
@@ -88,10 +94,10 @@ Claude → get_law_text(mst="279811", jo="제38조")
 
 | # | 도구 이름 | 필요 데이터 | ID 노출 형식 | 상태 |
 |---|----------|------------|-------------|------|
-| 21 | `get_admin_rule` | id (행정규칙일련번호) | `- 행정규칙일련번호: 2100000261222` | ✅ 정상 |
-| 22 | `get_ordinance` | ordinSeq | `[1121483]` | ✅ 정상 |
-| 23 | `get_precedent_text` | id | `[609561]` | ✅ 정상 |
-| 24 | `get_interpretation_text` | id | `[333393]` | ✅ 정상 |
+| 25 | `get_admin_rule` | id (행정규칙일련번호) | `- 행정규칙일련번호: 2100000261222` | ✅ 정상 |
+| 26 | `get_ordinance` | ordinSeq | `[1121483]` | ✅ 정상 |
+| 27 | `get_precedent_text` | id | `[609561]` | ✅ 정상 |
+| 28 | `get_interpretation_text` | id | `[333393]` | ✅ 정상 |
 
 **워크플로우 예시**:
 ```
@@ -114,11 +120,11 @@ v1.3.0에서 추가된 고급 분석 도구들:
 
 | # | 도구 이름 | 입력 | 출력 | 특징 |
 |---|----------|------|------|------|
-| 25 | `get_article_history` | lawId + jo | 조문 개정 연혁 | 시계열 추적 |
-| 26 | `summarize_precedent` | 판례 id | 판시사항, 판결요지, 주문 | 구조화된 요약 |
-| 27 | `extract_precedent_keywords` | 판례 id | 키워드 목록 (빈도순) | 법률 용어 우선 |
-| 28 | `find_similar_precedents` | query 또는 precedent id | 유사 판례 목록 | 유사도 점수 |
-| 29 | `get_law_statistics` | 통계 유형 | 최근 개정, 부처별, 연도별 | 통계 분석 |
+| 29 | `get_article_history` | lawId + jo | 조문 개정 연혁 | 시계열 추적 |
+| 30 | `summarize_precedent` | 판례 id | 판시사항, 판결요지, 주문 | 구조화된 요약 |
+| 31 | `extract_precedent_keywords` | 판례 id | 키워드 목록 (빈도순) | 법률 용어 우선 |
+| 32 | `find_similar_precedents` | query 또는 precedent id | 유사 판례 목록 | 유사도 점수 |
+| 33 | `get_law_statistics` | 통계 유형 | 최근 개정, 부처별, 연도별 | 통계 분석 |
 
 ---
 
@@ -233,6 +239,11 @@ Claude 워크플로우:
    - ID 추출 및 전달 자동화
    - 컨텍스트 유지로 매끄러운 대화 흐름
 
+5. **전문 도메인 확장성** (v1.4.0)
+   - 독립 도구로 전문 분야 추가 (조세심판원, 관세청)
+   - 기존 아키텍처 변경 없이 확장 가능
+   - 향후 추가 도메인 통합 용이
+
 #### 통합 시 단점:
 
 1. **복잡도 급증**
@@ -281,6 +292,18 @@ Claude 워크플로우:
    - 1시간/24시간 차등 TTL
    - 자동 cleanup (1시간 주기)
 
+### ✅ 완료된 개선 (v1.4.0)
+
+1. **조세심판원 재결례 통합**
+   - search_tax_tribunal_decisions: 재결례 검색
+   - get_tax_tribunal_decision: 재결 전문 조회
+   - 키워드 및 사건번호 검색 지원
+
+2. **관세청 법령해석 통합**
+   - search_customs_interpretations: 해석례 검색
+   - get_customs_interpretation: 해석 전문 조회
+   - 관세 전문 분야 데이터 접근성 향상
+
 ### 🔄 권장 개선 (선택사항)
 
 1. **벡터 임베딩 기반 유사 판례 검색**
@@ -301,11 +324,12 @@ Claude 워크플로우:
 
 ### ✅ 유지할 것
 
-1. **29개 도구 구조** - 각 도구의 단일 책임 원칙 준수
+1. **33개 도구 구조** - 각 도구의 단일 책임 원칙 준수
 2. **2단계 워크플로우** - Claude의 자동 처리 능력 활용
 3. **ID 노출 방식** - `[ID]` 형식 유지
 4. **캐싱 전략** - 1시간/24시간 차등 TTL
 5. **파일 크기 제한** - 200줄 이하 유지
+6. **독립 도구 확장 전략** - 전문 분야별 별도 도구
 
 ### 🔧 조치할 것
 
@@ -316,7 +340,7 @@ Claude 워크플로우:
    - DEVELOPMENT.md (신규 작성)
 
 2. **테스트 코드 정리** ✅ 완료
-   - test-all-tools.cjs (29개 도구 테스트)
+   - test-all-tools.cjs (33개 도구 테스트)
    - ID 자동 추출 로직
    - 100% 통과율 달성
 
@@ -335,15 +359,16 @@ Claude 워크플로우:
 
 ## 🎉 결론
 
-**Korean Law MCP Server v1.3.0은 프로덕션 환경에 적합한 상태입니다.**
+**Korean Law MCP Server v1.4.0은 프로덕션 환경에 적합한 상태입니다.**
 
 ### 핵심 지표
 
-- **✅ 도구 개수**: 29개
-- **✅ 테스트 통과율**: 100% (29/29)
+- **✅ 도구 개수**: 33개 (v1.4.0에서 4개 추가)
+- **✅ 테스트 통과율**: 100% (33/33)
 - **✅ 캐시 히트율**: 82% (평균)
 - **✅ API 호출 절감**: 80% (캐싱 효과)
 - **✅ 성능 향상**: 37.5× (검색), 47.5× (조회)
+- **✅ 전문 분야 확장**: 조세심판원, 관세청 통합
 
 ### 기술적 우수성
 
@@ -354,13 +379,14 @@ Claude 워크플로우:
 
 2. **Battle-tested 코드**
    - LexDiff 정규화 로직
-   - 20/20 → 29/29 도구 확장
+   - 20/20 → 29/29 → 33/33 도구 확장
    - 100% TypeScript + Zod 검증
 
 3. **도메인 전문성**
    - 한국 법령 시스템 특화
    - 약칭 자동 인식
    - 3단 비교 (법률→시행령→시행규칙)
+   - 전문 분야 통합 (조세심판원, 관세청)
 
 4. **사용자 경험**
    - Claude 워크플로우 자동화
@@ -369,7 +395,8 @@ Claude 워크플로우:
 
 ---
 
-**버전**: v1.3.0
+**버전**: v1.4.0
 **테스트 날짜**: 2025-12-20
-**테스트 결과**: 29/29 통과 (100%)
+**테스트 결과**: 33/33 통과 (100%)
 **문서 현행화**: ✅ 완료
+**v1.4.0 신규 기능**: 조세심판원 재결례, 관세청 법령해석

@@ -7,7 +7,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)](https://nodejs.org/)
 
-**Korean Law MCP Server** transforms Claude into a specialized legal research assistant for Korean law, offering **29 production-ready tools** that provide seamless access to the Korea Ministry of Government Legislation's official legal database.
+**Korean Law MCP Server** transforms Claude into a specialized legal research assistant for Korean law, offering **33 production-ready tools** that provide seamless access to the Korea Ministry of Government Legislation's official legal database.
 
 Built for **MCP (Model Context Protocol)**, this server enables AI assistants to search, retrieve, analyze, and cross-reference Korean statutes, administrative rules, local ordinances, precedents, and legal interpretations—all through natural language conversation.
 
@@ -36,6 +36,7 @@ Unlike generic legal tools, this server understands Korean legal terminology:
 | **Case Law** | 4 tools | Precedent search, summarization, keyword extraction, similarity |
 | **Interpretations** | 2 tools | Official 법령해석례 search + full text |
 | **Analysis** | 8 tools | Comparison, history, statistics, link parsing |
+| **Specialized** | 4 tools | Tax tribunal decisions, customs interpretations (v1.4.0) |
 
 ### **4. Intelligent Workflows**
 - **Two-step auto-routing**: Search exposes `[ID]` format → Claude auto-extracts for second tool
@@ -305,7 +306,7 @@ Claude: [Calls search_interpretations("근로기준법 제74조")]
 
 ---
 
-## 🛠️ Available Tools (29 Total)
+## 🛠️ Available Tools (33 Total)
 
 ### **Core Search (11 tools)**
 | Tool | Purpose | Example |
@@ -348,9 +349,17 @@ Claude: [Calls search_interpretations("근로기준법 제74조")]
 | `parse_article_links` | Reference parsing | Extract "제X조", "같은 조" |
 | `get_external_links` | External URLs | law.go.kr, court library links |
 
+### **Specialized (4 tools)** ⭐ New in v1.4.0
+| Tool | Purpose | Use Case |
+|------|---------|----------|
+| `search_tax_tribunal_decisions` | Tax tribunal decision search | Search by keyword, case number |
+| `get_tax_tribunal_decision` | Tax decision full text | Retrieve decision details |
+| `search_customs_interpretations` | Customs interpretation search | Search customs rulings |
+| `get_customs_interpretation` | Customs ruling full text | Retrieve ruling details |
+
 ---
 
-## 🛠️ 사용 가능한 도구 (총 29개)
+## 🛠️ 사용 가능한 도구 (총 33개)
 
 ### **검색 도구 (11개)**
 | 도구명 | 기능 | 예시 |
@@ -393,6 +402,14 @@ Claude: [Calls search_interpretations("근로기준법 제74조")]
 | `parse_article_links` | 조문 참조 파싱 | "제X조", "같은 조" 추출 |
 | `get_external_links` | 외부 링크 생성 | 법제처, 법원도서관 링크 |
 
+### **전문 도구 (4개)** ⭐ v1.4.0 신규
+| 도구명 | 기능 | 활용 사례 |
+|--------|------|-----------|
+| `search_tax_tribunal_decisions` | 조세심판원 재결례 검색 | 키워드, 사건번호로 검색 |
+| `get_tax_tribunal_decision` | 재결례 전문 조회 | 재결 상세 내용 확인 |
+| `search_customs_interpretations` | 관세청 법령해석 검색 | 관세 관련 해석 검색 |
+| `get_customs_interpretation` | 법령해석 전문 조회 | 해석 상세 내용 확인 |
+
 ---
 
 ## 🏗️ Architecture Highlights
@@ -405,7 +422,7 @@ Claude: [Calls search_interpretations("근로기준법 제74조")]
 │  STDIO Mode          SSE Mode           │
 │  (Claude Desktop)    (Remote Deployment)│
 ├─────────────────────────────────────────┤
-│         29 Tools (Zod-validated)        │
+│         33 Tools (Zod-validated)        │
 ├─────────────────────────────────────────┤
 │  Cache Layer (1hr/24hr TTL)             │
 ├─────────────────────────────────────────┤
@@ -441,10 +458,10 @@ Response to Claude
 
 ### **4. Production Quality**
 - ✅ **100% TypeScript** with strict mode
-- ✅ **Zod schema validation** on all 29 tools
+- ✅ **Zod schema validation** on all 33 tools
 - ✅ **Comprehensive error handling** (HTML detection, graceful fallbacks)
 - ✅ **Battle-tested code** (imported from LexDiff production service)
-- ✅ **Full test coverage** (20/20 integration tests passing)
+- ✅ **Full test coverage** (33/33 integration tests passing)
 
 ---
 
@@ -452,7 +469,7 @@ Response to Claude
 
 | Document | Description |
 |----------|-------------|
-| [API.md](docs/API.md) | Complete reference for all 29 tools |
+| [API.md](docs/API.md) | Complete reference for all 33 tools |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design and data flow |
 | [DEVELOPMENT.md](docs/DEVELOPMENT.md) | Developer guide and contribution |
 | [CLAUDE.md](CLAUDE.md) | Project-specific Claude Code instructions |
