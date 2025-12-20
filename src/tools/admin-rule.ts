@@ -31,11 +31,24 @@ export async function searchAdminRule(
     const rules = doc.getElementsByTagName("admrul")
 
     if (rules.length === 0) {
+      let errorMsg = "검색 결과가 없습니다."
+      errorMsg += `\n\n💡 개선 방법:`
+      errorMsg += `\n   1. 단순 키워드 사용:`
+      const words = input.query.split(/\s+/)
+      if (words.length > 1) {
+        errorMsg += `\n      search_admin_rule(query="${words[0]}")`
+      }
+      errorMsg += `\n\n   2. 상위 법령명 검색:`
+      errorMsg += `\n      search_law(query="관련 법령명")`
+      errorMsg += `\n\n   3. 광범위 검색:`
+      errorMsg += `\n      search_all(query="${words[0] || input.query}")`
+
       return {
         content: [{
           type: "text",
-          text: "검색 결과가 없습니다. 행정규칙명을 확인해주세요."
-        }]
+          text: errorMsg
+        }],
+        isError: true
       }
     }
 

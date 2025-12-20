@@ -55,11 +55,24 @@ export async function searchInterpretations(
     const expcs = data.expc ? (Array.isArray(data.expc) ? data.expc : [data.expc]) : [];
 
     if (totalCount === 0) {
+      let errorMsg = "검색 결과가 없습니다."
+      errorMsg += `\n\n💡 개선 방법:`
+      errorMsg += `\n   1. 단순 키워드 사용:`
+      const words = args.query.split(/\s+/)
+      if (words.length > 1) {
+        errorMsg += `\n      search_interpretations(query="${words[0]}")`
+      }
+      errorMsg += `\n\n   2. 판례 검색:`
+      errorMsg += `\n      search_precedents(query="${args.query}")`
+      errorMsg += `\n\n   3. 법령 검색으로 전환:`
+      errorMsg += `\n      search_law(query="${args.query}")`
+
       return {
         content: [{
           type: "text",
-          text: "검색 결과가 없습니다."
-        }]
+          text: errorMsg
+        }],
+        isError: true
       };
     }
 

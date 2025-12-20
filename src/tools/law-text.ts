@@ -126,8 +126,24 @@ export async function getLawText(
         // 특정 조문 요청했는데 없는 경우
         if (range) {
           errorMsg += `\n\n💡 이 법령은 제${range.min}조~제${range.max}조까지 총 ${range.count}개 조문만 존재합니다.`
-          errorMsg += `\n   - 전체 조회: jo 파라미터를 생략하세요`
-          errorMsg += `\n   - 유사 조문: 제${Math.max(1, range.max - 5)}조~제${range.max}조 범위 확인 권장`
+          errorMsg += `\n\n해결 방법:`
+          errorMsg += `\n   1. 전체 조회:`
+          if (input.mst) {
+            errorMsg += `\n      get_law_text(mst="${input.mst}")`
+          } else if (input.lawId) {
+            errorMsg += `\n      get_law_text(lawId="${input.lawId}")`
+          }
+          errorMsg += `\n\n   2. 유사 조문 조회 예시:`
+          const suggestJo = Math.max(1, range.max - 3)
+          if (input.mst) {
+            errorMsg += `\n      get_law_text(mst="${input.mst}", jo="제${range.max}조")`
+            errorMsg += `\n      get_law_text(mst="${input.mst}", jo="제${suggestJo}조")`
+          } else if (input.lawId) {
+            errorMsg += `\n      get_law_text(lawId="${input.lawId}", jo="제${range.max}조")`
+            errorMsg += `\n      get_law_text(lawId="${input.lawId}", jo="제${suggestJo}조")`
+          }
+          errorMsg += `\n\n   3. 키워드 검색:`
+          errorMsg += `\n      search_all(query="${lawName.replace(/\s+(시행령|시행규칙)/, '')}")`
         } else {
           errorMsg += `\n\n💡 조문을 찾을 수 없습니다. 다음을 시도해보세요:`
           errorMsg += `\n   - 전체 법령 조회 (jo 파라미터 생략)`

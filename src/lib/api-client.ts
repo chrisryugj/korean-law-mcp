@@ -73,9 +73,17 @@ export class LawApiClient {
 
       if (params.jo) {
         errorMsg += "\n\n💡 개선 방법:"
-        errorMsg += "\n   1. jo 파라미터를 생략하여 전체 법령 조회"
-        errorMsg += "\n   2. search_all 도구로 키워드 검색"
-        errorMsg += "\n   3. 법령명이 정확한지 확인 (예: 약사법 시행령은 제1~39조만 존재)"
+        errorMsg += "\n   1. 전체 법령 조회 (조문 범위 확인):"
+        if (params.mst) {
+          errorMsg += `\n      get_law_text(mst="${params.mst}")`
+        } else if (params.lawId) {
+          errorMsg += `\n      get_law_text(lawId="${params.lawId}")`
+        }
+        errorMsg += "\n\n   2. 키워드 검색:"
+        errorMsg += `\n      search_all(query="관련 키워드")`
+        errorMsg += "\n\n   3. 법령 검색:"
+        errorMsg += `\n      search_law(query="법령명")`
+        errorMsg += "\n\n   ℹ️  일부 법령은 조문 수가 적습니다 (예: 약사법 시행령 제1~39조)"
       } else {
         errorMsg += " MST 또는 법령명을 확인해주세요."
       }

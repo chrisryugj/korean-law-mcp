@@ -58,11 +58,26 @@ export async function searchPrecedents(
   const precs = data.prec ? (Array.isArray(data.prec) ? data.prec : [data.prec]) : [];
 
   if (totalCount === 0) {
+    let errorMsg = "검색 결과가 없습니다."
+    errorMsg += `\n\n💡 개선 방법:`
+    errorMsg += `\n   1. 단순 키워드 사용:`
+    if (args.query) {
+      const words = args.query.split(/\s+/)
+      if (words.length > 1) {
+        errorMsg += `\n      search_precedents(query="${words[0]}")`
+      }
+    }
+    errorMsg += `\n\n   2. 법령해석례 검색:`
+    errorMsg += `\n      search_interpretations(query="${args.query || '관련 키워드'}")`
+    errorMsg += `\n\n   3. 법령 검색으로 전환:`
+    errorMsg += `\n      search_law(query="${args.query || '관련 법령명'}")`
+
     return {
       content: [{
         type: "text",
-        text: "검색 결과가 없습니다."
-      }]
+        text: errorMsg
+      }],
+      isError: true
     };
   }
 
