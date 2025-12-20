@@ -82,9 +82,30 @@ npm install -g korean-law-mcp
 }
 ```
 
-##### Cline (VS Code Extension)
+##### Cursor / Windsurf / Sourcegraph Cody
 
-VS Code 설정 (`settings.json`):
+동일한 설정 형식 사용:
+
+**Cursor**: `.cursor/mcp.json`
+**Windsurf**: `.windsurf/mcp.json`
+**Cody**: `.cody/mcp.json`
+
+```json
+{
+  "mcpServers": {
+    "korean-law": {
+      "command": "korean-law-mcp",
+      "env": {
+        "LAW_OC": "your-api-key-here"
+      }
+    }
+  }
+}
+```
+
+##### VS Code Extensions
+
+**Cline**: `settings.json`에 추가
 ```json
 {
   "cline.mcpServers": {
@@ -98,7 +119,35 @@ VS Code 설정 (`settings.json`):
 }
 ```
 
-##### Continue (VS Code/JetBrains Extension)
+**Roo Cline**: `settings.json`에 추가
+```json
+{
+  "roo-cline.mcpServers": {
+    "korean-law": {
+      "command": "korean-law-mcp",
+      "env": {
+        "LAW_OC": "your-api-key-here"
+      }
+    }
+  }
+}
+```
+
+**Claude Code Extension**: `settings.json`에 추가
+```json
+{
+  "claude.mcpServers": {
+    "korean-law": {
+      "command": "korean-law-mcp",
+      "env": {
+        "LAW_OC": "your-api-key-here"
+      }
+    }
+  }
+}
+```
+
+##### Continue (VS Code/JetBrains)
 
 `~/.continue/config.json`:
 ```json
@@ -133,100 +182,6 @@ VS Code 설정 (`settings.json`):
 }
 ```
 
-##### Cursor
-
-`.cursor/mcp.json`:
-```json
-{
-  "mcpServers": {
-    "korean-law": {
-      "command": "korean-law-mcp",
-      "env": {
-        "LAW_OC": "your-api-key-here"
-      }
-    }
-  }
-}
-```
-
-##### VS Code (Claude Code Extension)
-
-VS Code 설정 (`settings.json`):
-```json
-{
-  "claude.mcpServers": {
-    "korean-law": {
-      "command": "korean-law-mcp",
-      "env": {
-        "LAW_OC": "your-api-key-here"
-      }
-    }
-  }
-}
-```
-
-또는 `.vscode/mcp.json` (프로젝트별 설정):
-```json
-{
-  "mcpServers": {
-    "korean-law": {
-      "command": "korean-law-mcp",
-      "env": {
-        "LAW_OC": "your-api-key-here"
-      }
-    }
-  }
-}
-```
-
-##### Windsurf
-
-`.windsurf/mcp.json`:
-```json
-{
-  "mcpServers": {
-    "korean-law": {
-      "command": "korean-law-mcp",
-      "env": {
-        "LAW_OC": "your-api-key-here"
-      }
-    }
-  }
-}
-```
-
-##### Roo Cline
-
-VS Code 설정 (`settings.json`):
-```json
-{
-  "roo-cline.mcpServers": {
-    "korean-law": {
-      "command": "korean-law-mcp",
-      "env": {
-        "LAW_OC": "your-api-key-here"
-      }
-    }
-  }
-}
-```
-
-##### Sourcegraph Cody
-
-`.cody/mcp.json`:
-```json
-{
-  "mcpServers": {
-    "korean-law": {
-      "command": "korean-law-mcp",
-      "env": {
-        "LAW_OC": "your-api-key-here"
-      }
-    }
-  }
-}
-```
-
 ##### LLM CLI
 
 `~/.config/llm/config.json`:
@@ -245,15 +200,9 @@ VS Code 설정 (`settings.json`):
 }
 ```
 
-또는 명령줄에서 직접 실행:
-```bash
-export LAW_OC=your-api-key
-llm mcp korean-law-mcp
-```
-
 ##### Raycast AI
 
-Raycast 설정에서 Extensions → AI → MCP Servers 추가:
+Extensions → AI → MCP Servers:
 ```json
 {
   "name": "korean-law",
