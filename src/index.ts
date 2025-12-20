@@ -1114,7 +1114,7 @@ async function main() {
   const portIndex = args.indexOf("--port")
 
   const mode = modeIndex >= 0 ? args[modeIndex + 1] : "stdio"
-  const port = portIndex >= 0 ? parseInt(args[portIndex + 1]) : 3000
+  const port = process.env.PORT ? parseInt(process.env.PORT) : (portIndex >= 0 ? parseInt(args[portIndex + 1]) : 3000)
 
   if (mode === "sse") {
     // SSE 모드 (리모트 배포용)
