@@ -3,7 +3,13 @@
     "allow": [
       "Bash(npm run build:*)",
       "Bash(npx:*)",
-      "Bash(node test-tools.js:*)"
+      "Bash(node test-tools.js:*)",
+      "Bash(where:*)",
+      "Bash(korean-law-mcp:*)",
+      "Bash(node -e \"console.log\\(require\\(''c:/github_project/korean-law-mcp/.claude/mcp.json''\\)\\)\")",
+      "Bash(set LAW_OC=ryuseungin:*)",
+      "Bash(node build/index.js:*)",
+      "Bash(ls:*)"
     ]
   },
   "outputStyle": "chris-v2"

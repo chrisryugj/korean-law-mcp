@@ -43,16 +43,8 @@ import { searchTaxTribunalDecisions, searchTaxTribunalDecisionsSchema, getTaxTri
 import { searchCustomsInterpretations, searchCustomsInterpretationsSchema, getCustomsInterpretationText, getCustomsInterpretationTextSchema } from "./tools/customs-interpretations.js"
 import { startHTTPServer } from "./server/http-server.js"
 
-// 환경변수 확인
-const LAW_OC = process.env.LAW_OC
-if (!LAW_OC) {
-  console.error("Error: LAW_OC 환경변수가 설정되지 않았습니다")
-  console.error("법제처 오픈API 인증키를 LAW_OC 환경변수로 설정해주세요")
-  console.error("발급: https://www.law.go.kr/DRF/lawService.do")
-  process.exit(1)
-}
-
 // API 클라이언트 초기화
+const LAW_OC = process.env.LAW_OC || ""
 const apiClient = new LawApiClient({ apiKey: LAW_OC })
 
 // MCP 서버 생성

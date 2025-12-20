@@ -144,32 +144,31 @@ function generateLawLinks(lawId?: string, mst?: string, lawName?: string, jo?: s
   // 1. 한글 URL (법령명 기반) - 우선순위 최상위
   if (lawName) {
     if (jo) {
-      links += `${linkNum++}. 법제처 조문 직접 링크 (한글 URL):\n`
-      links += `   https://www.law.go.kr/법령/${lawName}/${jo}\n\n`
+      const url = `https://www.law.go.kr/%EB%B2%95%EB%A0%B9/${encodeURIComponent(lawName)}/${encodeURIComponent(jo)}`
+      links += `${linkNum++}. [법제처 조문 직접 링크](${url})\n\n`
     } else {
-      links += `${linkNum++}. 법제처 법령 직접 링크 (한글 URL):\n`
-      links += `   https://www.law.go.kr/법령/${lawName}\n\n`
+      const url = `https://www.law.go.kr/%EB%B2%95%EB%A0%B9/${encodeURIComponent(lawName)}`
+      links += `${linkNum++}. [법제처 법령 직접 링크](${url})\n\n`
     }
   }
 
   // 2. 법령ID 기반 링크 (쿼리 파라미터)
   if (lawId) {
-    links += `${linkNum++}. 법제처 법령 상세 (ID):\n`
-    links += `   https://www.law.go.kr/LSW/lawLsInfoP.do?lsiSeq=${lawId}\n\n`
+    const detailUrl = `https://www.law.go.kr/LSW/lawLsInfoP.do?lsiSeq=${lawId}`
+    links += `${linkNum++}. [법제처 법령 상세 (ID)](${detailUrl})\n\n`
 
-    links += `${linkNum++}. 법령 전문 (영문):\n`
-    links += `   https://www.law.go.kr/eng/LSW/lawLsInfoP.do?lsiSeq=${lawId}\n\n`
+    const engUrl = `https://www.law.go.kr/eng/LSW/lawLsInfoP.do?lsiSeq=${lawId}`
+    links += `${linkNum++}. [법령 전문 (영문)](${engUrl})\n\n`
   }
 
   // 3. 법령 연혁
   if (mst) {
-    links += `${linkNum++}. 법령 연혁:\n`
-    links += `   https://www.law.go.kr/LSW/lsStmdInfoP.do?lsiSeq=${mst}\n\n`
+    const historyUrl = `https://www.law.go.kr/LSW/lsStmdInfoP.do?lsiSeq=${mst}`
+    links += `${linkNum++}. [법령 연혁](${historyUrl})\n\n`
   }
 
   // 4. 법제처 홈페이지
-  links += `${linkNum}. 법제처 홈페이지:\n`
-  links += `   https://www.law.go.kr/\n\n`
+  links += `${linkNum}. [법제처 홈페이지](https://www.law.go.kr/)\n\n`
 
   return links
 }
@@ -180,15 +179,13 @@ function generateLawLinks(lawId?: string, mst?: string, lawName?: string, jo?: s
 function generatePrecedentLinks(precedentId: string): string {
   let links = "⚖️ 판례 관련 링크:\n\n"
 
-  links += `1. 법제처 판례 상세:\n`
-  links += `   https://www.law.go.kr/LSW/precInfoP.do?precSeq=${precedentId}\n\n`
+  const lawUrl = `https://www.law.go.kr/LSW/precInfoP.do?precSeq=${precedentId}`
+  links += `1. [법제처 판례 상세](${lawUrl})\n\n`
 
-  links += `2. 대법원 종합법률정보:\n`
-  links += `   https://glaw.scourt.go.kr/\n`
+  links += `2. [대법원 종합법률정보](https://glaw.scourt.go.kr/)\n`
   links += `   (판례일련번호: ${precedentId}로 검색)\n\n`
 
-  links += `3. 법원도서관:\n`
-  links += `   https://library.scourt.go.kr/\n\n`
+  links += `3. [법원도서관](https://library.scourt.go.kr/)\n\n`
 
   return links
 }
@@ -199,11 +196,10 @@ function generatePrecedentLinks(precedentId: string): string {
 function generateInterpretationLinks(interpretationId: string): string {
   let links = "📖 법령해석례 관련 링크:\n\n"
 
-  links += `1. 법제처 해석례 상세:\n`
-  links += `   https://www.law.go.kr/LSW/lsExpcInfoP.do?lsExpcSeq=${interpretationId}\n\n`
+  const detailUrl = `https://www.law.go.kr/LSW/lsExpcInfoP.do?lsExpcSeq=${interpretationId}`
+  links += `1. [법제처 해석례 상세](${detailUrl})\n\n`
 
-  links += `2. 법제처 법령해석:\n`
-  links += `   https://www.moleg.go.kr/\n\n`
+  links += `2. [법제처 법령해석](https://www.moleg.go.kr/)\n\n`
 
   return links
 }
@@ -218,33 +214,31 @@ function generateOrdinanceLinks(ordinanceId?: string, mst?: string, lawName?: st
   // 1. 한글 URL (법령명 기반)
   if (lawName) {
     if (jo) {
-      links += `${linkNum++}. 법제처 조문 직접 링크 (한글 URL):\n`
-      links += `   https://www.law.go.kr/자치법규/${lawName}/${jo}\n\n`
+      const url = `https://www.law.go.kr/%EC%9E%90%EC%B9%98%EB%B2%95%EA%B7%9C/${encodeURIComponent(lawName)}/${encodeURIComponent(jo)}`
+      links += `${linkNum++}. [법제처 조문 직접 링크](${url})\n\n`
     } else {
-      links += `${linkNum++}. 법제처 자치법규 직접 링크 (한글 URL):\n`
-      links += `   https://www.law.go.kr/자치법규/${lawName}\n\n`
+      const url = `https://www.law.go.kr/%EC%9E%90%EC%B9%98%EB%B2%95%EA%B7%9C/${encodeURIComponent(lawName)}`
+      links += `${linkNum++}. [법제처 자치법규 직접 링크](${url})\n\n`
     }
   }
 
   // 2. 자치법규ID 기반 링크
   if (ordinanceId) {
-    links += `${linkNum++}. 법제처 자치법규 상세 (ID):\n`
-    links += `   https://www.law.go.kr/LSW/ordinInfoP.do?ordinSeq=${ordinanceId}\n\n`
+    const detailUrl = `https://www.law.go.kr/LSW/ordinInfoP.do?ordinSeq=${ordinanceId}`
+    links += `${linkNum++}. [법제처 자치법규 상세 (ID)](${detailUrl})\n\n`
   }
 
   // 3. 자치법규 연혁
   if (mst) {
-    links += `${linkNum++}. 자치법규 연혁:\n`
-    links += `   https://www.law.go.kr/LSW/lsStmdInfoP.do?lsiSeq=${mst}\n\n`
+    const historyUrl = `https://www.law.go.kr/LSW/lsStmdInfoP.do?lsiSeq=${mst}`
+    links += `${linkNum++}. [자치법규 연혁](${historyUrl})\n\n`
   }
 
   // 4. 국가법령정보센터 자치법규
-  links += `${linkNum++}. 국가법령정보센터 자치법규:\n`
-  links += `   https://www.law.go.kr/LSW/lsRvsRqInfoListP.do\n\n`
+  links += `${linkNum++}. [국가법령정보센터 자치법규](https://www.law.go.kr/LSW/lsRvsRqInfoListP.do)\n\n`
 
   // 5. 자치법규정보시스템 (ELIS)
-  links += `${linkNum}. 자치법규정보시스템 (ELIS):\n`
-  links += `   https://www.elis.go.kr/\n\n`
+  links += `${linkNum}. [자치법규정보시스템 (ELIS)](https://www.elis.go.kr/)\n\n`
 
   return links
 }
@@ -255,14 +249,12 @@ function generateOrdinanceLinks(ordinanceId?: string, mst?: string, lawName?: st
 function generateAdminRuleLinks(adminRuleId: string): string {
   let links = "📋 행정규칙 관련 링크:\n\n"
 
-  links += `1. 법제처 행정규칙 상세:\n`
-  links += `   https://www.law.go.kr/LSW/admRulInfoP.do?admRulSeq=${adminRuleId}\n\n`
+  const detailUrl = `https://www.law.go.kr/LSW/admRulInfoP.do?admRulSeq=${adminRuleId}`
+  links += `1. [법제처 행정규칙 상세](${detailUrl})\n\n`
 
-  links += `2. 국가법령정보센터 행정규칙:\n`
-  links += `   https://www.law.go.kr/LSW/admRulLsInfoP.do\n\n`
+  links += `2. [국가법령정보센터 행정규칙](https://www.law.go.kr/LSW/admRulLsInfoP.do)\n\n`
 
-  links += `3. 법제처 홈페이지:\n`
-  links += `   https://www.law.go.kr/\n\n`
+  links += `3. [법제처 홈페이지](https://www.law.go.kr/)\n\n`
 
   return links
 }
