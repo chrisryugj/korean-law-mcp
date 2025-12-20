@@ -72,6 +72,30 @@ export async function getLawText(
       }
     }
 
+    // 조문 범위 파싱 함수
+    const extractArticleRange = (data: any): { min: number, max: number, count: number } | null => {
+      const rawUnits = data.조문?.조문단위
+      if (!rawUnits) return null
+
+      const units = Array.isArray(rawUnits) ? rawUnits : [rawUnits]
+      const articleNumbers: number[] = []
+
+      for (const unit of units) {
+        if (unit.조문여부 === "조문" && unit.조문번호) {
+          const num = parseInt(unit.조문번호, 10)
+          if (!isNaN(num)) articleNumbers.push(num)
+        }
+      }
+
+      if (articleNumbers.length === 0) return null
+
+      return {
+        min: Math.min(...articleNumbers),
+        max: Math.max(...articleNumbers),
+        count: articleNumbers.length
+      }
+    }
+
     const basicInfo = lawData.기본정보 || lawData
     const lawName = basicInfo?.법령명_한글 || basicInfo?.법령명한글 || basicInfo?.법령명 || "알 수 없음"
     const promDate = basicInfo?.공포일자 || ""
@@ -94,11 +118,29 @@ export async function getLawText(
     }
 
     if (articleUnits.length === 0) {
+      // 조문 범위 확인
+      const range = extractArticleRange(lawData)
+      let errorMsg = resultText + "조문 내용을 찾을 수 없습니다."
+
+      if (input.jo) {
+        // 특정 조문 요청했는데 없는 경우
+        if (range) {
+          errorMsg += `\n\n💡 이 법령은 제${range.min}조~제${range.max}조까지 총 ${range.count}개 조문만 존재합니다.`
+          errorMsg += `\n   - 전체 조회: jo 파라미터를 생략하세요`
+          errorMsg += `\n   - 유사 조문: 제${Math.max(1, range.max - 5)}조~제${range.max}조 범위 확인 권장`
+        } else {
+          errorMsg += `\n\n💡 조문을 찾을 수 없습니다. 다음을 시도해보세요:`
+          errorMsg += `\n   - 전체 법령 조회 (jo 파라미터 생략)`
+          errorMsg += `\n   - 키워드 검색 (search_all 도구 사용)`
+        }
+      }
+
       return {
         content: [{
           type: "text",
-          text: resultText + "조문 내용을 찾을 수 없습니다."
-        }]
+          text: errorMsg
+        }],
+        isError: true
       }
     }
 

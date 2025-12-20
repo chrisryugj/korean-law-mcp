@@ -15,8 +15,8 @@ export async function startSSEServer(server: Server, port: number) {
   // CORS 설정 (모든 도메인 허용)
   app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*")
-    res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-    res.header("Access-Control-Allow-Headers", "Content-Type")
+    res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+    res.header("Access-Control-Allow-Headers", "Content-Type, mcp-session-id, last-event-id")
     if (req.method === "OPTIONS") {
       return res.sendStatus(200)
     }
@@ -34,6 +34,11 @@ export async function startSSEServer(server: Server, port: number) {
         health: "/health"
       }
     })
+  })
+
+  // MCP 프로토콜 디스커버리 (HEAD 메서드)
+  app.head("/", (req, res) => {
+    res.sendStatus(200)
   })
 
   app.get("/health", (req, res) => {

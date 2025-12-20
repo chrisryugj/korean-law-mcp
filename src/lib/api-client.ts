@@ -68,7 +68,19 @@ export class LawApiClient {
     const text = await response.text()
 
     if (text.includes("<!DOCTYPE html") || text.includes("<html")) {
-      throw new Error("법령을 찾을 수 없습니다. MST 또는 법령명을 확인해주세요.")
+      // 에러 메시지에 fallback 전략 포함
+      let errorMsg = "법령을 찾을 수 없습니다."
+
+      if (params.jo) {
+        errorMsg += "\n\n💡 개선 방법:"
+        errorMsg += "\n   1. jo 파라미터를 생략하여 전체 법령 조회"
+        errorMsg += "\n   2. search_all 도구로 키워드 검색"
+        errorMsg += "\n   3. 법령명이 정확한지 확인 (예: 약사법 시행령은 제1~39조만 존재)"
+      } else {
+        errorMsg += " MST 또는 법령명을 확인해주세요."
+      }
+
+      throw new Error(errorMsg)
     }
 
     return text
