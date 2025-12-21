@@ -1,0 +1,16 @@
+# Gemini API
+google-generativeai>=0.8.0
+
+# MCP Client
+mcp>=1.0.0
+httpx>=0.27.0
+httpx-sse>=0.4.0
+
+# API Server
+fastapi>=0.115.0
+uvicorn>=0.32.0
+websockets>=13.0
+
+# Utilities
+python-dotenv>=1.0.0
+pydantic>=2.9.0
