@@ -14,10 +14,10 @@ export class LawApiClient {
   }
 
   /**
-   * API 키 결정 (요청별 키 우선, 없으면 기본 키)
+   * API 키 결정 (요청별 키 우선, 없으면 환경변수, 마지막으로 기본 키)
    */
   private getApiKey(overrideKey?: string): string {
-    const key = overrideKey || this.defaultApiKey
+    const key = overrideKey || process.env.LAW_OC || this.defaultApiKey
     if (!key) {
       throw new Error("API 키가 필요합니다. 법제처(https://www.law.go.kr/DRF/lawService.do)에서 발급받으세요.")
     }
