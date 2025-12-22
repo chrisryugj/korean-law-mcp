@@ -1590,6 +1590,8 @@ linkType:
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     const { name, arguments: args } = request.params
+    console.error(`[CallTool] Tool: ${name}`)
+    console.error(`[DEBUG] args:`, JSON.stringify(args, null, 2))
 
     switch (name) {
       case "search_law": {
