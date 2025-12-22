@@ -144,10 +144,10 @@ function generateLawLinks(lawId?: string, mst?: string, lawName?: string, jo?: s
   // 1. 한글 URL (법령명 기반) - 우선순위 최상위
   if (lawName) {
     if (jo) {
-      const url = `https://www.law.go.kr/%EB%B2%95%EB%A0%B9/${encodeURIComponent(lawName)}/${encodeURIComponent(jo)}`
+      const url = `https://www.law.go.kr/법령/${encodeURIComponent(lawName)}/${encodeURIComponent(jo)}`
       links += `${linkNum++}. [법제처 조문 직접 링크](${url})\n\n`
     } else {
-      const url = `https://www.law.go.kr/%EB%B2%95%EB%A0%B9/${encodeURIComponent(lawName)}`
+      const url = `https://www.law.go.kr/법령/${encodeURIComponent(lawName)}`
       links += `${linkNum++}. [법제처 법령 직접 링크](${url})\n\n`
     }
   }
@@ -214,10 +214,10 @@ function generateOrdinanceLinks(ordinanceId?: string, mst?: string, lawName?: st
   // 1. 한글 URL (법령명 기반)
   if (lawName) {
     if (jo) {
-      const url = `https://www.law.go.kr/%EC%9E%90%EC%B9%98%EB%B2%95%EA%B7%9C/${encodeURIComponent(lawName)}/${encodeURIComponent(jo)}`
+      const url = `https://www.law.go.kr/자치법규/${encodeURIComponent(lawName)}/${encodeURIComponent(jo)}`
       links += `${linkNum++}. [법제처 조문 직접 링크](${url})\n\n`
     } else {
-      const url = `https://www.law.go.kr/%EC%9E%90%EC%B9%98%EB%B2%95%EA%B7%9C/${encodeURIComponent(lawName)}`
+      const url = `https://www.law.go.kr/자치법규/${encodeURIComponent(lawName)}`
       links += `${linkNum++}. [법제처 자치법규 직접 링크](${url})\n\n`
     }
   }

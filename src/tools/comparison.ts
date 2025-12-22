@@ -35,16 +35,26 @@ export async function compareOldNew(
     const doc = parser.parseFromString(xmlText, "text/xml")
 
     const lawName = doc.getElementsByTagName("법령명")[0]?.textContent || "알 수 없음"
+    const oldInfo = doc.getElementsByTagName("구조문_기본정보")[0]
+    const newInfo = doc.getElementsByTagName("신조문_기본정보")[0]
 
-    let resultText = `법령명: ${lawName}\n\n`
-    resultText += `━━━━━━━━━━━━━━━━━━━━━━\n`
+    const oldDate = oldInfo?.getElementsByTagName("공포일자")[0]?.textContent || ""
+    const newDate = newInfo?.getElementsByTagName("공포일자")[0]?.textContent || ""
+    const revisionType = newInfo?.getElementsByTagName("제개정구분명")[0]?.textContent || ""
+
+    let resultText = `법령명: ${lawName}\n`
+    if (revisionType) resultText += `개정구분: ${revisionType}\n`
+    if (oldDate) resultText += `구법 공포일: ${oldDate}\n`
+    if (newDate) resultText += `신법 공포일: ${newDate}\n`
+    resultText += `\n━━━━━━━━━━━━━━━━━━━━━━\n`
     resultText += `신구법 대조\n`
     resultText += `━━━━━━━━━━━━━━━━━━━━━━\n\n`
 
-    // 신구법 조문 파싱
-    const articles = doc.getElementsByTagName("조문")
+    // 구조문목록과 신조문목록 파싱
+    const oldArticleList = doc.getElementsByTagName("구조문목록")[0]
+    const newArticleList = doc.getElementsByTagName("신조문목록")[0]
 
-    if (articles.length === 0) {
+    if (!oldArticleList || !newArticleList) {
       return {
         content: [{
           type: "text",
@@ -53,30 +63,43 @@ export async function compareOldNew(
       }
     }
 
-    for (let i = 0; i < Math.min(articles.length, 10); i++) {
-      const article = articles[i]
+    const oldArticles = oldArticleList.getElementsByTagName("조문")
+    const newArticles = newArticleList.getElementsByTagName("조문")
 
-      const joNum = article.getElementsByTagName("조문번호")[0]?.textContent || ""
-      const joTitle = article.getElementsByTagName("조문제목")[0]?.textContent || ""
-      const oldContent = article.getElementsByTagName("개정전내용")[0]?.textContent || ""
-      const newContent = article.getElementsByTagName("개정후내용")[0]?.textContent || ""
-
-      resultText += `\n━━━━━━━━━━━━━━━━━━━━━━\n`
-      resultText += `${joNum}`
-      if (joTitle) resultText += ` ${joTitle}`
-      resultText += `\n━━━━━━━━━━━━━━━━━━━━━━\n\n`
-
-      if (oldContent) {
-        resultText += `[개정 전]\n${oldContent.trim()}\n\n`
-      }
-
-      if (newContent) {
-        resultText += `[개정 후]\n${newContent.trim()}\n\n`
+    if (oldArticles.length === 0 && newArticles.length === 0) {
+      return {
+        content: [{
+          type: "text",
+          text: resultText + "개정 이력이 없거나 신구법 대조 데이터가 없습니다."
+        }]
       }
     }
 
-    if (articles.length > 10) {
-      resultText += `\n... 외 ${articles.length - 10}개 조문 (생략)\n`
+    const maxArticles = Math.max(oldArticles.length, newArticles.length)
+    const displayCount = Math.min(maxArticles, 10)
+
+    for (let i = 0; i < displayCount; i++) {
+      const oldArticle = oldArticles[i]
+      const newArticle = newArticles[i]
+
+      const oldContent = oldArticle?.textContent?.trim() || ""
+      const newContent = newArticle?.textContent?.trim() || ""
+
+      resultText += `\n━━━━━━━━━━━━━━━━━━━━━━\n`
+      resultText += `조문 ${i + 1}\n`
+      resultText += `━━━━━━━━━━━━━━━━━━━━━━\n\n`
+
+      if (oldContent) {
+        resultText += `[개정 전]\n${oldContent}\n\n`
+      }
+
+      if (newContent) {
+        resultText += `[개정 후]\n${newContent}\n\n`
+      }
+    }
+
+    if (maxArticles > 10) {
+      resultText += `\n... 외 ${maxArticles - 10}개 조문 (생략)\n`
     }
 
     return {

@@ -46,13 +46,19 @@ export async function suggestLawNames(
     const lines = text.split('\n')
     const suggestions: Array<{ name: string; type: string }> = []
 
-    for (const line of lines) {
-      // Match lines like "[1] 관세법 (법률) | MST: 000013"
-      const match = line.match(/\[\d+\]\s+(.+?)\s+\((.+?)\)/)
-      if (match) {
-        const name = match[1].trim()
-        const type = match[2].trim()
-        suggestions.push({ name, type })
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      // Match lines like "1. 관세법"
+      const nameMatch = line.match(/^\d+\.\s+(.+)$/)
+      if (nameMatch) {
+        const name = nameMatch[1].trim()
+        // Look ahead for the type line "   - 구분: 법률"
+        const typeLine = lines[i + 4] // 4 lines down: lawId, MST, promDate, lawType
+        const typeMatch = typeLine?.match(/구분:\s+(.+)/)
+        if (typeMatch) {
+          const type = typeMatch[1].trim()
+          suggestions.push({ name, type })
+        }
       }
     }
 

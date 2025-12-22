@@ -1200,9 +1200,15 @@ knd 파라미터:
 - 부처별/연도별 법령 현황 파악 시
 
 analysisType:
-- "recent_changes": 최근 N일 개정 법령
+- "recent_changes": 최근 N일 개정 법령 (횡단 검색 - 특정 날짜에 개정된 모든 법령)
 - "by_department": 소관부처별 통계
 - "by_year": 제정연도별 통계
+
+**이 도구와 get_law_history의 차이**:
+- get_law_statistics (recent_changes): 특정 날짜에 개정된 모든 법령 조회 (횡단 검색)
+- get_law_history: 특정 법령의 전체 개정 이력 조회 (종단 검색)
+- 예: "2024-01-01에 개정된 법령 전체" → get_law_statistics 사용
+- 예: "관세법의 최근 개정 이력" → get_law_history 사용
 
 예시:
 - get_law_statistics(analysisType="recent_changes", days=30)
