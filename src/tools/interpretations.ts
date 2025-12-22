@@ -18,9 +18,9 @@ export async function searchInterpretations(
   args: SearchInterpretationsInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const apiKey = args.apiKey || process.env.apiKey;
+    const apiKey = args.apiKey || process.env.LAW_OC;
     if (!apiKey) {
-      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 apiKey 환경변수를 설정하세요.");
+      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 LAW_OC 환경변수를 설정하세요.");
     }
 
     const params = new URLSearchParams({
@@ -123,9 +123,9 @@ export async function getInterpretationText(
   args: GetInterpretationTextInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const apiKey = args.apiKey || process.env.apiKey;
+    const apiKey = args.apiKey || process.env.LAW_OC;
     if (!apiKey) {
-      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 apiKey 환경변수를 설정하세요.");
+      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 LAW_OC 환경변수를 설정하세요.");
     }
 
     const params = new URLSearchParams({

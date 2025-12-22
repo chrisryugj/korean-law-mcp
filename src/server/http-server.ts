@@ -60,6 +60,13 @@ export async function startHTTPServer(server: Server, port: number) {
       } else if (!sessionId && isInitializeRequest(req.body)) {
         // 새 세션 초기화
         console.error(`[POST /mcp] New initialization request`)
+        // PlayMCP apiKey 추출 및 환경변수 설정
+        const initParams = req.body.params as any
+        if (initParams?.apiKey) {
+          process.env.LAW_OC = initParams.apiKey
+          console.error(`[POST /mcp] API Key configured from initialize request`)
+        }
+
         const eventStore = new InMemoryEventStore()
         transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
