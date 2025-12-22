@@ -51,10 +51,12 @@ export async function startHTTPServer(server: Server, port: number) {
 
     // Extract API key from various possible header locations
     // PlayMCP converts field names to lowercase (apiKey → apikey, LAW_OC → law_oc)
+    // But also check uppercase variants for manual header injection
     const apiKeyFromHeader =
       req.headers["apikey"] ||
       req.headers["law_oc"] ||
       req.headers["law-oc"] ||
+      (req.headers["LAW_OC"] as string | undefined) ||
       req.headers["x-api-key"] ||
       req.headers["authorization"]?.replace(/^Bearer\s+/i, "") ||
       req.headers["x-law-oc"]
