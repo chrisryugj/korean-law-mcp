@@ -48,6 +48,18 @@ export async function startHTTPServer(server: Server, port: number) {
   // POST /mcp - 클라이언트 요청 처리
   app.post("/mcp", async (req, res) => {
     console.error(`[POST /mcp] Received request`)
+    console.error(`[DEBUG] All headers:`, JSON.stringify(req.headers, null, 2))
+
+    // Extract API key from various possible header locations
+    const apiKeyFromHeader =
+      req.headers["x-api-key"] ||
+      req.headers["authorization"]?.replace(/^Bearer\s+/i, "") ||
+      req.headers["x-law-oc"]
+
+    if (apiKeyFromHeader && !process.env.LAW_OC) {
+      process.env.LAW_OC = apiKeyFromHeader as string
+      console.error(`[POST /mcp] API Key configured from HTTP header`)
+    }
 
     try {
       const sessionId = req.headers["mcp-session-id"] as string | undefined
