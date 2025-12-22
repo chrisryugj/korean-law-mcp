@@ -49,9 +49,12 @@ export async function startHTTPServer(server: Server, port: number) {
   app.post("/mcp", async (req, res) => {
     console.error(`[POST /mcp] Received request`)
 
-    // Extract API key from various possible header locations (PlayMCP uses lowercase "apikey")
+    // Extract API key from various possible header locations
+    // PlayMCP converts field names to lowercase (apiKey → apikey, LAW_OC → law_oc)
     const apiKeyFromHeader =
       req.headers["apikey"] ||
+      req.headers["law_oc"] ||
+      req.headers["law-oc"] ||
       req.headers["x-api-key"] ||
       req.headers["authorization"]?.replace(/^Bearer\s+/i, "") ||
       req.headers["x-law-oc"]
