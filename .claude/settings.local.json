@@ -9,7 +9,13 @@
       "Bash(node -e \"console.log\\(require\\(''c:/github_project/korean-law-mcp/.claude/mcp.json''\\)\\)\")",
       "Bash(set LAW_OC=ryuseungin:*)",
       "Bash(node build/index.js:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(node test-33-tools.js:*)",
+      "Bash(node test-compare.js:*)",
+      "Bash(node test-admin-rule.js:*)",
+      "Bash(node:*)",
+      "Bash(LAW_OC=ryuseungin node:*)"
     ]
   },
   "outputStyle": "chris-v2"
