@@ -56,9 +56,9 @@ export async function startHTTPServer(server: Server, port: number) {
       req.headers["authorization"]?.replace(/^Bearer\s+/i, "") ||
       req.headers["x-law-oc"]
 
-    if (apiKeyFromHeader && !process.env.LAW_OC) {
+    if (apiKeyFromHeader) {
       process.env.LAW_OC = apiKeyFromHeader as string
-      console.error(`[POST /mcp] API Key configured from HTTP header: ${apiKeyFromHeader}`)
+      console.error(`[POST /mcp] ✓ API Key configured from HTTP header`)
     }
 
     try {
