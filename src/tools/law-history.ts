@@ -26,9 +26,9 @@ export async function getLawHistory(
     const doc = parser.parseFromString(xmlText, "text/xml")
 
     const totalCnt = doc.getElementsByTagName("totalCnt")[0]?.textContent || "0"
-    const histories = doc.getElementsByTagName("lsHstInf")
+    const laws = doc.getElementsByTagName("law")
 
-    if (histories.length === 0) {
+    if (laws.length === 0) {
       return {
         content: [{
           type: "text",
@@ -39,25 +39,26 @@ export async function getLawHistory(
 
     let resultText = `법령 변경이력 (${input.regDt}, 총 ${totalCnt}건):\n\n`
 
-    for (let i = 0; i < histories.length; i++) {
-      const history = histories[i]
+    for (let i = 0; i < laws.length; i++) {
+      const law = laws[i]
 
-      const lawName = history.getElementsByTagName("법령명한글")[0]?.textContent || "알 수 없음"
-      const lawId = history.getElementsByTagName("법령ID")[0]?.textContent || ""
-      const mst = history.getElementsByTagName("법령일련번호")[0]?.textContent || ""
-      const promDate = history.getElementsByTagName("공포일자")[0]?.textContent || ""
-      const effDate = history.getElementsByTagName("시행일자")[0]?.textContent || ""
-      const lawNo = history.getElementsByTagName("법령번호")[0]?.textContent || ""
-      const changeType = history.getElementsByTagName("개정구분명")[0]?.textContent || ""
-      const orgName = history.getElementsByTagName("소관부처명")[0]?.textContent || ""
+      const lawName = law.getElementsByTagName("법령명한글")[0]?.textContent || "알 수 없음"
+      const lawId = law.getElementsByTagName("법령ID")[0]?.textContent || ""
+      const mst = law.getElementsByTagName("법령일련번호")[0]?.textContent || ""
+      const promDate = law.getElementsByTagName("공포일자")[0]?.textContent || ""
+      const effDate = law.getElementsByTagName("시행일자")[0]?.textContent || ""
+      const lawNo = law.getElementsByTagName("공포번호")[0]?.textContent || ""
+      const changeType = law.getElementsByTagName("제개정구분명")[0]?.textContent || ""
+      const orgName = law.getElementsByTagName("소관부처명")[0]?.textContent || ""
+      const lawType = law.getElementsByTagName("법령구분명")[0]?.textContent || ""
+      const status = law.getElementsByTagName("현행연혁코드")[0]?.textContent || ""
 
       resultText += `${i + 1}. ${lawName}\n`
-      resultText += `   - 법령ID: ${lawId}\n`
-      resultText += `   - MST: ${mst}\n`
-      resultText += `   - 법령번호: ${lawNo}\n`
+      resultText += `   - 법령ID: ${lawId}, MST: ${mst}\n`
+      resultText += `   - 법령구분: ${lawType}, 상태: ${status}\n`
+      resultText += `   - 공포번호: ${lawNo}\n`
       resultText += `   - 개정구분: ${changeType}\n`
-      resultText += `   - 공포일: ${promDate}\n`
-      resultText += `   - 시행일: ${effDate}\n`
+      resultText += `   - 공포일: ${promDate}, 시행일: ${effDate}\n`
       resultText += `   - 소관부처: ${orgName}\n\n`
     }
 
