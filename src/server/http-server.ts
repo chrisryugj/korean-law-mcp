@@ -60,11 +60,17 @@ export async function startHTTPServer(server: Server, port: number) {
       } else if (!sessionId && isInitializeRequest(req.body)) {
         // 새 세션 초기화
         console.error(`[POST /mcp] New initialization request`)
+        console.error(`[DEBUG] req.body:`, JSON.stringify(req.body, null, 2))
+
         // PlayMCP apiKey 추출 및 환경변수 설정
         const initParams = req.body.params as any
+        console.error(`[DEBUG] initParams:`, JSON.stringify(initParams, null, 2))
+
         if (initParams?.apiKey) {
           process.env.LAW_OC = initParams.apiKey
           console.error(`[POST /mcp] API Key configured from initialize request`)
+        } else {
+          console.error(`[POST /mcp] No apiKey found in initialize params`)
         }
 
         const eventStore = new InMemoryEventStore()
