@@ -48,17 +48,17 @@ export async function startHTTPServer(server: Server, port: number) {
   // POST /mcp - 클라이언트 요청 처리
   app.post("/mcp", async (req, res) => {
     console.error(`[POST /mcp] Received request`)
-    console.error(`[DEBUG] All headers:`, JSON.stringify(req.headers, null, 2))
 
-    // Extract API key from various possible header locations
+    // Extract API key from various possible header locations (PlayMCP uses lowercase "apikey")
     const apiKeyFromHeader =
+      req.headers["apikey"] ||
       req.headers["x-api-key"] ||
       req.headers["authorization"]?.replace(/^Bearer\s+/i, "") ||
       req.headers["x-law-oc"]
 
     if (apiKeyFromHeader && !process.env.LAW_OC) {
       process.env.LAW_OC = apiKeyFromHeader as string
-      console.error(`[POST /mcp] API Key configured from HTTP header`)
+      console.error(`[POST /mcp] API Key configured from HTTP header: ${apiKeyFromHeader}`)
     }
 
     try {
@@ -72,18 +72,6 @@ export async function startHTTPServer(server: Server, port: number) {
       } else if (!sessionId && isInitializeRequest(req.body)) {
         // 새 세션 초기화
         console.error(`[POST /mcp] New initialization request`)
-        console.error(`[DEBUG] req.body:`, JSON.stringify(req.body, null, 2))
-
-        // PlayMCP apiKey 추출 및 환경변수 설정
-        const initParams = req.body.params as any
-        console.error(`[DEBUG] initParams:`, JSON.stringify(initParams, null, 2))
-
-        if (initParams?.apiKey) {
-          process.env.LAW_OC = initParams.apiKey
-          console.error(`[POST /mcp] API Key configured from initialize request`)
-        } else {
-          console.error(`[POST /mcp] No apiKey found in initialize params`)
-        }
 
         const eventStore = new InMemoryEventStore()
         transport = new StreamableHTTPServerTransport({
