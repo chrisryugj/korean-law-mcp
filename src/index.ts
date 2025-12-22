@@ -44,18 +44,9 @@ import { searchCustomsInterpretations, searchCustomsInterpretationsSchema, getCu
 import { startHTTPServer } from "./server/http-server.js"
 
 // API 클라이언트 초기화
-const LAW_OC = process.env.LAW_OC
-if (!LAW_OC || LAW_OC.trim() === "") {
-  console.error("❌ 환경변수 LAW_OC가 설정되지 않았습니다.")
-  console.error("   법제처 API 키를 발급받아 환경변수로 설정해주세요:")
-  console.error("   https://open.law.go.kr/LSO/openApi/guideList.do")
-  console.error("")
-  console.error("   설정 방법:")
-  console.error("   - 로컬: export LAW_OC=your-api-key")
-  console.error("   - Docker: -e LAW_OC=your-api-key")
-  console.error("   - Railway/Render: 환경변수 설정에서 LAW_OC 추가")
-  process.exit(1)
-}
+// PlayMCP 등 외부에서 apiKey를 파라미터로 전달받을 수 있도록
+// 환경변수는 선택사항으로 변경 (없어도 서버 시작 가능)
+const LAW_OC = process.env.LAW_OC || ""
 const apiClient = new LawApiClient({ apiKey: LAW_OC })
 
 // MCP 서버 생성
