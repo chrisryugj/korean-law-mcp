@@ -7,22 +7,33 @@ import { normalizeLawSearchText, resolveLawAlias } from "./search-normalizer.js"
 const LAW_API_BASE = "https://www.law.go.kr/DRF"
 
 export class LawApiClient {
-  private apiKey: string
+  private defaultApiKey: string
 
   constructor(config: { apiKey: string }) {
-    this.apiKey = config.apiKey
+    this.defaultApiKey = config.apiKey
+  }
+
+  /**
+   * API 키 결정 (요청별 키 우선, 없으면 기본 키)
+   */
+  private getApiKey(overrideKey?: string): string {
+    const key = overrideKey || this.defaultApiKey
+    if (!key) {
+      throw new Error("API 키가 필요합니다. 법제처(https://www.law.go.kr/DRF/lawService.do)에서 발급받으세요.")
+    }
+    return key
   }
 
   /**
    * 법령 검색
    */
-  async searchLaw(query: string): Promise<string> {
+  async searchLaw(query: string, apiKey?: string): Promise<string> {
     const normalizedQuery = normalizeLawSearchText(query)
     const aliasResolution = resolveLawAlias(normalizedQuery)
     const finalQuery = aliasResolution.canonical
 
     const params = new URLSearchParams({
-      OC: this.apiKey,
+      OC: this.getApiKey(apiKey),
       type: "XML",
       target: "law",
       query: finalQuery,
@@ -46,10 +57,11 @@ export class LawApiClient {
     lawId?: string
     jo?: string
     efYd?: string
+    apiKey?: string
   }): Promise<string> {
     const apiParams = new URLSearchParams({
       target: "eflaw",
-      OC: this.apiKey,
+      OC: this.getApiKey(params.apiKey),
       type: "JSON",
     })
 
@@ -102,10 +114,11 @@ export class LawApiClient {
     lawId?: string
     ld?: string
     ln?: string
+    apiKey?: string
   }): Promise<string> {
     const apiParams = new URLSearchParams({
       target: "oldAndNew",
-      OC: this.apiKey,
+      OC: this.getApiKey(params.apiKey),
       type: "XML",
     })
 
@@ -131,10 +144,11 @@ export class LawApiClient {
     mst?: string
     lawId?: string
     knd?: "1" | "2"
+    apiKey?: string
   }): Promise<string> {
     const apiParams = new URLSearchParams({
       target: "thdCmp",
-      OC: this.apiKey,
+      OC: this.getApiKey(params.apiKey),
       type: "JSON",
       knd: params.knd || "2", // 기본값: 위임조문
     })
@@ -158,9 +172,10 @@ export class LawApiClient {
   async searchAdminRule(params: {
     query: string
     knd?: string
+    apiKey?: string
   }): Promise<string> {
     const apiParams = new URLSearchParams({
-      OC: this.apiKey,
+      OC: this.getApiKey(params.apiKey),
       type: "XML",
       target: "admrul",
       query: params.query,
@@ -181,10 +196,10 @@ export class LawApiClient {
   /**
    * 행정규칙 조회
    */
-  async getAdminRule(id: string): Promise<string> {
+  async getAdminRule(id: string, apiKey?: string): Promise<string> {
     const apiParams = new URLSearchParams({
       target: "admrul",
-      OC: this.apiKey,
+      OC: this.getApiKey(apiKey),
       type: "XML",  // 행정규칙은 XML만 지원
       ID: id,  // 행정규칙일련번호 사용
     })
@@ -212,6 +227,7 @@ export class LawApiClient {
   async getAnnexes(params: {
     lawName: string
     knd?: "1" | "2" | "3" | "4" | "5"
+    apiKey?: string
   }): Promise<string> {
     // 법령 종류 판별
     const lawType = this.detectLawType(params.lawName)
@@ -224,7 +240,7 @@ export class LawApiClient {
 
     const apiParams = new URLSearchParams({
       target,
-      OC: this.apiKey,
+      OC: this.getApiKey(params.apiKey),
       type: "JSON",
       query: params.lawName,
       search: "2", // 해당법령으로 검색
@@ -276,10 +292,11 @@ export class LawApiClient {
   async searchOrdinance(params: {
     query: string
     display?: number
+    apiKey?: string
   }): Promise<string> {
     const apiParams = new URLSearchParams({
       target: "ordin",
-      OC: this.apiKey,
+      OC: this.getApiKey(params.apiKey),
       type: "XML",
       query: params.query,
       display: (params.display || 20).toString(),
@@ -298,10 +315,10 @@ export class LawApiClient {
   /**
    * 자치법규 조회
    */
-  async getOrdinance(ordinSeq: string): Promise<string> {
+  async getOrdinance(ordinSeq: string, apiKey?: string): Promise<string> {
     const apiParams = new URLSearchParams({
       target: "ordin",
-      OC: this.apiKey,
+      OC: this.getApiKey(apiKey),
       type: "JSON",
       MST: ordinSeq,  // ← 파라미터는 MST를 사용해야 함
     })
@@ -333,10 +350,11 @@ export class LawApiClient {
     toRegDt?: string
     org?: string
     page?: number
+    apiKey?: string
   }): Promise<string> {
     const apiParams = new URLSearchParams({
       target: "lsJoHstInf",
-      OC: this.apiKey,
+      OC: this.getApiKey(params.apiKey),
       type: "XML",
     })
 
@@ -366,10 +384,11 @@ export class LawApiClient {
     org?: string
     display?: number
     page?: number
+    apiKey?: string
   }): Promise<string> {
     const apiParams = new URLSearchParams({
       target: "lsHstInf",
-      OC: this.apiKey,
+      OC: this.getApiKey(params.apiKey),
       type: "XML",
       regDt: params.regDt,
     })

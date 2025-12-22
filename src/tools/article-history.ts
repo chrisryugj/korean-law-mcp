@@ -31,7 +31,8 @@ export const ArticleHistorySchema = z.object({
   fromRegDt: z.string().optional().describe("조회기간 시작일 (YYYYMMDD, 예: '20240101')"),
   toRegDt: z.string().optional().describe("조회기간 종료일 (YYYYMMDD, 예: '20241231')"),
   org: z.string().optional().describe("소관부처코드 (선택)"),
-  page: z.number().optional().default(1).describe("페이지 번호 (기본값: 1)")
+  page: z.number().optional().default(1).describe("페이지 번호 (기본값: 1)"),
+  LAW_OC: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
 })
 
 export type ArticleHistoryInput = z.infer<typeof ArticleHistorySchema>
@@ -45,7 +46,7 @@ export async function getArticleHistory(
 
     // lawName이 제공된 경우 먼저 법령 검색하여 lawId 찾기
     if (input.lawName && !lawId) {
-      const searchResult = await apiClient.searchLaw(input.lawName)
+      const searchResult = await apiClient.searchLaw(input.lawName, input.LAW_OC)
       const lawIdMatch = searchResult.match(/<법령ID>(\d+)<\/법령ID>/)
       if (lawIdMatch) {
         lawId = lawIdMatch[1]
@@ -60,7 +61,7 @@ export async function getArticleHistory(
       }
     }
 
-    const xmlText = await apiClient.getArticleHistory({ ...input, lawId })
+    const xmlText = await apiClient.getArticleHistory({ ...input, lawId, apiKey: input.LAW_OC })
 
     const parser = new DOMParser()
     const doc = parser.parseFromString(xmlText, "text/xml")

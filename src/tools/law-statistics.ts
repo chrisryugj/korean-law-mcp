@@ -11,7 +11,8 @@ export const LawStatisticsSchema = z.object({
     "통계 유형: recent_changes (최근 개정 법령), by_department (소관부처별), by_year (제정년도별)"
   ),
   days: z.number().optional().default(30).describe("최근 변경 분석 기간 (일 단위, 기본값: 30)"),
-  limit: z.number().optional().default(10).describe("결과 개수 제한 (기본값: 10)")
+  limit: z.number().optional().default(10).describe("결과 개수 제한 (기본값: 10)"),
+  LAW_OC: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
 })
 
 export type LawStatisticsInput = z.infer<typeof LawStatisticsSchema>
@@ -23,7 +24,7 @@ export async function getLawStatistics(
   try {
     switch (input.analysisType) {
       case "recent_changes":
-        return await getRecentChanges(apiClient, input.days, input.limit)
+        return await getRecentChanges(apiClient, input.days, input.limit, input.LAW_OC)
 
       case "by_department":
         return await getStatsByDepartment(apiClient, input.limit)
@@ -57,7 +58,8 @@ export async function getLawStatistics(
 async function getRecentChanges(
   apiClient: LawApiClient,
   days: number,
-  limit: number
+  limit: number,
+  apiKey?: string
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   // 날짜 계산
   const endDate = new Date()
@@ -73,7 +75,8 @@ async function getRecentChanges(
     try {
       const xmlText = await apiClient.getLawHistory({
         regDt: dateStr,
-        display: 100
+        display: 100,
+        apiKey
       })
 
       const parser = new DOMParser()

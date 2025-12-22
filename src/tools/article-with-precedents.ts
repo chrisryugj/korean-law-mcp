@@ -12,7 +12,8 @@ export const GetArticleWithPrecedentsSchema = z.object({
   lawId: z.string().optional().describe("법령ID (search_law에서 획득)"),
   jo: z.string().describe("조문 번호 (예: '제38조')"),
   efYd: z.string().optional().describe("시행일자 (YYYYMMDD 형식)"),
-  includePrecedents: z.boolean().optional().default(true).describe("관련 판례 포함 여부")
+  includePrecedents: z.boolean().optional().default(true).describe("관련 판례 포함 여부"),
+  LAW_OC: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
 }).refine(data => data.mst || data.lawId, {
   message: "mst 또는 lawId 중 하나는 필수입니다"
 })
@@ -29,7 +30,8 @@ export async function getArticleWithPrecedents(
       mst: input.mst,
       lawId: input.lawId,
       jo: input.jo,
-      efYd: input.efYd
+      efYd: input.efYd,
+      LAW_OC: input.LAW_OC
     } as GetLawTextInput)
 
     if (articleResult.isError || !input.includePrecedents) {
@@ -54,7 +56,8 @@ export async function getArticleWithPrecedents(
       const precedentResult = await searchPrecedents(apiClient, {
         query: precedentQuery,
         display: 5,
-        page: 1
+        page: 1,
+        LAW_OC: input.LAW_OC
       })
 
       if (!precedentResult.isError) {

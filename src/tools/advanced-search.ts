@@ -15,7 +15,8 @@ export const AdvancedSearchSchema = z.object({
   toDate: z.string().optional().describe("제정일 종료 (YYYYMMDD)"),
   org: z.string().optional().describe("소관부처코드"),
   operator: z.enum(["AND", "OR"]).optional().default("AND").describe("키워드 결합 연산자"),
-  maxResults: z.number().optional().default(20).describe("최대 결과 개수")
+  maxResults: z.number().optional().default(20).describe("최대 결과 개수"),
+  LAW_OC: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
 })
 
 export type AdvancedSearchInput = z.infer<typeof AdvancedSearchSchema>
@@ -36,7 +37,7 @@ export async function advancedSearch(
       : [input.searchType]
 
     for (const target of searchTargets) {
-      const targetResults = await searchByType(apiClient, target, keywords, input)
+      const targetResults = await searchByType(apiClient, target, keywords, input, input.LAW_OC)
       results = results.concat(targetResults)
     }
 
@@ -93,7 +94,8 @@ async function searchByType(
   apiClient: LawApiClient,
   type: string,
   keywords: string[],
-  input: AdvancedSearchInput
+  input: AdvancedSearchInput,
+  apiKey?: string
 ): Promise<Array<{ name: string, id: string, type: string, date: string }>> {
   const query = keywords.join(" ")
   const results: Array<{ name: string, id: string, type: string, date: string }> = []
@@ -102,11 +104,11 @@ async function searchByType(
     let xmlText = ""
 
     if (type === "law") {
-      xmlText = await apiClient.searchLaw(query)
+      xmlText = await apiClient.searchLaw(query, apiKey)
     } else if (type === "admin_rule") {
-      xmlText = await apiClient.searchAdminRule({ query })
+      xmlText = await apiClient.searchAdminRule({ query, apiKey })
     } else if (type === "ordinance") {
-      xmlText = await apiClient.searchOrdinance({ query, display: 100 })
+      xmlText = await apiClient.searchOrdinance({ query, display: 100, apiKey })
     }
 
     const parser = new DOMParser()

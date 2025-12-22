@@ -7,7 +7,8 @@ import type { LawApiClient } from "../lib/api-client.js"
 
 export const SearchOrdinanceSchema = z.object({
   query: z.string().describe("검색할 자치법규명 (예: '서울', '환경')"),
-  display: z.number().min(1).max(100).default(20).describe("페이지당 결과 개수 (기본값: 20, 최대: 100)")
+  display: z.number().min(1).max(100).default(20).describe("페이지당 결과 개수 (기본값: 20, 최대: 100)"),
+  LAW_OC: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
 })
 
 export type SearchOrdinanceInput = z.infer<typeof SearchOrdinanceSchema>
@@ -19,7 +20,8 @@ export async function searchOrdinance(
   try {
     const xmlText = await apiClient.searchOrdinance({
       query: input.query,
-      display: input.display || 20
+      display: input.display || 20,
+      apiKey: input.LAW_OC
     })
 
     // Simple XML parsing

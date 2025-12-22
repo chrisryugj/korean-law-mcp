@@ -6,7 +6,8 @@ import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 
 export const GetOrdinanceSchema = z.object({
-  ordinSeq: z.string().describe("자치법규 일련번호")
+  ordinSeq: z.string().describe("자치법규 일련번호"),
+  LAW_OC: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
 })
 
 export type GetOrdinanceInput = z.infer<typeof GetOrdinanceSchema>
@@ -16,7 +17,7 @@ export async function getOrdinance(
   input: GetOrdinanceInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const jsonText = await apiClient.getOrdinance(input.ordinSeq)
+    const jsonText = await apiClient.getOrdinance(input.ordinSeq, input.LAW_OC)
     const json = JSON.parse(jsonText)
 
     const lawService = json?.LawService

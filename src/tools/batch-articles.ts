@@ -12,7 +12,8 @@ export const GetBatchArticlesSchema = z.object({
   mst: z.string().optional().describe("법령일련번호"),
   lawId: z.string().optional().describe("법령ID"),
   articles: z.array(z.string()).describe("조문 번호 배열 (예: ['제38조', '제39조', '제40조'])"),
-  efYd: z.string().optional().describe("시행일자 (YYYYMMDD 형식)")
+  efYd: z.string().optional().describe("시행일자 (YYYYMMDD 형식)"),
+  LAW_OC: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
 }).refine(data => data.mst || data.lawId, {
   message: "mst 또는 lawId 중 하나는 필수입니다"
 })
@@ -35,7 +36,8 @@ export async function getBatchArticles(
       const jsonText = await apiClient.getLawText({
         mst: input.mst,
         lawId: input.lawId,
-        efYd: input.efYd
+        efYd: input.efYd,
+        apiKey: input.LAW_OC
       })
       fullLawData = JSON.parse(jsonText)
       lawCache.set(cacheKey, fullLawData)

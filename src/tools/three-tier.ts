@@ -9,7 +9,8 @@ import { parseThreeTierDelegation } from "../lib/three-tier-parser.js"
 export const GetThreeTierSchema = z.object({
   mst: z.string().optional().describe("법령일련번호"),
   lawId: z.string().optional().describe("법령ID"),
-  knd: z.enum(["1", "2"]).optional().default("2").describe("1=인용조문, 2=위임조문 (기본값)")
+  knd: z.enum(["1", "2"]).optional().default("2").describe("1=인용조문, 2=위임조문 (기본값)"),
+  LAW_OC: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
 }).refine(data => data.mst || data.lawId, {
   message: "mst 또는 lawId 중 하나는 필수입니다"
 })
@@ -21,7 +22,12 @@ export async function getThreeTier(
   input: GetThreeTierInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const jsonText = await apiClient.getThreeTier(input)
+    const jsonText = await apiClient.getThreeTier({
+      mst: input.mst,
+      lawId: input.lawId,
+      knd: input.knd,
+      apiKey: input.LAW_OC
+    })
     const json = JSON.parse(jsonText)
 
     const threeTierData = parseThreeTierDelegation(json)

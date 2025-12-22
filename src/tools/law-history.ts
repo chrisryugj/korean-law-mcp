@@ -10,7 +10,8 @@ export const LawHistorySchema = z.object({
   regDt: z.string().describe("법령 변경일자 (YYYYMMDD, 예: '20240101')"),
   org: z.string().optional().describe("소관부처코드 (선택)"),
   display: z.number().optional().default(20).describe("결과 개수 (기본값: 20, 최대: 100)"),
-  page: z.number().optional().default(1).describe("페이지 번호 (기본값: 1)")
+  page: z.number().optional().default(1).describe("페이지 번호 (기본값: 1)"),
+  LAW_OC: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
 })
 
 export type LawHistoryInput = z.infer<typeof LawHistorySchema>
@@ -20,7 +21,13 @@ export async function getLawHistory(
   input: LawHistoryInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const xmlText = await apiClient.getLawHistory(input)
+    const xmlText = await apiClient.getLawHistory({
+      regDt: input.regDt,
+      org: input.org,
+      display: input.display,
+      page: input.page,
+      apiKey: input.LAW_OC
+    })
 
     const parser = new DOMParser()
     const doc = parser.parseFromString(xmlText, "text/xml")

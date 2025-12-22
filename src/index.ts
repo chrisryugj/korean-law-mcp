@@ -100,9 +100,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "number",
               description: "최대 결과 개수 (기본값: 20)",
               default: 20
+            },
+            apiKey: {
+              type: "string",
+              description: "법제처 API 키 (필수). https://www.law.go.kr/DRF/lawService.do 에서 발급"
             }
           },
-          required: ["query"]
+          required: ["query", "apiKey"]
         }
       },
       {

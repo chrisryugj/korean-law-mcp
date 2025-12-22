@@ -9,7 +9,8 @@ import { lawCache } from "../lib/cache.js"
 
 export const SearchLawSchema = z.object({
   query: z.string().describe("검색할 법령명 (예: '관세법', 'fta특례법', '화관법')"),
-  maxResults: z.number().optional().default(20).describe("최대 결과 개수")
+  maxResults: z.number().optional().default(20).describe("최대 결과 개수"),
+  LAW_OC: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
 })
 
 export type SearchLawInput = z.infer<typeof SearchLawSchema>
@@ -31,7 +32,7 @@ export async function searchLaw(
       }
     }
 
-    const xmlText = await apiClient.searchLaw(input.query)
+    const xmlText = await apiClient.searchLaw(input.query, input.LAW_OC)
 
     const parser = new DOMParser()
     const doc = parser.parseFromString(xmlText, "text/xml")

@@ -9,7 +9,8 @@ import { getThreeTier } from "./three-tier.js"
 
 export const GetLawTreeSchema = z.object({
   mst: z.string().optional().describe("법령일련번호"),
-  lawId: z.string().optional().describe("법령ID")
+  lawId: z.string().optional().describe("법령ID"),
+  LAW_OC: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
 })
 
 export type GetLawTreeInput = z.infer<typeof GetLawTreeSchema>
@@ -23,7 +24,8 @@ export async function getLawTree(
     const result = await getThreeTier(apiClient, {
       mst: input.mst,
       lawId: input.lawId,
-      knd: "2" // 위임조문
+      knd: "2", // 위임조문
+      LAW_OC: input.LAW_OC
     })
 
     if (result.isError) {
