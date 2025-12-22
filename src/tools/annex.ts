@@ -8,7 +8,7 @@ import type { LawApiClient } from "../lib/api-client.js"
 export const GetAnnexesSchema = z.object({
   lawName: z.string().describe("법령명 (예: '관세법')"),
   knd: z.enum(["1", "2", "3", "4", "5"]).optional().describe("1=별표, 2=서식, 3=부칙별표, 4=부칙서식, 5=전체"),
-  LAW_OC: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
+  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
 })
 
 export type GetAnnexesInput = z.infer<typeof GetAnnexesSchema>
@@ -21,7 +21,7 @@ export async function getAnnexes(
     const jsonText = await apiClient.getAnnexes({
       lawName: input.lawName,
       knd: input.knd,
-      apiKey: input.LAW_OC
+      apiKey: input.apiKey
     })
 
     const json = JSON.parse(jsonText)

@@ -18,7 +18,7 @@ export const CompareArticlesSchema = z.object({
     lawId: z.string().optional().describe("법령ID"),
     jo: z.string().describe("조문 번호 (예: '제25조')")
   }).describe("두 번째 법령 정보"),
-  LAW_OC: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
+  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
 })
 
 export type CompareArticlesInput = z.infer<typeof CompareArticlesSchema>
@@ -33,14 +33,14 @@ export async function compareArticles(
       mst: input.law1.mst,
       lawId: input.law1.lawId,
       jo: input.law1.jo,
-      LAW_OC: input.LAW_OC
+      apiKey: input.apiKey
     })
 
     const result2 = await getLawText(apiClient, {
       mst: input.law2.mst,
       lawId: input.law2.lawId,
       jo: input.law2.jo,
-      LAW_OC: input.LAW_OC
+      apiKey: input.apiKey
     })
 
     // Check for errors

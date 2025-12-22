@@ -9,7 +9,7 @@ import { getPrecedentText } from "./precedents.js"
 export const SummarizePrecedentSchema = z.object({
   id: z.string().describe("판례일련번호"),
   maxLength: z.number().optional().default(500).describe("요약 최대 길이 (기본값: 500자)"),
-  LAW_OC: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
+  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
 })
 
 export type SummarizePrecedentInput = z.infer<typeof SummarizePrecedentSchema>
@@ -24,7 +24,7 @@ export async function summarizePrecedent(
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
     // 1. 판례 전문 조회
-    const precedentResult = await getPrecedentText(apiClient, { id: input.id, LAW_OC: input.LAW_OC })
+    const precedentResult = await getPrecedentText(apiClient, { id: input.id, apiKey: input.apiKey })
 
     if (precedentResult.isError || precedentResult.content.length === 0) {
       return {

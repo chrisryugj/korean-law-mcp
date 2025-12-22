@@ -12,7 +12,7 @@ import { searchOrdinance } from "./ordinance-search.js"
 export const SearchAllSchema = z.object({
   query: z.string().describe("검색할 키워드"),
   maxResults: z.number().min(1).max(50).default(10).describe("각 유형별 최대 결과 개수 (기본값: 10)"),
-  LAW_OC: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
+  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
 })
 
 export type SearchAllInput = z.infer<typeof SearchAllSchema>
@@ -26,15 +26,15 @@ export async function searchAll(
 
     // Parallel searches for all three types
     const [lawResult, adminRuleResult, ordinanceResult] = await Promise.all([
-      searchLaw(apiClient, { query: input.query, maxResults, LAW_OC: input.LAW_OC }).catch(e => ({
+      searchLaw(apiClient, { query: input.query, maxResults, apiKey: input.apiKey }).catch(e => ({
         content: [{ type: "text", text: `법령 검색 실패: ${e.message}` }],
         isError: true
       })),
-      searchAdminRule(apiClient, { query: input.query, maxResults, LAW_OC: input.LAW_OC }).catch(e => ({
+      searchAdminRule(apiClient, { query: input.query, maxResults, apiKey: input.apiKey }).catch(e => ({
         content: [{ type: "text", text: `행정규칙 검색 실패: ${e.message}` }],
         isError: true
       })),
-      searchOrdinance(apiClient, { query: input.query, display: maxResults, LAW_OC: input.LAW_OC }).catch(e => ({
+      searchOrdinance(apiClient, { query: input.query, display: maxResults, apiKey: input.apiKey }).catch(e => ({
         content: [{ type: "text", text: `자치법규 검색 실패: ${e.message}` }],
         isError: true
       }))

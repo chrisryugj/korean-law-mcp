@@ -11,7 +11,7 @@ export const searchCustomsInterpretationsSchema = z.object({
   explYd: z.string().optional().describe("Interpretation date range (YYYYMMDD~YYYYMMDD, e.g., '20200101~20201231')"),
   sort: z.enum(["lasc", "ldes", "dasc", "ddes"]).optional()
     .describe("Sort option: lasc/ldes (interpretation name), dasc/ddes (interpretation date)"),
-  LAW_OC: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)"),
+  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)"),
 });
 
 export type SearchCustomsInterpretationsInput = z.infer<typeof searchCustomsInterpretationsSchema>;
@@ -21,9 +21,9 @@ export async function searchCustomsInterpretations(
   args: SearchCustomsInterpretationsInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const apiKey = args.LAW_OC || process.env.LAW_OC;
+    const apiKey = args.apiKey || process.env.apiKey;
     if (!apiKey) {
-      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 LAW_OC 환경변수를 설정하세요.");
+      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 apiKey 환경변수를 설정하세요.");
     }
 
     const params = new URLSearchParams({
@@ -107,7 +107,7 @@ export async function searchCustomsInterpretations(
 export const getCustomsInterpretationTextSchema = z.object({
   id: z.string().describe("Customs interpretation serial number (법령해석일련번호) from search results"),
   interpretationName: z.string().optional().describe("Interpretation name (optional, for verification)"),
-  LAW_OC: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)"),
+  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)"),
 });
 
 export type GetCustomsInterpretationTextInput = z.infer<typeof getCustomsInterpretationTextSchema>;
@@ -117,9 +117,9 @@ export async function getCustomsInterpretationText(
   args: GetCustomsInterpretationTextInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const apiKey = args.LAW_OC || process.env.LAW_OC;
+    const apiKey = args.apiKey || process.env.apiKey;
     if (!apiKey) {
-      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 LAW_OC 환경변수를 설정하세요.");
+      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 apiKey 환경변수를 설정하세요.");
     }
 
     const params = new URLSearchParams({

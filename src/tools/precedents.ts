@@ -9,7 +9,7 @@ export const searchPrecedentsSchema = z.object({
   page: z.number().min(1).default(1).describe("Page number (default: 1)"),
   sort: z.enum(["lasc", "ldes", "dasc", "ddes", "nasc", "ndes"]).optional()
     .describe("Sort option: lasc/ldes (law name), dasc/ddes (date), nasc/ndes (case number)"),
-  LAW_OC: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)"),
+  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)"),
 });
 
 export type SearchPrecedentsInput = z.infer<typeof searchPrecedentsSchema>;
@@ -19,9 +19,9 @@ export async function searchPrecedents(
   args: SearchPrecedentsInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const apiKey = args.LAW_OC || process.env.LAW_OC;
+    const apiKey = args.apiKey || process.env.apiKey;
     if (!apiKey) {
-      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 LAW_OC 환경변수를 설정하세요.");
+      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 apiKey 환경변수를 설정하세요.");
     }
 
     const params = new URLSearchParams({
@@ -119,7 +119,7 @@ export async function searchPrecedents(
 export const getPrecedentTextSchema = z.object({
   id: z.string().describe("Precedent serial number (판례일련번호) from search results"),
   caseName: z.string().optional().describe("Case name (optional, for verification)"),
-  LAW_OC: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)"),
+  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)"),
 });
 
 export type GetPrecedentTextInput = z.infer<typeof getPrecedentTextSchema>;
@@ -129,9 +129,9 @@ export async function getPrecedentText(
   args: GetPrecedentTextInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const apiKey = args.LAW_OC || process.env.LAW_OC;
+    const apiKey = args.apiKey || process.env.apiKey;
     if (!apiKey) {
-      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 LAW_OC 환경변수를 설정하세요.");
+      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 apiKey 환경변수를 설정하세요.");
     }
 
   const params = new URLSearchParams({

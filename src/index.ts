@@ -105,10 +105,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             apiKey: {
               type: "string",
-              description: "법제처 API 키 (필수). https://www.law.go.kr/DRF/lawService.do 에서 발급"
+              description: "법제처 API 키 (선택). https://open.law.go.kr/LSO/openApi/guideList.do 에서 발급"
             }
           },
-          required: ["query", "apiKey"]
+          required: ["query"]
         }
       },
       {

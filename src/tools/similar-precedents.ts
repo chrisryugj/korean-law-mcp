@@ -10,7 +10,7 @@ import { searchPrecedents } from "./precedents.js"
 export const FindSimilarPrecedentsSchema = z.object({
   query: z.string().describe("검색 키워드 또는 판례 내용"),
   maxResults: z.number().optional().default(5).describe("최대 결과 개수 (기본값: 5)"),
-  LAW_OC: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
+  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
 })
 
 export type FindSimilarPrecedentsInput = z.infer<typeof FindSimilarPrecedentsSchema>
@@ -43,7 +43,7 @@ export async function findSimilarPrecedents(
       query: searchQuery,
       display: input.maxResults * 2,  // 여유있게 가져오기
       page: 1,
-      LAW_OC: input.LAW_OC
+      apiKey: input.apiKey
     })
 
     if (searchResult.isError) {

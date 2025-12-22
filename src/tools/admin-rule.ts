@@ -11,7 +11,7 @@ export const SearchAdminRuleSchema = z.object({
   query: z.string().describe("검색할 행정규칙명"),
   knd: z.string().optional().describe("행정규칙 종류 (1=훈령, 2=예규, 3=고시, 4=공고, 5=일반)"),
   maxResults: z.number().optional().default(20).describe("최대 결과 개수"),
-  LAW_OC: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
+  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
 })
 
 export type SearchAdminRuleInput = z.infer<typeof SearchAdminRuleSchema>
@@ -24,7 +24,7 @@ export async function searchAdminRule(
     const xmlText = await apiClient.searchAdminRule({
       query: input.query,
       knd: input.knd,
-      apiKey: input.LAW_OC
+      apiKey: input.apiKey
     })
 
     const parser = new DOMParser()
@@ -98,7 +98,7 @@ export async function searchAdminRule(
 // get_admin_rule 스키마
 export const GetAdminRuleSchema = z.object({
   id: z.string().describe("행정규칙ID (search_admin_rule에서 획득)"),
-  LAW_OC: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
+  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
 })
 
 export type GetAdminRuleInput = z.infer<typeof GetAdminRuleSchema>
@@ -108,7 +108,7 @@ export async function getAdminRule(
   input: GetAdminRuleInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const xmlText = await apiClient.getAdminRule(input.id, input.LAW_OC)
+    const xmlText = await apiClient.getAdminRule(input.id, input.apiKey)
 
     const parser = new DOMParser()
     const doc = parser.parseFromString(xmlText, "text/xml")
