@@ -1,229 +1,46 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Korean Law MCP Server - 법제처 API 기반 MCP 서버 (51개 도구)
 
-## Project Overview
+## Structure
 
-Korean Law MCP Server - 국가법령정보센터(법제처) API 기반 Model Context Protocol 서버
+```
+src/
+├── index.ts          # 엔트리포인트 (STDIO/SSE 모드)
+├── tools/            # 51개 도구 (각 파일 200줄 미만)
+├── lib/              # API 클라이언트, 파서, 정규화
+└── server/           # HTTP/SSE 서버 (Express)
+```
 
-**Purpose**: Provides Claude with tools to search, retrieve, and compare Korean legal statutes through the Korea Ministry of Government Legislation Open API.
-
-**Key Features**:
-- Law search with automatic abbreviation resolution (화관법 → 화학물질관리법)
-- Article text retrieval with automatic article number conversion (제38조 → 003800)
-- Old-new law comparison (신구법 대조)
-- Three-tier delegation mapping (법률→시행령→시행규칙)
-- Precedent search and retrieval (판례 검색 및 전문 조회)
-- Legal interpretation search and retrieval (법령해석례 검색 및 전문 조회)
-- **[v1.3.0]** Article history tracking (조문 연혁 추적)
-- **[v1.3.0]** Law change history (법령 변경이력)
-- **[v1.3.0]** Precedent analysis (판례 분석: 요약, 키워드, 유사 판례)
-- **[v1.3.0]** Law statistics (법령 통계)
-- **[v1.3.0]** Article link parsing (조문 참조 파싱)
-- **[v1.3.0]** External links generation (외부 링크 생성)
-- **[v1.3.0]** Advanced search (고급 검색)
-- **[v1.4.0]** Tax tribunal decisions (조세심판원 재결례 검색 및 전문 조회)
-- **[v1.4.0]** Customs interpretations (관세청 법령해석 검색 및 전문 조회)
-- **[v1.5.0]** Constitutional Court decisions (헌재결정례 검색 및 전문 조회)
-- **[v1.5.0]** Administrative appeals (행정심판례 검색 및 전문 조회)
-- **[v1.5.0]** English law translation (영문법령 검색 및 조회)
-- **[v1.5.0]** Legal terminology dictionary (법령용어 검색)
-- **[v1.5.0]** Everyday law guides (생활법령정보 검색)
-- **[v1.5.0]** Committee decisions (공정위/개보위/노동위 결정문)
-- **[v1.5.0]** Historical law retrieval (연혁법령 조회)
-- **[v1.5.0]** Law system tree (법령체계도 조회)
-
-## Development Commands
+## Commands
 
 ```bash
-# Install dependencies
-npm install
-
-# Build TypeScript to JavaScript
-npm run build
-
-# Watch mode (rebuild on file changes)
-npm run watch
-
-# Run locally in STDIO mode (for Claude Desktop)
-LAW_OC=your-api-key node build/index.js
-
-# Run locally in SSE mode (for remote deployment testing)
-LAW_OC=your-api-key node build/index.js --mode sse --port 3000
-# Alternative: npm run start:sse
-
-# Test with MCP Inspector
-npx @modelcontextprotocol/inspector build/index.js
+npm install           # 의존성 설치
+npm run build         # TypeScript 빌드
+npm run watch         # 개발 모드
+LAW_OC=키 node build/index.js  # 로컬 실행
 ```
 
-## Environment Variables
+## Environment
 
-**Required**:
-- `LAW_OC`: Korea Ministry of Government Legislation API key
-  - Obtain from: https://www.law.go.kr/DRF/lawService.do
-  - Store in `.env` or `.env.local` for local development
-  - Set in deployment platform (Railway, Render) for production
+`LAW_OC`: 법제처 API 키 (필수) - https://www.law.go.kr/DRF/lawService.do
 
-## Architecture
+## Domain Knowledge
 
-### Core Components
+**JO Code**: 조문번호 6자리 코드 (AAAABB)
+- AAAA: 조번호 (zero-padded)
+- BB: 의X 번호 (없으면 00)
+- 예: 제38조 → 003800, 제10조의2 → 001002
 
-**Entry Point** ([src/index.ts](src/index.ts)):
-- Initializes MCP server with 51 tools (v1.5.0)
-- Supports dual transport modes: STDIO (local) and SSE (remote)
-- Parses CLI arguments to determine mode
+## Critical Rules
 
-**API Client** ([src/lib/api-client.ts](src/lib/api-client.ts)):
-- Singleton HTTP client for Korea Law API
-- All API calls go through this class
-- Handles URL construction and error responses
+1. **LexDiff 코드 수정 금지**: `search-normalizer.ts`, `law-parser.ts`는 LexDiff에서 가져온 코드. 수정 시 원본 확인 필수
+2. **파일 크기 200줄 미만**: 초과 시 `src/lib/`로 분리
+3. **Zod 스키마**: 모든 도구 입력에 Zod 검증 필수
 
-**Tools** ([src/tools/](src/tools/)) - 51 tools total:
-- Each tool is a separate module with Zod schema validation
-- **Core Tools (1-14)**:
-  - `search.ts`: Law search with abbreviation resolution
-  - `law-text.ts`: Article text retrieval
-  - `comparison.ts`: Old-new law comparison
-  - `three-tier.ts`: Delegation relationship mapping
-  - `admin-rule.ts`: Administrative rule search and retrieval
-  - `annex.ts`: Annexes and forms retrieval
-  - `ordinance.ts`: Local ordinances retrieval
-  - `precedents.ts`: Precedent search and full text retrieval
-  - `interpretations.ts`: Legal interpretation search and full text retrieval
-  - `utils.ts`: JO code conversion utility
-- **Analysis Tools (15-20, v1.2.0)**:
-  - `ordinance-search.ts`: Ordinance search
-  - `article-compare.ts`: Article comparison
-  - `law-tree.ts`: Law tree view
-  - `search-all.ts`: Unified search
-  - `autocomplete.ts`: Law name autocomplete
-  - `batch-articles.ts`: Batch article retrieval
-  - `article-with-precedents.ts`: Article + precedents integration
-- **Advanced Tools (21-29, v1.3.0)**:
-  - `article-history.ts`: Article revision history
-  - `law-history.ts`: Law change history
-  - `precedent-summary.ts`: Precedent summarization
-  - `precedent-keywords.ts`: Keyword extraction from precedents
-  - `similar-precedents.ts`: Similar precedent search
-  - `law-statistics.ts`: Law statistics
-  - `article-link-parser.ts`: Article reference parsing
-  - `external-links.ts`: External link generation
-  - `advanced-search.ts`: Advanced search with filters
-- **Specialized Tools (30-33, v1.4.0)**:
-  - `tax-tribunal-decisions.ts`: Tax tribunal decision search and full text retrieval
-  - `customs-interpretations.ts`: Customs interpretation search and full text retrieval
-- **Extended API Tools (34-51, v1.5.0)**:
-  - `constitutional-decisions.ts`: Constitutional Court decision search and retrieval
-  - `admin-appeals.ts`: Administrative appeal search and retrieval
-  - `english-law.ts`: English law translation search and retrieval
-  - `legal-terms.ts`: Legal terminology dictionary search
-  - `life-law.ts`: Everyday law guide search and retrieval
-  - `committee-decisions.ts`: FTC/PIPC/NLRC committee decision search and retrieval
-  - `historical-law.ts`: Historical law version search and retrieval
-  - `law-system-tree.ts`: Law hierarchy tree visualization
+## Docs
 
-**Data Normalization** ([src/lib/](src/lib/)):
-- `search-normalizer.ts`: Law name abbreviation resolution (imported from LexDiff project)
-- `law-parser.ts`: Article number parsing and JO code conversion
-- `three-tier-parser.ts`: JSON parsing for delegation data
-
-**SSE Server** ([src/server/sse-server.ts](src/server/sse-server.ts)):
-- Express-based SSE transport for remote deployment
-- CORS enabled for cross-origin access
-- Health check endpoints for monitoring
-
-### Data Flow
-
-1. **Search Flow**:
-   - User query → `search_law` tool
-   - Normalize query → Resolve abbreviations → API call
-   - Return law list with `mst` and `lawId`
-
-2. **Article Retrieval Flow**:
-   - `mst` or `lawId` + optional `jo` → `get_law_text` tool
-   - Convert Korean article number to JO code if needed
-   - API call → JSON response
-
-3. **JO Code Conversion**:
-   - Korean notation (제38조, 제10조의2) ↔ 6-digit code (003800, 001002)
-   - Used internally by `get_law_text` and exposed as `parse_jo_code` tool
-
-### Key Patterns
-
-**Abbreviation Resolution**:
-- Implemented in `search-normalizer.ts`
-- Uses pre-built lookup map with common law abbreviations
-- Also normalizes typos and spacing inconsistencies
-- Code imported from production LexDiff project (battle-tested)
-
-**Article Number Parsing**:
-- Handles various formats: "38조", "제38조", "10조의2", "제10조의2"
-- Converts to 6-digit JO code: AAAABB (AAAA=article, BB=branch)
-- Example: "제10조의2" → 001002
-
-**Dual Transport Support**:
-- STDIO mode: For local Claude Desktop integration
-- SSE mode: For remote deployment (Railway, Render)
-- Mode selected via `--mode` CLI argument
-
-## Deployment
-
-### Local (Claude Desktop)
-
-Add to `claude_desktop_config.json`:
-```json
-{
-  "mcpServers": {
-    "korean-law": {
-      "command": "node",
-      "args": ["path/to/korean-law-mcp/build/index.js"],
-      "env": {
-        "LAW_OC": "your-api-key-here"
-      }
-    }
-  }
-}
-```
-
-### Remote (Railway/Render)
-
-1. Deploy from GitHub repository
-2. Platform auto-detects Dockerfile
-3. Set environment variable: `LAW_OC=your-api-key`
-4. SSE endpoint available at: `https://your-app.railway.app/sse`
-
-## Important Implementation Notes
-
-### LexDiff Code Reuse
-- `search-normalizer.ts` and `law-parser.ts` are imported from LexDiff project
-- These modules have been battle-tested in production
-- `debugLogger` calls removed during import
-- Do not modify core normalization logic without consulting LexDiff source
-
-### XML vs JSON API Responses
-- `searchLaw`: Returns XML (parsed in tool layer)
-- `getLawText`: Returns JSON
-- `compareOldNew`: Returns XML
-- `getThreeTier`: Returns JSON
-- `searchPrecedents`: Returns XML (custom parser in precedents.ts)
-- `getPrecedentText`: Returns JSON
-- `searchInterpretations`: Returns XML (custom parser in interpretations.ts)
-- `getInterpretationText`: Returns JSON
-
-### Error Handling
-- API client checks for HTML error pages disguised as responses
-- Zod schema validation on all tool inputs
-- Tool errors wrapped in MCP error response format
-
-### JO Code Format
-- Always 6 digits: `AAAABB`
-- AAAA: Article number (zero-padded)
-- BB: Branch number (00 if none)
-- Examples: 000500 (제5조), 003800 (제38조), 001002 (제10조의2)
-
-## File Size Management
-
-All source files are under 200 lines. When adding features:
-- Keep tool implementations focused and single-purpose
-- Extract shared logic to `src/lib/`
-- Split large parsers into separate modules
+상세 정보는 별도 문서 참조:
+- [docs/API.md](docs/API.md) - 51개 도구 레퍼런스
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - 시스템 설계, 데이터 플로우
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) - 개발 가이드
