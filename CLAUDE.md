@@ -24,6 +24,14 @@ Korean Law MCP Server - 국가법령정보센터(법제처) API 기반 Model Con
 - **[v1.3.0]** Advanced search (고급 검색)
 - **[v1.4.0]** Tax tribunal decisions (조세심판원 재결례 검색 및 전문 조회)
 - **[v1.4.0]** Customs interpretations (관세청 법령해석 검색 및 전문 조회)
+- **[v1.5.0]** Constitutional Court decisions (헌재결정례 검색 및 전문 조회)
+- **[v1.5.0]** Administrative appeals (행정심판례 검색 및 전문 조회)
+- **[v1.5.0]** English law translation (영문법령 검색 및 조회)
+- **[v1.5.0]** Legal terminology dictionary (법령용어 검색)
+- **[v1.5.0]** Everyday law guides (생활법령정보 검색)
+- **[v1.5.0]** Committee decisions (공정위/개보위/노동위 결정문)
+- **[v1.5.0]** Historical law retrieval (연혁법령 조회)
+- **[v1.5.0]** Law system tree (법령체계도 조회)
 
 ## Development Commands
 
@@ -61,7 +69,7 @@ npx @modelcontextprotocol/inspector build/index.js
 ### Core Components
 
 **Entry Point** ([src/index.ts](src/index.ts)):
-- Initializes MCP server with 33 tools (v1.4.0)
+- Initializes MCP server with 51 tools (v1.5.0)
 - Supports dual transport modes: STDIO (local) and SSE (remote)
 - Parses CLI arguments to determine mode
 
@@ -70,7 +78,7 @@ npx @modelcontextprotocol/inspector build/index.js
 - All API calls go through this class
 - Handles URL construction and error responses
 
-**Tools** ([src/tools/](src/tools/)) - 33 tools total:
+**Tools** ([src/tools/](src/tools/)) - 51 tools total:
 - Each tool is a separate module with Zod schema validation
 - **Core Tools (1-14)**:
   - `search.ts`: Law search with abbreviation resolution
@@ -104,6 +112,15 @@ npx @modelcontextprotocol/inspector build/index.js
 - **Specialized Tools (30-33, v1.4.0)**:
   - `tax-tribunal-decisions.ts`: Tax tribunal decision search and full text retrieval
   - `customs-interpretations.ts`: Customs interpretation search and full text retrieval
+- **Extended API Tools (34-51, v1.5.0)**:
+  - `constitutional-decisions.ts`: Constitutional Court decision search and retrieval
+  - `admin-appeals.ts`: Administrative appeal search and retrieval
+  - `english-law.ts`: English law translation search and retrieval
+  - `legal-terms.ts`: Legal terminology dictionary search
+  - `life-law.ts`: Everyday law guide search and retrieval
+  - `committee-decisions.ts`: FTC/PIPC/NLRC committee decision search and retrieval
+  - `historical-law.ts`: Historical law version search and retrieval
+  - `law-system-tree.ts`: Law hierarchy tree visualization
 
 **Data Normalization** ([src/lib/](src/lib/)):
 - `search-normalizer.ts`: Law name abbreviation resolution (imported from LexDiff project)

@@ -41,6 +41,15 @@ import { getExternalLinks, ExternalLinksSchema } from "./tools/external-links.js
 import { advancedSearch, AdvancedSearchSchema } from "./tools/advanced-search.js"
 import { searchTaxTribunalDecisions, searchTaxTribunalDecisionsSchema, getTaxTribunalDecisionText, getTaxTribunalDecisionTextSchema } from "./tools/tax-tribunal-decisions.js"
 import { searchCustomsInterpretations, searchCustomsInterpretationsSchema, getCustomsInterpretationText, getCustomsInterpretationTextSchema } from "./tools/customs-interpretations.js"
+// v1.5.0 - New API tools
+import { searchConstitutionalDecisions, searchConstitutionalDecisionsSchema, getConstitutionalDecisionText, getConstitutionalDecisionTextSchema } from "./tools/constitutional-decisions.js"
+import { searchAdminAppeals, searchAdminAppealsSchema, getAdminAppealText, getAdminAppealTextSchema } from "./tools/admin-appeals.js"
+import { searchEnglishLaw, searchEnglishLawSchema, getEnglishLawText, getEnglishLawTextSchema } from "./tools/english-law.js"
+import { searchLegalTerms, searchLegalTermsSchema } from "./tools/legal-terms.js"
+import { searchLifeLaw, searchLifeLawSchema, getLifeLawGuide, getLifeLawGuideSchema } from "./tools/life-law.js"
+import { searchFtcDecisions, searchFtcDecisionsSchema, getFtcDecisionText, getFtcDecisionTextSchema, searchPipcDecisions, searchPipcDecisionsSchema, getPipcDecisionText, getPipcDecisionTextSchema, searchNlrcDecisions, searchNlrcDecisionsSchema, getNlrcDecisionText, getNlrcDecisionTextSchema } from "./tools/committee-decisions.js"
+import { getHistoricalLaw, getHistoricalLawSchema, searchHistoricalLaw, searchHistoricalLawSchema } from "./tools/historical-law.js"
+import { getLawSystemTree, getLawSystemTreeSchema } from "./tools/law-system-tree.js"
 import { startHTTPServer } from "./server/http-server.js"
 
 // API 클라이언트 초기화
@@ -53,7 +62,7 @@ const apiClient = new LawApiClient({ apiKey: LAW_OC })
 const server = new Server(
   {
     name: "korean-law",
-    version: "1.3.0",
+    version: "1.5.0",
   },
   {
     capabilities: {
@@ -1587,6 +1596,822 @@ linkType:
           },
           required: ["id"]
         }
+      },
+      // v1.5.0 - New API tools
+      {
+        name: "search_constitutional_decisions",
+        description: `[헌재결정례] 검색 - 헌법재판소 결정례를 검색합니다.
+
+사용 시점:
+- 위헌/합헌 결정 확인 시
+- 헌법소원 관련 선례 검색 시
+- 기본권 침해 사례 연구 시
+
+검색 파라미터 (모두 선택):
+- query: 키워드 (예: "위헌", "기본권", "재산권")
+- caseNumber: 사건번호 (예: "2020헌바123", "2019헌마456")
+
+관련 도구:
+- 일반 판례: search_precedents
+- 행정심판: search_admin_appeals
+- 법령해석: search_interpretations
+
+워크플로우:
+1. search_constitutional_decisions(query="위헌")
+2. 결과에서 헌재결정일련번호 획득
+3. get_constitutional_decision_text(id="...")로 전문 조회
+
+예시:
+- search_constitutional_decisions(query="위헌")
+- search_constitutional_decisions(query="기본권", caseNumber="2020헌바")
+- search_constitutional_decisions(query="재산권 침해")`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "검색 키워드 (예: '위헌', '기본권', '재산권')"
+            },
+            caseNumber: {
+              type: "string",
+              description: "사건번호 (예: '2020헌바123', '2019헌마456')"
+            },
+            display: {
+              type: "number",
+              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              default: 20
+            },
+            page: {
+              type: "number",
+              description: "페이지 번호 (기본값: 1)",
+              default: 1
+            },
+            sort: {
+              type: "string",
+              enum: ["lasc", "ldes", "dasc", "ddes", "nasc", "ndes"],
+              description: "정렬 옵션: lasc/ldes (법령명순), dasc/ddes (날짜순), nasc/ndes (사건번호순)"
+            }
+          },
+          required: []
+        }
+      },
+      {
+        name: "get_constitutional_decision_text",
+        description: `[헌재결정례] 전문 조회 - search_constitutional_decisions로 얻은 ID로 결정문 전문을 조회합니다.
+
+사용 시점:
+- search_constitutional_decisions 실행 후 상세 내용 필요 시
+
+필수 파라미터:
+- id: 헌재결정일련번호 (search_constitutional_decisions에서 획득)
+
+응답 내용:
+- 기본정보: 사건번호, 선고일자, 결정유형, 청구인/피청구인
+- 판시사항, 결정요지, 참조조문, 참조판례, 전문
+
+워크플로우:
+1. search_constitutional_decisions(query="...") → 헌재결정일련번호 획득
+2. get_constitutional_decision_text(id="...")
+
+예시:
+- get_constitutional_decision_text(id="12345")`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description: "헌재결정일련번호 (search_constitutional_decisions에서 획득)"
+            },
+            caseName: {
+              type: "string",
+              description: "사건명 (선택사항, 검증용)"
+            }
+          },
+          required: ["id"]
+        }
+      },
+      {
+        name: "search_admin_appeals",
+        description: `[행정심판례] 검색 - 중앙행정심판위원회 재결례를 검색합니다.
+
+사용 시점:
+- 행정처분 취소/무효 사례 확인 시
+- 과태료/과징금 감경 선례 검색 시
+- 인허가 거부 불복 사례 연구 시
+- 공무원 징계 관련 사례 확인 시
+
+검색 파라미터 (모두 선택):
+- query: 키워드 (예: "취소처분", "영업정지", "과태료")
+
+관련 도구:
+- 헌재결정: search_constitutional_decisions
+- 조세심판: search_tax_tribunal_decisions
+- 일반 판례: search_precedents
+
+워크플로우:
+1. search_admin_appeals(query="영업정지")
+2. 결과에서 행정심판일련번호 획득
+3. get_admin_appeal_text(id="...")로 전문 조회
+
+예시:
+- search_admin_appeals(query="취소처분")
+- search_admin_appeals(query="과태료 감경")
+- search_admin_appeals(query="인허가 거부")`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "검색 키워드 (예: '취소처분', '영업정지', '과태료')"
+            },
+            display: {
+              type: "number",
+              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              default: 20
+            },
+            page: {
+              type: "number",
+              description: "페이지 번호 (기본값: 1)",
+              default: 1
+            },
+            sort: {
+              type: "string",
+              enum: ["lasc", "ldes", "dasc", "ddes", "nasc", "ndes"],
+              description: "정렬 옵션: lasc/ldes (법령명순), dasc/ddes (날짜순), nasc/ndes (사건번호순)"
+            }
+          },
+          required: []
+        }
+      },
+      {
+        name: "get_admin_appeal_text",
+        description: `[행정심판례] 전문 조회 - search_admin_appeals로 얻은 ID로 재결문 전문을 조회합니다.
+
+사용 시점:
+- search_admin_appeals 실행 후 상세 내용 필요 시
+
+필수 파라미터:
+- id: 행정심판일련번호 (search_admin_appeals에서 획득)
+
+응답 내용:
+- 기본정보: 사건번호, 재결일자, 재결청, 재결결과
+- 주문, 청구취지, 이유, 참조조문, 전문
+
+워크플로우:
+1. search_admin_appeals(query="...") → 행정심판일련번호 획득
+2. get_admin_appeal_text(id="...")
+
+예시:
+- get_admin_appeal_text(id="12345")`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description: "행정심판일련번호 (search_admin_appeals에서 획득)"
+            },
+            caseName: {
+              type: "string",
+              description: "사건명 (선택사항, 검증용)"
+            }
+          },
+          required: ["id"]
+        }
+      },
+      {
+        name: "search_english_law",
+        description: `[영문법령] 검색 - 영문으로 번역된 대한민국 법령을 검색합니다.
+
+사용 시점:
+- FTA 원산지 규정 영문 확인 시
+- 외국 기업/투자자 대상 법령 설명 시
+- 국제 계약 시 법률 조항 영문 참조 시
+- 해외 법률 자문 시
+
+검색 파라미터 (모두 선택):
+- query: 법령명 (영문 또는 한글 모두 가능)
+
+영문법령 범위:
+- 주요 법률 약 1,800건 영문 번역 제공
+- 헌법, 상법, 민법, 형법 등 기본법
+- 관세법, 외국인투자촉진법 등 국제거래 관련법
+
+워크플로우:
+1. search_english_law(query="Customs Act") 또는 search_english_law(query="관세법")
+2. 결과에서 법령ID 획득
+3. get_english_law_text(lawId="...")로 영문 조문 조회
+
+예시:
+- search_english_law(query="Customs Act")
+- search_english_law(query="관세법")
+- search_english_law(query="Foreign Investment")`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "법령명 검색어 (영문 또는 한글, 예: 'Customs Act', '관세법')"
+            },
+            display: {
+              type: "number",
+              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              default: 20
+            },
+            page: {
+              type: "number",
+              description: "페이지 번호 (기본값: 1)",
+              default: 1
+            },
+            sort: {
+              type: "string",
+              enum: ["lasc", "ldes", "dasc", "ddes"],
+              description: "정렬 옵션: lasc/ldes (법령명순), dasc/ddes (날짜순)"
+            }
+          },
+          required: []
+        }
+      },
+      {
+        name: "get_english_law_text",
+        description: `[영문법령] 전문 조회 - 법령의 영문 번역 조문을 조회합니다.
+
+사용 시점:
+- search_english_law 실행 후 영문 조문 필요 시
+- 한글 법령의 영문 버전 확인 시
+
+파라미터 (하나 이상 필요):
+- lawId: 법령ID (search_english_law에서 획득)
+- mst: 법령일련번호
+- lawName: 법령명 (영문 또는 한글)
+
+응답 내용:
+- 영문법령명, 한글법령명, 시행일자
+- 영문 조문 전체 (Article 단위)
+
+워크플로우:
+1. search_english_law(query="...") → 법령ID 획득
+2. get_english_law_text(lawId="...")
+
+예시:
+- get_english_law_text(lawId="001234")
+- get_english_law_text(lawName="Customs Act")`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            lawId: {
+              type: "string",
+              description: "법령ID (search_english_law에서 획득)"
+            },
+            mst: {
+              type: "string",
+              description: "법령일련번호 (MST)"
+            },
+            lawName: {
+              type: "string",
+              description: "법령명 (영문 또는 한글)"
+            }
+          },
+          required: []
+        }
+      },
+      {
+        name: "search_legal_terms",
+        description: `[법령용어] 검색 - 법령에서 사용되는 용어의 정의를 검색합니다.
+
+사용 시점:
+- 법률 용어의 정확한 의미 파악 시
+- 일상어와 법률용어의 차이 확인 시
+- 법률 문서 작성/검토 시 용어 확인
+
+검색 가능 용어 예시:
+- 민법: "선의", "악의", "하자", "채권", "채무"
+- 형법: "고의", "과실", "미수", "공범"
+- 상법: "상인", "영업", "회사"
+- 행정법: "처분", "행정행위", "재량"
+
+워크플로우:
+search_legal_terms(query="선의") → 용어 정의 및 관련 법령 확인
+
+예시:
+- search_legal_terms(query="선의")
+- search_legal_terms(query="채권")
+- search_legal_terms(query="하자담보")`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "검색할 법령용어 (예: '선의', '악의', '하자', '채권')"
+            },
+            display: {
+              type: "number",
+              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              default: 20
+            },
+            page: {
+              type: "number",
+              description: "페이지 번호 (기본값: 1)",
+              default: 1
+            }
+          },
+          required: ["query"]
+        }
+      },
+      {
+        name: "search_life_law",
+        description: `[생활법령] 검색 - 일반인을 위한 생활법령 가이드를 검색합니다.
+
+사용 시점:
+- "창업할 때 필요한 법률은?" 등 주제별 법령 정보 필요 시
+- 일반인 친화적 법률 가이드 필요 시
+- 특정 상황(이혼, 상속, 교통사고 등)의 법적 절차 확인 시
+
+주요 생활법령 분야:
+- 창업/사업: "창업", "개인사업자", "법인설립", "프랜차이즈"
+- 부동산: "아파트", "전월세", "부동산매매", "재건축"
+- 가정: "이혼", "상속", "입양", "친권"
+- 교통: "교통사고", "자동차", "운전면허"
+- 노동: "근로계약", "해고", "퇴직금", "산업재해"
+- 소비자: "소비자보호", "환불", "하자"
+
+관련 도구:
+- 법령 원문 검색: search_law
+- 판례 검색: search_precedents
+
+워크플로우:
+1. search_life_law(query="창업")
+2. 결과에서 생활법령ID 획득
+3. get_life_law_guide(id="...")로 가이드 상세 조회
+
+예시:
+- search_life_law(query="창업")
+- search_life_law(query="이혼")
+- search_life_law(query="교통사고")`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "검색 주제 (예: '창업', '부동산', '이혼', '교통사고')"
+            },
+            display: {
+              type: "number",
+              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              default: 20
+            },
+            page: {
+              type: "number",
+              description: "페이지 번호 (기본값: 1)",
+              default: 1
+            }
+          },
+          required: ["query"]
+        }
+      },
+      {
+        name: "get_life_law_guide",
+        description: `[생활법령] 가이드 조회 - search_life_law로 얻은 ID로 가이드 상세 내용을 조회합니다.
+
+사용 시점:
+- search_life_law 실행 후 상세 가이드 필요 시
+
+필수 파라미터:
+- id: 생활법령ID (search_life_law에서 획득)
+
+응답 내용:
+- 분야, 목차, 핵심내용
+- 관련법령 목록
+- 관련서식
+- 자주 묻는 질문(FAQ)
+
+워크플로우:
+1. search_life_law(query="...") → 생활법령ID 획득
+2. get_life_law_guide(id="...")
+
+예시:
+- get_life_law_guide(id="12345")`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description: "생활법령ID (search_life_law에서 획득)"
+            }
+          },
+          required: ["id"]
+        }
+      },
+      {
+        name: "search_ftc_decisions",
+        description: `[공정거래위원회] 결정문 검색 - 공정위의 시정명령, 담합 제재 등 결정문을 검색합니다.
+
+사용 시점:
+- 담합/카르텔 제재 사례 확인 시
+- 불공정거래 시정명령 선례 검색 시
+- 기업결합 심사 사례 확인 시
+- 하도급법 위반 사례 연구 시
+
+대상자:
+- 기업 법무팀
+- 공정거래 전문 변호사
+- 준법감시인
+
+검색 키워드 예시:
+- "담합", "카르텔", "입찰담합"
+- "불공정거래", "시정명령"
+- "하도급", "기업결합"
+
+관련 도구:
+- 개인정보보호: search_pipc_decisions
+- 노동: search_nlrc_decisions
+
+워크플로우:
+1. search_ftc_decisions(query="담합")
+2. 결과에서 결정문 일련번호 획득
+3. get_ftc_decision_text(id="...")로 전문 조회
+
+예시:
+- search_ftc_decisions(query="담합")
+- search_ftc_decisions(query="하도급 위반")`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "검색 키워드 (예: '담합', '불공정거래', '하도급')"
+            },
+            display: {
+              type: "number",
+              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              default: 20
+            },
+            page: {
+              type: "number",
+              description: "페이지 번호 (기본값: 1)",
+              default: 1
+            },
+            sort: {
+              type: "string",
+              enum: ["lasc", "ldes", "dasc", "ddes"],
+              description: "정렬 옵션: lasc/ldes (법령명순), dasc/ddes (날짜순)"
+            }
+          },
+          required: []
+        }
+      },
+      {
+        name: "get_ftc_decision_text",
+        description: `[공정거래위원회] 결정문 전문 조회 - search_ftc_decisions로 얻은 ID로 결정문 전문을 조회합니다.
+
+사용 시점:
+- search_ftc_decisions 실행 후 상세 내용 필요 시
+
+필수 파라미터:
+- id: 결정문 일련번호 (search_ftc_decisions에서 획득)
+
+응답 내용:
+- 기본정보: 사건번호, 결정일자, 결정유형
+- 주문, 결정요지, 이유, 참조조문, 전문
+
+워크플로우:
+1. search_ftc_decisions(query="...") → 결정문 일련번호 획득
+2. get_ftc_decision_text(id="...")
+
+예시:
+- get_ftc_decision_text(id="12345")`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description: "결정문 일련번호 (search_ftc_decisions에서 획득)"
+            }
+          },
+          required: ["id"]
+        }
+      },
+      {
+        name: "search_pipc_decisions",
+        description: `[개인정보보호위원회] 결정문 검색 - 개인정보 침해 사례, 과징금 결정 등을 검색합니다.
+
+사용 시점:
+- 개인정보 침해 제재 사례 확인 시
+- 개인정보 유출 과징금 기준 확인 시
+- 개인정보처리 적법성 판단 선례 검색 시
+
+대상자:
+- IT 기업 법무팀/DPO
+- 개인정보보호 담당자
+- 정보보안 컨설턴트
+
+검색 키워드 예시:
+- "개인정보 유출", "과징금"
+- "동의", "수집", "제공"
+- "CCTV", "영상정보"
+
+관련 도구:
+- 공정거래: search_ftc_decisions
+- 노동: search_nlrc_decisions
+
+워크플로우:
+1. search_pipc_decisions(query="개인정보 유출")
+2. 결과에서 결정문 일련번호 획득
+3. get_pipc_decision_text(id="...")로 전문 조회
+
+예시:
+- search_pipc_decisions(query="개인정보 유출")
+- search_pipc_decisions(query="과징금")`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "검색 키워드 (예: '개인정보', '유출', '과징금')"
+            },
+            display: {
+              type: "number",
+              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              default: 20
+            },
+            page: {
+              type: "number",
+              description: "페이지 번호 (기본값: 1)",
+              default: 1
+            },
+            sort: {
+              type: "string",
+              enum: ["lasc", "ldes", "dasc", "ddes"],
+              description: "정렬 옵션: lasc/ldes (법령명순), dasc/ddes (날짜순)"
+            }
+          },
+          required: []
+        }
+      },
+      {
+        name: "get_pipc_decision_text",
+        description: `[개인정보보호위원회] 결정문 전문 조회 - search_pipc_decisions로 얻은 ID로 결정문 전문을 조회합니다.
+
+사용 시점:
+- search_pipc_decisions 실행 후 상세 내용 필요 시
+
+필수 파라미터:
+- id: 결정문 일련번호 (search_pipc_decisions에서 획득)
+
+워크플로우:
+1. search_pipc_decisions(query="...") → 결정문 일련번호 획득
+2. get_pipc_decision_text(id="...")
+
+예시:
+- get_pipc_decision_text(id="12345")`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description: "결정문 일련번호 (search_pipc_decisions에서 획득)"
+            }
+          },
+          required: ["id"]
+        }
+      },
+      {
+        name: "search_nlrc_decisions",
+        description: `[중앙노동위원회] 결정문 검색 - 부당해고, 부당노동행위 등 노동 분쟁 재심 결정을 검색합니다.
+
+사용 시점:
+- 부당해고 구제 사례 확인 시
+- 부당노동행위 판정 선례 검색 시
+- 노동쟁의 조정/중재 사례 연구 시
+
+대상자:
+- HR 담당자
+- 노무사
+- 노동법 전문 변호사
+
+검색 키워드 예시:
+- "부당해고", "해고무효"
+- "부당노동행위", "노조"
+- "징계", "정직", "감봉"
+
+관련 도구:
+- 공정거래: search_ftc_decisions
+- 개인정보보호: search_pipc_decisions
+- 행정심판: search_admin_appeals
+
+워크플로우:
+1. search_nlrc_decisions(query="부당해고")
+2. 결과에서 결정문 일련번호 획득
+3. get_nlrc_decision_text(id="...")로 전문 조회
+
+예시:
+- search_nlrc_decisions(query="부당해고")
+- search_nlrc_decisions(query="부당노동행위")`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "검색 키워드 (예: '부당해고', '부당노동행위', '징계')"
+            },
+            display: {
+              type: "number",
+              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              default: 20
+            },
+            page: {
+              type: "number",
+              description: "페이지 번호 (기본값: 1)",
+              default: 1
+            },
+            sort: {
+              type: "string",
+              enum: ["lasc", "ldes", "dasc", "ddes"],
+              description: "정렬 옵션: lasc/ldes (법령명순), dasc/ddes (날짜순)"
+            }
+          },
+          required: []
+        }
+      },
+      {
+        name: "get_nlrc_decision_text",
+        description: `[중앙노동위원회] 결정문 전문 조회 - search_nlrc_decisions로 얻은 ID로 결정문 전문을 조회합니다.
+
+사용 시점:
+- search_nlrc_decisions 실행 후 상세 내용 필요 시
+
+필수 파라미터:
+- id: 결정문 일련번호 (search_nlrc_decisions에서 획득)
+
+워크플로우:
+1. search_nlrc_decisions(query="...") → 결정문 일련번호 획득
+2. get_nlrc_decision_text(id="...")
+
+예시:
+- get_nlrc_decision_text(id="12345")`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description: "결정문 일련번호 (search_nlrc_decisions에서 획득)"
+            }
+          },
+          required: ["id"]
+        }
+      },
+      {
+        name: "get_historical_law",
+        description: `[연혁법령] 특정 시점 법령 조회 - 과거 특정 날짜에 시행 중이던 법령 내용을 조회합니다.
+
+사용 시점:
+- 과거 특정 시점의 법령 원문 확인 시
+- 법령 변천사 연구 시
+- 소급적용 관련 법적 분석 시
+- 과거 사건에 적용될 법령 확인 시
+
+필수 파라미터:
+- date: 조회 시점 날짜 (YYYYMMDD 형식)
+- lawId, mst, lawName 중 하나 이상
+
+관련 도구:
+- 법령 개정 이력: get_law_history
+- 조문 연혁: get_article_history
+- 신구법 대조: compare_old_new
+
+워크플로우:
+1. search_law(query="관세법") → lawId 획득
+2. get_historical_law(lawId="...", date="20200101")
+3. 필요시 jo 파라미터로 특정 조문만 조회
+
+예시:
+- get_historical_law(lawId="001234", date="20200101")
+- get_historical_law(lawName="관세법", date="20180701", jo="제38조")`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            lawId: {
+              type: "string",
+              description: "법령ID (search_law에서 획득)"
+            },
+            mst: {
+              type: "string",
+              description: "법령일련번호 (MST)"
+            },
+            lawName: {
+              type: "string",
+              description: "법령명"
+            },
+            date: {
+              type: "string",
+              description: "조회 시점 날짜 (YYYYMMDD 형식, 예: '20200101')"
+            },
+            jo: {
+              type: "string",
+              description: "특정 조문 번호 (예: '제38조', 선택사항)"
+            }
+          },
+          required: ["date"]
+        }
+      },
+      {
+        name: "search_historical_law",
+        description: `[연혁법령] 목록 검색 - 특정 법령의 모든 연혁 버전 목록을 검색합니다.
+
+사용 시점:
+- 법령의 개정 이력 전체를 확인하고 싶을 때
+- 특정 버전의 법령을 찾을 때
+
+파라미터:
+- lawId: 법령ID (search_law에서 획득)
+- lawName: 법령명
+
+관련 도구:
+- 특정 시점 법령 조회: get_historical_law
+- 법령 개정 이력: get_law_history
+
+워크플로우:
+1. search_historical_law(lawName="관세법")
+2. 원하는 버전의 법령ID와 시행일자 확인
+3. get_historical_law(lawId="...", date="...")로 해당 버전 조회
+
+예시:
+- search_historical_law(lawName="관세법")
+- search_historical_law(lawId="001234")`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            lawId: {
+              type: "string",
+              description: "법령ID"
+            },
+            lawName: {
+              type: "string",
+              description: "법령명"
+            },
+            display: {
+              type: "number",
+              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              default: 20
+            },
+            page: {
+              type: "number",
+              description: "페이지 번호 (기본값: 1)",
+              default: 1
+            }
+          },
+          required: []
+        }
+      },
+      {
+        name: "get_law_system_tree",
+        description: `[법령체계도] 조회 - 법령의 상하위 관계를 트리 구조로 시각화합니다.
+
+사용 시점:
+- 법령 체계 전체 구조 파악 시
+- "이 법의 시행령/시행규칙은?" 확인 시
+- 상위법/하위법 관계 이해 시
+- 법령 간 위임 구조 파악 시
+
+파라미터 (하나 이상 필요):
+- lawId: 법령ID (search_law에서 획득)
+- mst: 법령일련번호
+- lawName: 법령명
+
+출력 구조:
+- 상위법령 (헌법, 법률)
+- 현재 법령 (조회 대상)
+- 하위법령 (시행령, 시행규칙)
+- 관련법령 (인용/참조 관계)
+
+관련 도구:
+- 3단비교 (상세 위임관계): get_three_tier
+- 법령 트리뷰: get_law_tree
+
+워크플로우:
+1. search_law(query="관세법") → lawId, mst 획득
+2. get_law_system_tree(lawId="...")
+
+예시:
+- get_law_system_tree(lawId="001234")
+- get_law_system_tree(lawName="관세법")`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            lawId: {
+              type: "string",
+              description: "법령ID (search_law에서 획득)"
+            },
+            mst: {
+              type: "string",
+              description: "법령일련번호 (MST)"
+            },
+            lawName: {
+              type: "string",
+              description: "법령명"
+            }
+          },
+          required: []
+        }
       }
     ]
   }
@@ -1761,6 +2586,97 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "get_customs_interpretation_text": {
         const input = getCustomsInterpretationTextSchema.parse(args)
         return await getCustomsInterpretationText(apiClient, input)
+      }
+
+      // v1.5.0 - New API tools
+      case "search_constitutional_decisions": {
+        const input = searchConstitutionalDecisionsSchema.parse(args)
+        return await searchConstitutionalDecisions(apiClient, input)
+      }
+
+      case "get_constitutional_decision_text": {
+        const input = getConstitutionalDecisionTextSchema.parse(args)
+        return await getConstitutionalDecisionText(apiClient, input)
+      }
+
+      case "search_admin_appeals": {
+        const input = searchAdminAppealsSchema.parse(args)
+        return await searchAdminAppeals(apiClient, input)
+      }
+
+      case "get_admin_appeal_text": {
+        const input = getAdminAppealTextSchema.parse(args)
+        return await getAdminAppealText(apiClient, input)
+      }
+
+      case "search_english_law": {
+        const input = searchEnglishLawSchema.parse(args)
+        return await searchEnglishLaw(apiClient, input)
+      }
+
+      case "get_english_law_text": {
+        const input = getEnglishLawTextSchema.parse(args)
+        return await getEnglishLawText(apiClient, input)
+      }
+
+      case "search_legal_terms": {
+        const input = searchLegalTermsSchema.parse(args)
+        return await searchLegalTerms(apiClient, input)
+      }
+
+      case "search_life_law": {
+        const input = searchLifeLawSchema.parse(args)
+        return await searchLifeLaw(apiClient, input)
+      }
+
+      case "get_life_law_guide": {
+        const input = getLifeLawGuideSchema.parse(args)
+        return await getLifeLawGuide(apiClient, input)
+      }
+
+      case "search_ftc_decisions": {
+        const input = searchFtcDecisionsSchema.parse(args)
+        return await searchFtcDecisions(apiClient, input)
+      }
+
+      case "get_ftc_decision_text": {
+        const input = getFtcDecisionTextSchema.parse(args)
+        return await getFtcDecisionText(apiClient, input)
+      }
+
+      case "search_pipc_decisions": {
+        const input = searchPipcDecisionsSchema.parse(args)
+        return await searchPipcDecisions(apiClient, input)
+      }
+
+      case "get_pipc_decision_text": {
+        const input = getPipcDecisionTextSchema.parse(args)
+        return await getPipcDecisionText(apiClient, input)
+      }
+
+      case "search_nlrc_decisions": {
+        const input = searchNlrcDecisionsSchema.parse(args)
+        return await searchNlrcDecisions(apiClient, input)
+      }
+
+      case "get_nlrc_decision_text": {
+        const input = getNlrcDecisionTextSchema.parse(args)
+        return await getNlrcDecisionText(apiClient, input)
+      }
+
+      case "get_historical_law": {
+        const input = getHistoricalLawSchema.parse(args)
+        return await getHistoricalLaw(apiClient, input)
+      }
+
+      case "search_historical_law": {
+        const input = searchHistoricalLawSchema.parse(args)
+        return await searchHistoricalLaw(apiClient, input)
+      }
+
+      case "get_law_system_tree": {
+        const input = getLawSystemTreeSchema.parse(args)
+        return await getLawSystemTree(apiClient, input)
       }
 
       default:

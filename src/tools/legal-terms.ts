@@ -1,0 +1,157 @@
+import { z } from "zod";
+
+// Legal terms search tool - Search for legal terminology definitions
+export const searchLegalTermsSchema = z.object({
+  query: z.string().describe("검색할 법령용어 (예: '선의', '악의', '하자', '채권')"),
+  display: z.number().min(1).max(100).default(20).describe("페이지당 결과 개수 (기본값: 20, 최대: 100)"),
+  page: z.number().min(1).default(1).describe("페이지 번호 (기본값: 1)"),
+  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)"),
+});
+
+export type SearchLegalTermsInput = z.infer<typeof searchLegalTermsSchema>;
+
+export async function searchLegalTerms(
+  apiClient: any,
+  args: SearchLegalTermsInput
+): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
+  try {
+    const apiKey = args.apiKey || process.env.LAW_OC;
+    if (!apiKey) {
+      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 LAW_OC 환경변수를 설정하세요.");
+    }
+
+    const params = new URLSearchParams({
+      OC: apiKey,
+      target: "lsTrm",
+      type: "XML",
+      query: args.query,
+      display: (args.display || 20).toString(),
+      page: (args.page || 1).toString(),
+    });
+
+    const url = `https://www.law.go.kr/DRF/lawSearch.do?${params.toString()}`;
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const xmlText = await response.text();
+    const result = parseLegalTermsXML(xmlText);
+
+    if (!result.LsTrmSearch) {
+      throw new Error("Invalid response format from API");
+    }
+
+    const data = result.LsTrmSearch;
+    const totalCount = parseInt(data.totalCnt || "0");
+    const currentPage = parseInt(data.page || "1");
+    const terms = data.lsTrm ? (Array.isArray(data.lsTrm) ? data.lsTrm : [data.lsTrm]) : [];
+
+    if (totalCount === 0) {
+      let errorMsg = "검색 결과가 없습니다.";
+      errorMsg += `\n\n💡 개선 방법:`;
+      errorMsg += `\n   1. 단순 용어로 검색:`;
+      errorMsg += `\n      search_legal_terms(query="채권")`;
+      errorMsg += `\n\n   2. 유사 용어 시도:`;
+      errorMsg += `\n      - "선의" / "악의" (법률상 의미)`;
+      errorMsg += `\n      - "하자" / "담보" / "보증"`;
+      errorMsg += `\n\n   3. 법령 검색으로 용어 사용례 확인:`;
+      errorMsg += `\n      search_law(query="${args.query}")`;
+
+      return {
+        content: [{
+          type: "text",
+          text: errorMsg
+        }],
+        isError: true
+      };
+    }
+
+    let output = `법령용어 검색 결과 (총 ${totalCount}건, ${currentPage}페이지):\n\n`;
+
+    for (const term of terms) {
+      output += `📌 ${term.용어명}\n`;
+      if (term.용어정의) {
+        output += `   정의: ${term.용어정의}\n`;
+      }
+      if (term.관련법령) {
+        output += `   관련법령: ${term.관련법령}\n`;
+      }
+      if (term.일상용어) {
+        output += `   일상용어: ${term.일상용어}\n`;
+      }
+      if (term.영문용어) {
+        output += `   영문: ${term.영문용어}\n`;
+      }
+      output += `\n`;
+    }
+
+    output += `\n💡 법령에서 용어 사용례를 확인하려면 search_law(query="용어명")을 사용하세요.`;
+
+    return {
+      content: [{
+        type: "text",
+        text: output
+      }]
+    };
+  } catch (error) {
+    return {
+      content: [{
+        type: "text",
+        text: `Error: ${error instanceof Error ? error.message : String(error)}`
+      }],
+      isError: true
+    };
+  }
+}
+
+// XML parser for legal terms search
+function parseLegalTermsXML(xml: string): any {
+  const obj: any = {};
+
+  // Try different root element patterns
+  const searchMatch = xml.match(/<LsTrmSearch[^>]*>([\s\S]*?)<\/LsTrmSearch>/) ||
+                      xml.match(/<lsTrmSearch[^>]*>([\s\S]*?)<\/lsTrmSearch>/) ||
+                      xml.match(/<TrmSearch[^>]*>([\s\S]*?)<\/TrmSearch>/);
+  if (!searchMatch) return obj;
+
+  const content = searchMatch[1];
+  obj.LsTrmSearch = {};
+
+  const totalCntMatch = content.match(/<totalCnt>([^<]*)<\/totalCnt>/);
+  const pageMatch = content.match(/<page>([^<]*)<\/page>/);
+
+  obj.LsTrmSearch.totalCnt = totalCntMatch ? totalCntMatch[1] : "0";
+  obj.LsTrmSearch.page = pageMatch ? pageMatch[1] : "1";
+
+  // Extract lsTrm items
+  const itemMatches = content.matchAll(/<lsTrm[^>]*>([\s\S]*?)<\/lsTrm>/gi) ||
+                      content.matchAll(/<trm[^>]*>([\s\S]*?)<\/trm>/gi);
+  obj.LsTrmSearch.lsTrm = [];
+
+  for (const match of itemMatches) {
+    const itemContent = match[1];
+    const item: any = {};
+
+    const extractTag = (tag: string) => {
+      const cdataRegex = new RegExp(`<${tag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\/${tag}>`, 'i');
+      const cdataMatch = itemContent.match(cdataRegex);
+      if (cdataMatch) return cdataMatch[1];
+
+      const regex = new RegExp(`<${tag}>([^<]*)<\/${tag}>`, 'i');
+      const match = itemContent.match(regex);
+      return match ? match[1] : "";
+    };
+
+    item.용어명 = extractTag("용어명") || extractTag("용어");
+    item.용어정의 = extractTag("용어정의") || extractTag("정의");
+    item.관련법령 = extractTag("관련법령") || extractTag("법령명");
+    item.일상용어 = extractTag("일상용어");
+    item.영문용어 = extractTag("영문용어") || extractTag("영문");
+
+    obj.LsTrmSearch.lsTrm.push(item);
+  }
+
+  return obj;
+}

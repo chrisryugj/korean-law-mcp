@@ -15,7 +15,9 @@
       "Bash(node test-compare.js:*)",
       "Bash(node test-admin-rule.js:*)",
       "Bash(node:*)",
-      "Bash(LAW_OC=ryuseungin node:*)"
+      "Bash(LAW_OC=ryuseungin node:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: Add 18 new law API tools \\(v1.5.0\\)\n\n- Constitutional Court decisions \\(헌재결정례\\)\n- Administrative appeals \\(행정심판례\\)\n- English law translation \\(영문법령\\)\n- Legal terminology dictionary \\(법령용어\\)\n- Everyday law guides \\(생활법령정보\\)\n- Committee decisions: FTC, PIPC, NLRC \\(위원회 결정문\\)\n- Historical law retrieval \\(연혁법령\\)\n- Law system tree \\(법령체계도\\)\n\nTotal tools: 51\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   },
   "outputStyle": "chris-v2"
