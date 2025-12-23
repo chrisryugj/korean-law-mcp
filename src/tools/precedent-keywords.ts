@@ -9,7 +9,7 @@ import { getPrecedentText } from "./precedents.js"
 export const ExtractKeywordsSchema = z.object({
   id: z.string().describe("판례일련번호"),
   maxKeywords: z.number().optional().default(10).describe("최대 키워드 개수 (기본값: 10)"),
-  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
+  apiKey: z.string().optional().describe("API 키")
 })
 
 export type ExtractKeywordsInput = z.infer<typeof ExtractKeywordsSchema>
