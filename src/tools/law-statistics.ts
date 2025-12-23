@@ -12,7 +12,7 @@ export const LawStatisticsSchema = z.object({
   ),
   days: z.number().optional().default(30).describe("최근 변경 분석 기간 (일 단위, 기본값: 30)"),
   limit: z.number().optional().default(10).describe("결과 개수 제한 (기본값: 10)"),
-  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
+  apiKey: z.string().optional().describe("API 키")
 })
 
 export type LawStatisticsInput = z.infer<typeof LawStatisticsSchema>

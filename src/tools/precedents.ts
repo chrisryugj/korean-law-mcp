@@ -9,7 +9,7 @@ export const searchPrecedentsSchema = z.object({
   page: z.number().min(1).default(1).describe("Page number (default: 1)"),
   sort: z.enum(["lasc", "ldes", "dasc", "ddes", "nasc", "ndes"]).optional()
     .describe("Sort option: lasc/ldes (law name), dasc/ddes (date), nasc/ndes (case number)"),
-  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)"),
+  apiKey: z.string().optional().describe("API 키"),
 });
 
 export type SearchPrecedentsInput = z.infer<typeof searchPrecedentsSchema>;
@@ -119,7 +119,7 @@ export async function searchPrecedents(
 export const getPrecedentTextSchema = z.object({
   id: z.string().describe("Precedent serial number (판례일련번호) from search results"),
   caseName: z.string().optional().describe("Case name (optional, for verification)"),
-  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)"),
+  apiKey: z.string().optional().describe("API 키"),
 });
 
 export type GetPrecedentTextInput = z.infer<typeof getPrecedentTextSchema>;

@@ -62,7 +62,7 @@ const apiClient = new LawApiClient({ apiKey: LAW_OC })
 const server = new Server(
   {
     name: "korean-law",
-    version: "1.5.0",
+    version: "1.5.1",
   },
   {
     capabilities: {
@@ -77,22 +77,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: "search_law",
-        description: `법령 검색 → lawId, mst 획득. 약칭 자동변환(화관법→화학물질관리법). get_law_text 전 필수 실행.`,
+        description: `[법령] 검색 → lawId, mst 획득. 약칭 자동변환(화관법→화학물질관리법). get_law_text 전 필수 실행.`,
         inputSchema: {
           type: "object",
           properties: {
             query: {
               type: "string",
-              description: "검색할 법령명 (예: '관세법', 'fta특례법', '화관법')"
+              description: "검색할 법령명 (약칭 가능)"
             },
             maxResults: {
               type: "number",
-              description: "최대 결과 개수 (기본값: 20)",
+              description: "결과 수 (기본:20)",
               default: 20
-            },
-            apiKey: {
-              type: "string",
-              description: "법제처 API 키 (선택). https://open.law.go.kr/LSO/openApi/guideList.do 에서 발급"
             }
           },
           required: ["query"]
@@ -100,25 +96,25 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_law_text",
-        description: `조문 조회. mst/lawId 필수(search_law에서). jo 생략시 전문 반환. 한글 조문번호 자동변환(제38조→003800).`,
+        description: `[법령] 조문 조회. mst/lawId 필수(search_law에서). jo 생략시 전문 반환. 한글 조문번호 자동변환(제38조→003800).`,
         inputSchema: {
           type: "object",
           properties: {
             mst: {
               type: "string",
-              description: "법령일련번호 (search_law에서 획득)"
+              description: "법령일련번호"
             },
             lawId: {
               type: "string",
-              description: "법령ID (search_law에서 획득)"
+              description: "법령ID"
             },
             jo: {
               type: "string",
-              description: "조문 번호 (예: '제38조' 또는 '003800')"
+              description: "조문 번호 제X조 또는 6자리코드"
             },
             efYd: {
               type: "string",
-              description: "시행일자 (YYYYMMDD 형식)"
+              description: "시행일자 (YYYYMMDD)"
             }
           },
           required: []
@@ -126,7 +122,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "parse_jo_code",
-        description: `조문번호 양방향 변환. to_code: 제38조→003800, to_text: 003800→제38조. (get_law_text는 자동변환하므로 직접 호출 불필요)`,
+        description: `[유틸] 조문번호 변환. to_code: 제38조→003800, to_text: 003800→제38조. (get_law_text는 자동변환하므로 직접 호출 불필요)`,
         inputSchema: {
           type: "object",
           properties: {
@@ -146,7 +142,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "compare_old_new",
-        description: `신구법 대조 - 개정 전후 조문 비교. mst/lawId + ld(공포일 YYYYMMDD) 필요. 자치법규 미지원.`,
+        description: `[법령] 신구법 대조 - 개정 전후 조문 비교. mst/lawId + ld(공포일 YYYYMMDD) 필요. 자치법규 미지원.`,
         inputSchema: {
           type: "object",
           properties: {
@@ -172,7 +168,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_three_tier",
-        description: `3단비교 - 법률→시행령→시행규칙 위임/인용 관계. knd=1(인용), knd=2(위임, 기본값). 행정규칙/자치법규 미지원.`,
+        description: `[법령] 3단비교 - 법률→시행령→시행규칙 위임/인용 관계. knd=1(인용), knd=2(위임, 기본값). 행정규칙/자치법규 미지원.`,
         inputSchema: {
           type: "object",
           properties: {
@@ -196,7 +192,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "search_admin_rule",
-        description: `행정규칙 검색(훈령/예규/고시/공고). knd=1훈령,2예규,3고시,4공고,5일반. → get_admin_rule로 전문 조회.`,
+        description: `[행정규칙] 검색(훈령/예규/고시/공고). knd=1훈령,2예규,3고시,4공고,5일반. → get_admin_rule로 전문 조회.`,
         inputSchema: {
           type: "object",
           properties: {
@@ -210,7 +206,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             maxResults: {
               type: "number",
-              description: "최대 결과 개수 (기본값: 20)",
+              description: "결과 수 (기본:20)",
               default: 20
             }
           },
@@ -219,13 +215,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_admin_rule",
-        description: `행정규칙 전문 조회. id 필수(search_admin_rule에서 획득).`,
+        description: `[행정규칙] 전문 조회. id 필수.`,
         inputSchema: {
           type: "object",
           properties: {
             id: {
               type: "string",
-              description: "행정규칙ID (search_admin_rule에서 획득)"
+              description: "행정규칙ID"
             }
           },
           required: ["id"]
@@ -233,13 +229,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_annexes",
-        description: `별표/서식 조회. lawName 필수(정식명칭, 약칭 불가). knd=1별표,2서식,3부칙별표,4부칙서식,5전체.`,
+        description: `[법령] 별표/서식 조회. lawName 필수(정식명칭, 약칭 불가). knd=1별표,2서식,3부칙별표,4부칙서식,5전체.`,
         inputSchema: {
           type: "object",
           properties: {
             lawName: {
               type: "string",
-              description: "법령명 (예: '관세법')"
+              description: "법령명 "
             },
             knd: {
               type: "string",
@@ -252,7 +248,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_ordinance",
-        description: `자치법규(조례/규칙) 전문 조회. ordinSeq 필수(search_ordinance에서 획득).`,
+        description: `[자치법규] 전문 조회. ordinSeq 필수.`,
         inputSchema: {
           type: "object",
           properties: {
@@ -266,17 +262,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "search_ordinance",
-        description: `자치법규(조례/규칙) 검색. 지역명+주제 조합 가능. → get_ordinance로 전문 조회.`,
+        description: `[자치법규] 검색. 지역명+주제 조합 가능. → get_ordinance로 전문 조회.`,
         inputSchema: {
           type: "object",
           properties: {
             query: {
               type: "string",
-              description: "검색할 자치법규명 (예: '서울', '환경')"
+              description: "검색할 자치법규명 지역+주제"
             },
             display: {
               type: "number",
-              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              description: "결과 수 (기본:20)",
               default: 20
             }
           },
@@ -285,7 +281,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "compare_articles",
-        description: `두 법령 조문 비교. law1, law2 각각 {mst/lawId, jo} 지정.`,
+        description: `[법령] 조문 비교. law1, law2 각각 {mst/lawId, jo} 지정.`,
         inputSchema: {
           type: "object",
           properties: {
@@ -303,7 +299,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                 },
                 jo: {
                   type: "string",
-                  description: "조문 번호 (예: '제38조')"
+                  description: "조문 번호 제X조"
                 }
               },
               required: ["jo"]
@@ -322,7 +318,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                 },
                 jo: {
                   type: "string",
-                  description: "조문 번호 (예: '제25조')"
+                  description: "조문 번호 제X조"
                 }
               },
               required: ["jo"]
@@ -333,7 +329,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_law_tree",
-        description: `법령 계층 트리 시각화. 법률→시행령→시행규칙 구조 표시. get_three_tier의 시각화 버전.`,
+        description: `[법령] 계층 트리 시각화. 법률→시행령→시행규칙 구조 표시. get_three_tier의 시각화 버전.`,
         inputSchema: {
           type: "object",
           properties: {
@@ -351,7 +347,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "search_all",
-        description: `통합검색 - 법령+행정규칙+자치법규 동시 검색. 검색 대상 유형 불명확할 때 사용.`,
+        description: `[검색] 통합검색 - 법령+행정규칙+자치법규 동시 검색. 검색 대상 유형 불명확할 때 사용.`,
         inputSchema: {
           type: "object",
           properties: {
@@ -361,7 +357,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             maxResults: {
               type: "number",
-              description: "각 유형별 최대 결과 개수 (기본값: 10)",
+              description: "각 유형별 결과 수 (기본:10)",
               default: 10
             }
           },
@@ -370,13 +366,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "suggest_law_names",
-        description: `법령명 자동완성. 부분 입력으로 후보 목록 제안. search_law 실패 시 대안.`,
+        description: `[유틸] 법령명 자동완성. 부분 입력으로 후보 목록 제안. search_law 실패 시 대안.`,
         inputSchema: {
           type: "object",
           properties: {
             partial: {
               type: "string",
-              description: "부분 입력된 법령명 (예: '관세', '환경')"
+              description: "부분 입력된 법령명 부분 입력"
             }
           },
           required: ["partial"]
@@ -384,30 +380,30 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "search_precedents",
-        description: `판례 검색(키워드/법원/사건번호). → get_precedent_text로 전문 조회. 법령해석은 search_interpretations.`,
+        description: `[판례] 검색(키워드/법원/사건번호). → get_precedent_text로 전문 조회. 법령해석은 search_interpretations.`,
         inputSchema: {
           type: "object",
           properties: {
             query: {
               type: "string",
-              description: "검색 키워드 (예: '자동차', '담보권')"
+              description: "검색 키워드 키워드"
             },
             court: {
               type: "string",
-              description: "법원명 필터 (예: '대법원', '서울고등법원')"
+              description: "법원명 필터 예: 대법원"
             },
             caseNumber: {
               type: "string",
-              description: "사건번호 (예: '2009느합133')"
+              description: "사건번호 예: 2009느합133"
             },
             display: {
               type: "number",
-              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              description: "결과 수 (기본:20)",
               default: 20
             },
             page: {
               type: "number",
-              description: "페이지 번호 (기본값: 1)",
+              description: "페이지 (기본:1)",
               default: 1
             },
             sort: {
@@ -421,17 +417,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_precedent_text",
-        description: `판례 전문 조회. id 필수(search_precedents에서). 판시사항/판결요지/참조조문/전문 포함.`,
+        description: `[판례] 전문 조회. id 필수(search_precedents에서). 판시사항/판결요지/참조조문/전문 포함.`,
         inputSchema: {
           type: "object",
           properties: {
             id: {
               type: "string",
-              description: "판례일련번호 (search_precedents에서 획득)"
+              description: "판례일련번호"
             },
             caseName: {
               type: "string",
-              description: "판례명 (선택사항, 검증용)"
+              description: "판례명"
             }
           },
           required: ["id"]
@@ -439,22 +435,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "search_interpretations",
-        description: `법령해석례 검색(법제처 등 행정기관 해석). → get_interpretation_text로 전문. 조세는 search_tax_tribunal_decisions.`,
+        description: `[해석례] 검색(법제처 등 행정기관 해석). → get_interpretation_text로 전문. 조세는 search_tax_tribunal_decisions.`,
         inputSchema: {
           type: "object",
           properties: {
             query: {
               type: "string",
-              description: "검색 키워드 (예: '자동차', '근로기준법')"
+              description: "검색 키워드 키워드"
             },
             display: {
               type: "number",
-              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              description: "결과 수 (기본:20)",
               default: 20
             },
             page: {
               type: "number",
-              description: "페이지 번호 (기본값: 1)",
+              description: "페이지 (기본:1)",
               default: 1
             },
             sort: {
@@ -468,17 +464,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_interpretation_text",
-        description: `법령해석례 전문 조회. id 필수(search_interpretations에서).`,
+        description: `[해석례] 전문 조회. id 필수(search_interpretations에서).`,
         inputSchema: {
           type: "object",
           properties: {
             id: {
               type: "string",
-              description: "법령해석례일련번호 (search_interpretations에서 획득)"
+              description: "법령해석례ID"
             },
             caseName: {
               type: "string",
-              description: "안건명 (선택사항, 검증용)"
+              description: "안건명"
             }
           },
           required: ["id"]
@@ -486,7 +482,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_batch_articles",
-        description: `여러 조문 일괄 조회. articles 배열로 조문 지정. get_law_text 반복 호출 대체.`,
+        description: `[법령] 다중 조문 조회. articles 배열로 조문 지정. get_law_text 반복 호출 대체.`,
         inputSchema: {
           type: "object",
           properties: {
@@ -503,11 +499,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               items: {
                 type: "string"
               },
-              description: "조문 번호 배열 (예: ['제38조', '제39조', '제40조'])"
+              description: "조문 번호 배열 조문 배열"
             },
             efYd: {
               type: "string",
-              description: "시행일자 (YYYYMMDD 형식)"
+              description: "시행일자 (YYYYMMDD)"
             }
           },
           required: ["articles"]
@@ -515,7 +511,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_article_with_precedents",
-        description: `조문+관련판례 통합 조회. jo 필수. includePrecedents=false로 조문만 조회 가능.`,
+        description: `[법령] 조문+판례 통합 조회. jo 필수. includePrecedents=false로 조문만 조회 가능.`,
         inputSchema: {
           type: "object",
           properties: {
@@ -529,15 +525,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             jo: {
               type: "string",
-              description: "조문 번호 (예: '제38조')"
+              description: "조문 번호 제X조"
             },
             efYd: {
               type: "string",
-              description: "시행일자 (YYYYMMDD 형식)"
+              description: "시행일자 (YYYYMMDD)"
             },
             includePrecedents: {
               type: "boolean",
-              description: "관련 판례 포함 여부 (기본값: true)",
+              description: "관련 판례 포함 여부 (기본:true)",
               default: true
             }
           },
@@ -546,7 +542,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_article_history",
-        description: `조문별 개정 연혁 조회. lawId+jo 또는 기간(fromRegDt~toRegDt) 지정.`,
+        description: `[연혁] 조문별 개정 조회. lawId+jo 또는 기간(fromRegDt~toRegDt) 지정.`,
         inputSchema: {
           type: "object",
           properties: {
@@ -576,7 +572,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             page: {
               type: "number",
-              description: "페이지 번호 (기본값: 1)",
+              description: "페이지 (기본:1)",
               default: 1
             }
           },
@@ -585,13 +581,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_law_history",
-        description: `특정 날짜 개정 법령 목록. regDt(YYYYMMDD) 필수. 조문별은 get_article_history.`,
+        description: `[연혁] 특정일 개정 법령 목록. regDt(YYYYMMDD) 필수. 조문별은 get_article_history.`,
         inputSchema: {
           type: "object",
           properties: {
             regDt: {
               type: "string",
-              description: "법령 변경일자 (YYYYMMDD, 예: '20240101')"
+              description: "법령 변경일자 예: 20240101"
             },
             org: {
               type: "string",
@@ -599,12 +595,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             display: {
               type: "number",
-              description: "결과 개수 (기본값: 20, 최대: 100)",
+              description: "결과 수 (기본:20)",
               default: 20
             },
             page: {
               type: "number",
-              description: "페이지 번호 (기본값: 1)",
+              description: "페이지 (기본:1)",
               default: 1
             }
           },
@@ -613,7 +609,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "summarize_precedent",
-        description: `판례 요약(판시사항/판결요지/주문). id 필수. 전문은 get_precedent_text.`,
+        description: `[판례] 요약(판시사항/판결요지/주문). id 필수. 전문은 get_precedent_text.`,
         inputSchema: {
           type: "object",
           properties: {
@@ -623,7 +619,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             maxLength: {
               type: "number",
-              description: "요약 최대 길이 (기본값: 500자)",
+              description: "요약 최대 길이 (기본:500자)",
               default: 500
             }
           },
@@ -632,7 +628,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "extract_precedent_keywords",
-        description: `판례 핵심 키워드 추출(법률용어/조문번호). id 필수. → find_similar_precedents에 활용.`,
+        description: `[판례] 키워드 추출(법률용어/조문번호). id 필수. → find_similar_precedents에 활용.`,
         inputSchema: {
           type: "object",
           properties: {
@@ -642,7 +638,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             maxKeywords: {
               type: "number",
-              description: "최대 키워드 개수 (기본값: 10)",
+              description: "최대 키워드 개수 (기본:10)",
               default: 10
             }
           },
@@ -651,7 +647,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "find_similar_precedents",
-        description: `유사 판례 검색(키워드 기반 유사도). query 필수.`,
+        description: `[판례] 유사 검색(키워드 기반 유사도). query 필수.`,
         inputSchema: {
           type: "object",
           properties: {
@@ -661,7 +657,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             maxResults: {
               type: "number",
-              description: "최대 결과 개수 (기본값: 5)",
+              description: "결과 수 (기본:5)",
               default: 5
             }
           },
@@ -670,7 +666,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_law_statistics",
-        description: `법령 통계. analysisType=recent_changes(최근N일)/by_department(부처별)/by_year(연도별). 특정 법령 이력은 get_law_history.`,
+        description: `[통계] 법령 통계. analysisType=recent_changes(최근N일)/by_department(부처별)/by_year(연도별). 특정 법령 이력은 get_law_history.`,
         inputSchema: {
           type: "object",
           properties: {
@@ -686,7 +682,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             limit: {
               type: "number",
-              description: "결과 개수 제한 (기본값: 10)",
+              description: "결과 개수 제한 (기본:10)",
               default: 10
             }
           },
@@ -695,7 +691,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "parse_article_links",
-        description: `조문 내 참조 파싱("제X조", "같은 조", "전항" 등 자동 인식). jo 필수.`,
+        description: `[유틸] 조문 참조 파싱("제X조", "같은 조", "전항" 등 자동 인식). jo 필수.`,
         inputSchema: {
           type: "object",
           properties: {
@@ -709,7 +705,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             jo: {
               type: "string",
-              description: "조문 번호 (예: '제38조')"
+              description: "조문 번호 제X조"
             },
             efYd: {
               type: "string",
@@ -721,7 +717,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_external_links",
-        description: `외부 링크 생성(법제처/법원도서관). linkType=law/precedent/interpretation.`,
+        description: `[유틸] 외부 링크 생성(법제처/법원도서관). linkType=law/precedent/interpretation.`,
         inputSchema: {
           type: "object",
           properties: {
@@ -752,7 +748,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "advanced_search",
-        description: `고급 검색 - 기간/부처/AND|OR 필터. searchType=law/admin_rule/ordinance/all.`,
+        description: `[검색] 고급 검색 - 기간/부처/AND|OR 필터. searchType=law/admin_rule/ordinance/all.`,
         inputSchema: {
           type: "object",
           properties: {
@@ -786,7 +782,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             maxResults: {
               type: "number",
-              description: "최대 결과 개수 (기본값: 20)",
+              description: "결과 수 (기본:20)",
               default: 20
             }
           },
@@ -795,22 +791,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "search_tax_tribunal_decisions",
-        description: `조세심판원 재결례 검색. → get_tax_tribunal_decision_text로 전문. 관세는 search_customs_interpretations.`,
+        description: `[조세] 심판원 재결례 검색. → get_tax_tribunal_decision_text로 전문. 관세는 search_customs_interpretations.`,
         inputSchema: {
           type: "object",
           properties: {
             query: {
               type: "string",
-              description: "검색 키워드 (예: '자동차', '부가가치세')"
+              description: "검색 키워드 키워드"
             },
             display: {
               type: "number",
-              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              description: "결과 수 (기본:20)",
               default: 20
             },
             page: {
               type: "number",
-              description: "페이지 번호 (기본값: 1)",
+              description: "페이지 (기본:1)",
               default: 1
             },
             cls: {
@@ -840,17 +836,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_tax_tribunal_decision_text",
-        description: `조세심판원 재결례 전문. id 필수(search_tax_tribunal_decisions에서).`,
+        description: `[조세] 심판원 재결례 전문. id 필수(search_tax_tribunal_decisions에서).`,
         inputSchema: {
           type: "object",
           properties: {
             id: {
               type: "string",
-              description: "특별행정심판재결례일련번호 (search_tax_tribunal_decisions에서 획득)"
+              description: "재결례ID"
             },
             decisionName: {
               type: "string",
-              description: "재결례명 (선택사항, 검증용)"
+              description: "재결례명"
             }
           },
           required: ["id"]
@@ -858,22 +854,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "search_customs_interpretations",
-        description: `관세청 법령해석 검색(FTA/원산지/관세평가 등). → get_customs_interpretation_text로 전문.`,
+        description: `[관세] 해석 검색(FTA/원산지/관세평가 등). → get_customs_interpretation_text로 전문.`,
         inputSchema: {
           type: "object",
           properties: {
             query: {
               type: "string",
-              description: "검색 키워드 (예: '거래명세서', '세금')"
+              description: "검색 키워드 키워드"
             },
             display: {
               type: "number",
-              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              description: "결과 수 (기본:20)",
               default: 20
             },
             page: {
               type: "number",
-              description: "페이지 번호 (기본값: 1)",
+              description: "페이지 (기본:1)",
               default: 1
             },
             inq: {
@@ -903,17 +899,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_customs_interpretation_text",
-        description: `관세청 법령해석 전문. id 필수(search_customs_interpretations에서).`,
+        description: `[관세] 해석 전문. id 필수(search_customs_interpretations에서).`,
         inputSchema: {
           type: "object",
           properties: {
             id: {
               type: "string",
-              description: "법령해석일련번호 (search_customs_interpretations에서 획득)"
+              description: "해석례ID"
             },
             interpretationName: {
               type: "string",
-              description: "해석명 (선택사항, 검증용)"
+              description: "해석명"
             }
           },
           required: ["id"]
@@ -922,26 +918,26 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       // v1.5.0 - New API tools
       {
         name: "search_constitutional_decisions",
-        description: `헌법재판소 결정례 검색(위헌/합헌/헌법소원). → get_constitutional_decision_text로 전문.`,
+        description: `[헌재] 결정례 검색(위헌/합헌/헌법소원). → get_constitutional_decision_text로 전문.`,
         inputSchema: {
           type: "object",
           properties: {
             query: {
               type: "string",
-              description: "검색 키워드 (예: '위헌', '기본권', '재산권')"
+              description: "검색 키워드 키워드"
             },
             caseNumber: {
               type: "string",
-              description: "사건번호 (예: '2020헌바123', '2019헌마456')"
+              description: "사건번호 예: 2020헌바123"
             },
             display: {
               type: "number",
-              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              description: "결과 수 (기본:20)",
               default: 20
             },
             page: {
               type: "number",
-              description: "페이지 번호 (기본값: 1)",
+              description: "페이지 (기본:1)",
               default: 1
             },
             sort: {
@@ -955,17 +951,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_constitutional_decision_text",
-        description: `헌재결정례 전문. id 필수(search_constitutional_decisions에서).`,
+        description: `[헌재] 결정례 전문. id 필수(search_constitutional_decisions에서).`,
         inputSchema: {
           type: "object",
           properties: {
             id: {
               type: "string",
-              description: "헌재결정일련번호 (search_constitutional_decisions에서 획득)"
+              description: "헌재결정ID"
             },
             caseName: {
               type: "string",
-              description: "사건명 (선택사항, 검증용)"
+              description: "사건명"
             }
           },
           required: ["id"]
@@ -973,22 +969,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "search_admin_appeals",
-        description: `행정심판례 검색(취소/무효/과태료감경). → get_admin_appeal_text로 전문.`,
+        description: `[행심] 검색(취소/무효/과태료감경). → get_admin_appeal_text로 전문.`,
         inputSchema: {
           type: "object",
           properties: {
             query: {
               type: "string",
-              description: "검색 키워드 (예: '취소처분', '영업정지', '과태료')"
+              description: "검색 키워드 키워드"
             },
             display: {
               type: "number",
-              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              description: "결과 수 (기본:20)",
               default: 20
             },
             page: {
               type: "number",
-              description: "페이지 번호 (기본값: 1)",
+              description: "페이지 (기본:1)",
               default: 1
             },
             sort: {
@@ -1002,17 +998,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_admin_appeal_text",
-        description: `행정심판례 전문. id 필수(search_admin_appeals에서).`,
+        description: `[행심] 전문. id 필수(search_admin_appeals에서).`,
         inputSchema: {
           type: "object",
           properties: {
             id: {
               type: "string",
-              description: "행정심판일련번호 (search_admin_appeals에서 획득)"
+              description: "행정심판ID"
             },
             caseName: {
               type: "string",
-              description: "사건명 (선택사항, 검증용)"
+              description: "사건명"
             }
           },
           required: ["id"]
@@ -1020,22 +1016,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "search_english_law",
-        description: `영문법령 검색(영문/한글 모두 가능). 약 1,800건 영문 번역. → get_english_law_text로 조문.`,
+        description: `[영문] 법령 검색(영문/한글 모두 가능). 약 1,800건 영문 번역. → get_english_law_text로 조문.`,
         inputSchema: {
           type: "object",
           properties: {
             query: {
               type: "string",
-              description: "법령명 검색어 (영문 또는 한글, 예: 'Customs Act', '관세법')"
+              description: "법령명 검색어 (영문/한글)"
             },
             display: {
               type: "number",
-              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              description: "결과 수 (기본:20)",
               default: 20
             },
             page: {
               type: "number",
-              description: "페이지 번호 (기본값: 1)",
+              description: "페이지 (기본:1)",
               default: 1
             },
             sort: {
@@ -1049,21 +1045,21 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_english_law_text",
-        description: `영문법령 조문 조회. lawId/mst/lawName 중 하나 필요.`,
+        description: `[영문] 조문 조회. lawId/mst/lawName 중 하나 필요.`,
         inputSchema: {
           type: "object",
           properties: {
             lawId: {
               type: "string",
-              description: "법령ID (search_english_law에서 획득)"
+              description: "법령ID"
             },
             mst: {
               type: "string",
-              description: "법령일련번호 (MST)"
+              description: "법령일련번호"
             },
             lawName: {
               type: "string",
-              description: "법령명 (영문 또는 한글)"
+              description: "법령명 영문/한글"
             }
           },
           required: []
@@ -1071,22 +1067,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "search_legal_terms",
-        description: `법령용어 정의 검색(선의/악의/하자/채권 등). 용어 의미와 관련 법령 확인.`,
+        description: `[용어] 법령용어 검색(선의/악의/하자/채권 등). 용어 의미와 관련 법령 확인.`,
         inputSchema: {
           type: "object",
           properties: {
             query: {
               type: "string",
-              description: "검색할 법령용어 (예: '선의', '악의', '하자', '채권')"
+              description: "검색할 법령용어 용어"
             },
             display: {
               type: "number",
-              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              description: "결과 수 (기본:20)",
               default: 20
             },
             page: {
               type: "number",
-              description: "페이지 번호 (기본값: 1)",
+              description: "페이지 (기본:1)",
               default: 1
             }
           },
@@ -1095,22 +1091,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "search_life_law",
-        description: `생활법령 가이드 검색(창업/부동산/이혼/상속/교통사고 등). → get_life_law_guide로 상세.`,
+        description: `[생활] 가이드 검색(창업/부동산/이혼/상속/교통사고 등). → get_life_law_guide로 상세.`,
         inputSchema: {
           type: "object",
           properties: {
             query: {
               type: "string",
-              description: "검색 주제 (예: '창업', '부동산', '이혼', '교통사고')"
+              description: "검색 주제 주제"
             },
             display: {
               type: "number",
-              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              description: "결과 수 (기본:20)",
               default: 20
             },
             page: {
               type: "number",
-              description: "페이지 번호 (기본값: 1)",
+              description: "페이지 (기본:1)",
               default: 1
             }
           },
@@ -1119,13 +1115,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_life_law_guide",
-        description: `생활법령 가이드 상세. id 필수(search_life_law에서). 목차/핵심내용/관련법령/FAQ 포함.`,
+        description: `[생활] 가이드 상세. id 필수(search_life_law에서). 목차/핵심내용/관련법령/FAQ 포함.`,
         inputSchema: {
           type: "object",
           properties: {
             id: {
               type: "string",
-              description: "생활법령ID (search_life_law에서 획득)"
+              description: "생활법령ID"
             }
           },
           required: ["id"]
@@ -1133,22 +1129,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "search_ftc_decisions",
-        description: `공정거래위원회 결정문 검색(담합/불공정거래/하도급). → get_ftc_decision_text로 전문.`,
+        description: `[공정위] 결정문 검색(담합/불공정거래/하도급). → get_ftc_decision_text로 전문.`,
         inputSchema: {
           type: "object",
           properties: {
             query: {
               type: "string",
-              description: "검색 키워드 (예: '담합', '불공정거래', '하도급')"
+              description: "검색 키워드 키워드"
             },
             display: {
               type: "number",
-              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              description: "결과 수 (기본:20)",
               default: 20
             },
             page: {
               type: "number",
-              description: "페이지 번호 (기본값: 1)",
+              description: "페이지 (기본:1)",
               default: 1
             },
             sort: {
@@ -1162,13 +1158,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_ftc_decision_text",
-        description: `공정거래위원회 결정문 전문. id 필수(search_ftc_decisions에서).`,
+        description: `[공정위] 결정문 전문. id 필수(search_ftc_decisions에서).`,
         inputSchema: {
           type: "object",
           properties: {
             id: {
               type: "string",
-              description: "결정문 일련번호 (search_ftc_decisions에서 획득)"
+              description: "결정문ID"
             }
           },
           required: ["id"]
@@ -1176,22 +1172,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "search_pipc_decisions",
-        description: `개인정보보호위원회 결정문 검색(침해/유출/과징금). → get_pipc_decision_text로 전문.`,
+        description: `[개보위] 결정문 검색(침해/유출/과징금). → get_pipc_decision_text로 전문.`,
         inputSchema: {
           type: "object",
           properties: {
             query: {
               type: "string",
-              description: "검색 키워드 (예: '개인정보', '유출', '과징금')"
+              description: "검색 키워드 키워드"
             },
             display: {
               type: "number",
-              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              description: "결과 수 (기본:20)",
               default: 20
             },
             page: {
               type: "number",
-              description: "페이지 번호 (기본값: 1)",
+              description: "페이지 (기본:1)",
               default: 1
             },
             sort: {
@@ -1205,13 +1201,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_pipc_decision_text",
-        description: `개인정보보호위원회 결정문 전문. id 필수(search_pipc_decisions에서).`,
+        description: `[개보위] 결정문 전문. id 필수(search_pipc_decisions에서).`,
         inputSchema: {
           type: "object",
           properties: {
             id: {
               type: "string",
-              description: "결정문 일련번호 (search_pipc_decisions에서 획득)"
+              description: "결정문ID"
             }
           },
           required: ["id"]
@@ -1219,22 +1215,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "search_nlrc_decisions",
-        description: `중앙노동위원회 결정문 검색(부당해고/부당노동행위). → get_nlrc_decision_text로 전문.`,
+        description: `[노동위] 결정문 검색(부당해고/부당노동행위). → get_nlrc_decision_text로 전문.`,
         inputSchema: {
           type: "object",
           properties: {
             query: {
               type: "string",
-              description: "검색 키워드 (예: '부당해고', '부당노동행위', '징계')"
+              description: "검색 키워드 키워드"
             },
             display: {
               type: "number",
-              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              description: "결과 수 (기본:20)",
               default: 20
             },
             page: {
               type: "number",
-              description: "페이지 번호 (기본값: 1)",
+              description: "페이지 (기본:1)",
               default: 1
             },
             sort: {
@@ -1248,13 +1244,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_nlrc_decision_text",
-        description: `중앙노동위원회 결정문 전문. id 필수(search_nlrc_decisions에서).`,
+        description: `[노동위] 결정문 전문. id 필수(search_nlrc_decisions에서).`,
         inputSchema: {
           type: "object",
           properties: {
             id: {
               type: "string",
-              description: "결정문 일련번호 (search_nlrc_decisions에서 획득)"
+              description: "결정문ID"
             }
           },
           required: ["id"]
@@ -1262,17 +1258,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_historical_law",
-        description: `과거 특정 시점 법령 조회. date(YYYYMMDD) 필수 + lawId/mst/lawName 중 하나.`,
+        description: `[연혁] 특정 시점 법령 조회. date(YYYYMMDD) 필수 + lawId/mst/lawName 중 하나.`,
         inputSchema: {
           type: "object",
           properties: {
             lawId: {
               type: "string",
-              description: "법령ID (search_law에서 획득)"
+              description: "법령ID"
             },
             mst: {
               type: "string",
-              description: "법령일련번호 (MST)"
+              description: "법령일련번호"
             },
             lawName: {
               type: "string",
@@ -1280,7 +1276,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             date: {
               type: "string",
-              description: "조회 시점 날짜 (YYYYMMDD 형식, 예: '20200101')"
+              description: "조회 시점 날짜 (YYYYMMDD 형식, 예: 20200101"
             },
             jo: {
               type: "string",
@@ -1292,7 +1288,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "search_historical_law",
-        description: `법령 연혁 버전 목록. lawId/lawName으로 검색 → get_historical_law로 특정 버전 조회.`,
+        description: `[연혁] 버전 목록. lawId/lawName으로 검색 → get_historical_law로 특정 버전 조회.`,
         inputSchema: {
           type: "object",
           properties: {
@@ -1306,12 +1302,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             display: {
               type: "number",
-              description: "페이지당 결과 개수 (기본값: 20, 최대: 100)",
+              description: "결과 수 (기본:20)",
               default: 20
             },
             page: {
               type: "number",
-              description: "페이지 번호 (기본값: 1)",
+              description: "페이지 (기본:1)",
               default: 1
             }
           },
@@ -1320,17 +1316,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_law_system_tree",
-        description: `법령체계도 - 상하위법/관련법 트리 구조. lawId/mst/lawName 중 하나 필요.`,
+        description: `[법령] 체계도 - 상하위법/관련법 트리 구조. lawId/mst/lawName 중 하나 필요.`,
         inputSchema: {
           type: "object",
           properties: {
             lawId: {
               type: "string",
-              description: "법령ID (search_law에서 획득)"
+              description: "법령ID"
             },
             mst: {
               type: "string",
-              description: "법령일련번호 (MST)"
+              description: "법령일련번호"
             },
             lawName: {
               type: "string",

@@ -11,7 +11,7 @@ export const searchCustomsInterpretationsSchema = z.object({
   explYd: z.string().optional().describe("Interpretation date range (YYYYMMDD~YYYYMMDD, e.g., '20200101~20201231')"),
   sort: z.enum(["lasc", "ldes", "dasc", "ddes"]).optional()
     .describe("Sort option: lasc/ldes (interpretation name), dasc/ddes (interpretation date)"),
-  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)"),
+  apiKey: z.string().optional().describe("API 키"),
 });
 
 export type SearchCustomsInterpretationsInput = z.infer<typeof searchCustomsInterpretationsSchema>;
@@ -107,7 +107,7 @@ export async function searchCustomsInterpretations(
 export const getCustomsInterpretationTextSchema = z.object({
   id: z.string().describe("Customs interpretation serial number (법령해석일련번호) from search results"),
   interpretationName: z.string().optional().describe("Interpretation name (optional, for verification)"),
-  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)"),
+  apiKey: z.string().optional().describe("API 키"),
 });
 
 export type GetCustomsInterpretationTextInput = z.infer<typeof getCustomsInterpretationTextSchema>;

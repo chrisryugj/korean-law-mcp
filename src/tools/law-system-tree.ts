@@ -5,7 +5,7 @@ export const getLawSystemTreeSchema = z.object({
   lawId: z.string().optional().describe("법령ID (search_law에서 획득)"),
   mst: z.string().optional().describe("법령일련번호 (MST)"),
   lawName: z.string().optional().describe("법령명"),
-  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)"),
+  apiKey: z.string().optional().describe("API 키"),
 });
 
 export type GetLawSystemTreeInput = z.infer<typeof getLawSystemTreeSchema>;
