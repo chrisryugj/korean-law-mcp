@@ -12,7 +12,7 @@ import { searchOrdinance } from "./ordinance-search.js"
 export const SearchAllSchema = z.object({
   query: z.string().describe("검색할 키워드"),
   maxResults: z.number().min(1).max(50).default(10).describe("각 유형별 최대 결과 개수 (기본값: 10)"),
-  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
+  apiKey: z.string().optional().describe("API 키")
 })
 
 export type SearchAllInput = z.infer<typeof SearchAllSchema>

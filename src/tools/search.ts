@@ -10,7 +10,7 @@ import { lawCache } from "../lib/cache.js"
 export const SearchLawSchema = z.object({
   query: z.string().describe("검색할 법령명 (예: '관세법', 'fta특례법', '화관법')"),
   maxResults: z.number().optional().default(20).describe("최대 결과 개수"),
-  apiKey: z.string().optional().describe("법제처 API 키 (선택, https://open.law.go.kr/LSO/openApi/guideList.do 에서 발급)")
+  apiKey: z.string().optional().describe("API 키")
 })
 
 export type SearchLawInput = z.infer<typeof SearchLawSchema>

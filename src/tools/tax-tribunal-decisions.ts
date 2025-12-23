@@ -11,7 +11,7 @@ export const searchTaxTribunalDecisionsSchema = z.object({
   rslYd: z.string().optional().describe("Decision date range (YYYYMMDD~YYYYMMDD, e.g., '20200101~20201231')"),
   sort: z.enum(["lasc", "ldes", "dasc", "ddes", "nasc", "ndes"]).optional()
     .describe("Sort option: lasc/ldes (decision name), dasc/ddes (decision date), nasc/ndes (claim number)"),
-  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)"),
+  apiKey: z.string().optional().describe("API 키"),
 });
 
 export type SearchTaxTribunalDecisionsInput = z.infer<typeof searchTaxTribunalDecisionsSchema>;
@@ -109,7 +109,7 @@ export async function searchTaxTribunalDecisions(
 export const getTaxTribunalDecisionTextSchema = z.object({
   id: z.string().describe("Tax tribunal decision serial number (특별행정심판재결례일련번호) from search results"),
   decisionName: z.string().optional().describe("Decision name (optional, for verification)"),
-  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)"),
+  apiKey: z.string().optional().describe("API 키"),
 });
 
 export type GetTaxTribunalDecisionTextInput = z.infer<typeof getTaxTribunalDecisionTextSchema>;

@@ -32,7 +32,7 @@ export const ArticleHistorySchema = z.object({
   toRegDt: z.string().optional().describe("조회기간 종료일 (YYYYMMDD, 예: '20241231')"),
   org: z.string().optional().describe("소관부처코드 (선택)"),
   page: z.number().optional().default(1).describe("페이지 번호 (기본값: 1)"),
-  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
+  apiKey: z.string().optional().describe("API 키")
 })
 
 export type ArticleHistoryInput = z.infer<typeof ArticleHistorySchema>

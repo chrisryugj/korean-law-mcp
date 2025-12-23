@@ -8,7 +8,7 @@ export const searchInterpretationsSchema = z.object({
   page: z.number().min(1).default(1).describe("Page number (default: 1)"),
   sort: z.enum(["lasc", "ldes", "dasc", "ddes", "nasc", "ndes"]).optional()
     .describe("Sort option: lasc/ldes (case name), dasc/ddes (date), nasc/ndes (interpretation number)"),
-  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)"),
+  apiKey: z.string().optional().describe("API 키"),
 });
 
 export type SearchInterpretationsInput = z.infer<typeof searchInterpretationsSchema>;
@@ -113,7 +113,7 @@ export async function searchInterpretations(
 export const getInterpretationTextSchema = z.object({
   id: z.string().describe("Legal interpretation serial number (법령해석례일련번호) from search results"),
   caseName: z.string().optional().describe("Case name (optional, for verification)"),
-  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)"),
+  apiKey: z.string().optional().describe("API 키"),
 });
 
 export type GetInterpretationTextInput = z.infer<typeof getInterpretationTextSchema>;

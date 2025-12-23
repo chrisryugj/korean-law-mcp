@@ -7,7 +7,7 @@ import type { LawApiClient } from "../lib/api-client.js"
 
 export const GetOrdinanceSchema = z.object({
   ordinSeq: z.string().describe("자치법규 일련번호"),
-  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)")
+  apiKey: z.string().optional().describe("API 키")
 })
 
 export type GetOrdinanceInput = z.infer<typeof GetOrdinanceSchema>

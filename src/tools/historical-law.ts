@@ -7,7 +7,7 @@ export const getHistoricalLawSchema = z.object({
   lawName: z.string().optional().describe("법령명"),
   date: z.string().describe("조회 시점 날짜 (YYYYMMDD 형식, 예: '20200101')"),
   jo: z.string().optional().describe("특정 조문 번호 (예: '제38조')"),
-  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)"),
+  apiKey: z.string().optional().describe("API 키"),
 });
 
 export type GetHistoricalLawInput = z.infer<typeof getHistoricalLawSchema>;
@@ -148,7 +148,7 @@ export const searchHistoricalLawSchema = z.object({
   lawName: z.string().optional().describe("법령명"),
   display: z.number().min(1).max(100).default(20).describe("페이지당 결과 개수 (기본값: 20)"),
   page: z.number().min(1).default(1).describe("페이지 번호 (기본값: 1)"),
-  apiKey: z.string().optional().describe("사용자 API 키"),
+  apiKey: z.string().optional().describe("API 키"),
 });
 
 export type SearchHistoricalLawInput = z.infer<typeof searchHistoricalLawSchema>;

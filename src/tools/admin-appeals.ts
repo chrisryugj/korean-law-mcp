@@ -7,7 +7,7 @@ export const searchAdminAppealsSchema = z.object({
   page: z.number().min(1).default(1).describe("페이지 번호 (기본값: 1)"),
   sort: z.enum(["lasc", "ldes", "dasc", "ddes", "nasc", "ndes"]).optional()
     .describe("정렬 옵션: lasc/ldes (법령명순), dasc/ddes (날짜순), nasc/ndes (사건번호순)"),
-  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)"),
+  apiKey: z.string().optional().describe("API 키"),
 });
 
 export type SearchAdminAppealsInput = z.infer<typeof searchAdminAppealsSchema>;
@@ -113,7 +113,7 @@ export async function searchAdminAppeals(
 export const getAdminAppealTextSchema = z.object({
   id: z.string().describe("행정심판일련번호 (검색 결과에서 획득)"),
   caseName: z.string().optional().describe("사건명 (선택사항, 검증용)"),
-  apiKey: z.string().optional().describe("사용자 API 키 (https://open.law.go.kr 에서 발급, 없으면 서버 기본값 사용)"),
+  apiKey: z.string().optional().describe("API 키"),
 });
 
 export type GetAdminAppealTextInput = z.infer<typeof getAdminAppealTextSchema>;
