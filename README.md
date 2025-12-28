@@ -57,7 +57,7 @@ Unlike generic legal tools, this server understands Korean legal terminology:
 
 ### Prerequisites
 - Node.js 18+
-- API key from [Korea Law API](https://www.law.go.kr/DRF/lawService.do) (free)
+- API key from [Korea Law API](https://open.law.go.kr/LSO/openApi/guideResult.do) (free)
 
 ### Installation
 
@@ -531,7 +531,7 @@ docker run -e LAW_OC=your-api-key -p 3000:3000 korean-law-mcp
 ### **Environment Variables**
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `LAW_OC` | ✅ Yes | - | Korea Law API key ([Get here](https://www.law.go.kr/DRF/lawService.do)) |
+| `LAW_OC` | ✅ Yes | - | Korea Law API key ([Get here](https://open.law.go.kr/LSO/openApi/guideResult.do)) |
 | `PORT` | ⬜ No | 3000 | SSE server port (SSE mode only) |
 | `NODE_ENV` | ⬜ No | development | Environment (production/development) |
 
