@@ -222,50 +222,43 @@ export async function getEnglishLawText(
 
 // XML parser for English law search
 function parseEnglishLawXML(xml: string): any {
-  const obj: any = {};
+  const obj: any = { ElawSearch: {} };
 
-  // Try different root element patterns
-  const searchMatch = xml.match(/<ElawSearch[^>]*>([\s\S]*?)<\/ElawSearch>/) ||
-                      xml.match(/<elawSearch[^>]*>([\s\S]*?)<\/elawSearch>/) ||
-                      xml.match(/<LawSearch[^>]*>([\s\S]*?)<\/LawSearch>/);
-  if (!searchMatch) return obj;
-
-  const content = searchMatch[1];
-  obj.ElawSearch = {};
-
-  const totalCntMatch = content.match(/<totalCnt>([^<]*)<\/totalCnt>/);
-  const pageMatch = content.match(/<page>([^<]*)<\/page>/);
+  // Extract totalCnt and page directly (works regardless of root tag)
+  const totalCntMatch = xml.match(/<totalCnt>([^<]*)<\/totalCnt>/);
+  const pageMatch = xml.match(/<page>([^<]*)<\/page>/);
 
   obj.ElawSearch.totalCnt = totalCntMatch ? totalCntMatch[1] : "0";
   obj.ElawSearch.page = pageMatch ? pageMatch[1] : "1";
-
-  // Extract elaw items
-  const itemMatches = content.matchAll(/<elaw[^>]*>([\s\S]*?)<\/elaw>/gi) ||
-                      content.matchAll(/<law[^>]*>([\s\S]*?)<\/law>/gi);
   obj.ElawSearch.elaw = [];
+
+  // Extract law items (API uses <law id="N"> format)
+  const itemMatches = xml.matchAll(/<law[^>]*>([\s\S]*?)<\/law>/gi);
 
   for (const match of itemMatches) {
     const itemContent = match[1];
     const item: any = {};
 
     const extractTag = (tag: string) => {
-      const cdataRegex = new RegExp(`<${tag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\/${tag}>`, 'i');
+      const cdataRegex = new RegExp(`<${tag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>`, 'i');
       const cdataMatch = itemContent.match(cdataRegex);
       if (cdataMatch) return cdataMatch[1];
 
-      const regex = new RegExp(`<${tag}>([^<]*)<\/${tag}>`, 'i');
-      const match = itemContent.match(regex);
-      return match ? match[1] : "";
+      const regex = new RegExp(`<${tag}>([^<]*)<\\/${tag}>`, 'i');
+      const tagMatch = itemContent.match(regex);
+      return tagMatch ? tagMatch[1] : "";
     };
 
-    item.법령ID = extractTag("법령ID") || extractTag("lawId");
-    item.영문법령명 = extractTag("영문법령명") || extractTag("법령명_영문") || extractTag("법령명영문");
-    item.한글법령명 = extractTag("한글법령명") || extractTag("법령명_한글") || extractTag("법령명한글") || extractTag("법령명");
+    item.법령ID = extractTag("법령ID");
+    item.영문법령명 = extractTag("법령명영문");
+    item.한글법령명 = extractTag("법령명한글");
     item.시행일자 = extractTag("시행일자");
-    item.법령구분 = extractTag("법령구분");
+    item.법령구분 = extractTag("법령구분명");
     item.법령상세링크 = extractTag("법령상세링크");
 
-    obj.ElawSearch.elaw.push(item);
+    if (item.법령ID || item.영문법령명) {
+      obj.ElawSearch.elaw.push(item);
+    }
   }
 
   return obj;

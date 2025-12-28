@@ -7,7 +7,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)](https://nodejs.org/)
 
-**Korean Law MCP Server** transforms Claude into a specialized legal research assistant for Korean law, offering **51 production-ready tools** that provide seamless access to the Korea Ministry of Government Legislation's official legal database.
+**Korean Law MCP Server** transforms Claude into a specialized legal research assistant for Korean law, offering **58 production-ready tools** that provide seamless access to the Korea Ministry of Government Legislation's official legal database.
 
 Built for **MCP (Model Context Protocol)**, this server enables AI assistants to search, retrieve, analyze, and cross-reference Korean statutes, administrative rules, local ordinances, precedents, and legal interpretations—all through natural language conversation.
 
@@ -39,9 +39,10 @@ Unlike generic legal tools, this server understands Korean legal terminology:
 | **Admin Appeals** | 2 tools | 행정심판례 search + full text (v1.5.0) |
 | **Tax/Customs** | 4 tools | 조세심판원 재결례, 관세청 해석 |
 | **Committee Decisions** | 6 tools | 공정위/개보위/노동위 결정문 (v1.5.0) |
-| **Life Law** | 2 tools | 생활법령 가이드 (v1.5.0) |
+| **AI Search** | 1 tool | 자연어 지능형 검색 (v1.6.0) |
 | **English Law** | 2 tools | 영문법령 검색 및 조회 (v1.5.0) |
 | **Legal Terms** | 1 tool | 법령용어 사전 (v1.5.0) |
+| **Knowledge Base** | 7 tools | 용어 연계/조문 연계/관련법령 (v1.6.0) |
 | **Historical** | 2 tools | 연혁법령 조회 (v1.5.0) |
 | **Analysis** | 7 tools | Comparison, history, statistics, link parsing |
 
@@ -313,7 +314,7 @@ Claude: [Calls search_interpretations("근로기준법 제74조")]
 
 ---
 
-## 🛠️ Available Tools (51 Total)
+## 🛠️ Available Tools (58 Total)
 
 ### **Core Search (11 tools)**
 | Tool | Purpose | Example |
@@ -356,7 +357,7 @@ Claude: [Calls search_interpretations("근로기준법 제74조")]
 | `parse_article_links` | Reference parsing | Extract "제X조", "같은 조" |
 | `get_external_links` | External URLs | law.go.kr, court library links |
 
-### **Specialized (4 tools)** ⭐ New in v1.4.0
+### **Specialized (4 tools)**
 | Tool | Purpose | Use Case |
 |------|---------|----------|
 | `search_tax_tribunal_decisions` | Tax tribunal decision search | Search by keyword, case number |
@@ -364,9 +365,25 @@ Claude: [Calls search_interpretations("근로기준법 제74조")]
 | `search_customs_interpretations` | Customs interpretation search | Search customs rulings |
 | `get_customs_interpretation` | Customs ruling full text | Retrieve ruling details |
 
+### **Knowledge Base (7 tools)** ⭐ New in v1.6.0
+| Tool | Purpose | Use Case |
+|------|---------|----------|
+| `get_legal_term_kb` | Legal term KB search | Search terms with relations |
+| `get_legal_term_detail` | Term definition detail | Get full definition |
+| `get_daily_term` | Daily term search | Search everyday expressions |
+| `get_daily_to_legal` | Daily→Legal mapping | "월세" → "임대차" |
+| `get_legal_to_daily` | Legal→Daily mapping | "임대차" → "월세", "전세" |
+| `get_term_articles` | Term→Article links | Find articles using term |
+| `get_related_laws` | Related laws | Find connected laws |
+
+### **AI Search (1 tool)** ⭐ New in v1.6.0
+| Tool | Purpose | Use Case |
+|------|---------|----------|
+| `search_ai_law` | Natural language law search | "음주운전 처벌", "퇴직금 계산" |
+
 ---
 
-## 🛠️ 사용 가능한 도구 (총 51개)
+## 🛠️ 사용 가능한 도구 (총 58개)
 
 ### **검색 도구 (11개)**
 | 도구명 | 기능 | 예시 |
@@ -409,13 +426,29 @@ Claude: [Calls search_interpretations("근로기준법 제74조")]
 | `parse_article_links` | 조문 참조 파싱 | "제X조", "같은 조" 추출 |
 | `get_external_links` | 외부 링크 생성 | 법제처, 법원도서관 링크 |
 
-### **전문 도구 (4개)** ⭐ v1.4.0 신규
+### **전문 도구 (4개)**
 | 도구명 | 기능 | 활용 사례 |
 |--------|------|-----------|
 | `search_tax_tribunal_decisions` | 조세심판원 재결례 검색 | 키워드, 사건번호로 검색 |
 | `get_tax_tribunal_decision` | 재결례 전문 조회 | 재결 상세 내용 확인 |
 | `search_customs_interpretations` | 관세청 법령해석 검색 | 관세 관련 해석 검색 |
 | `get_customs_interpretation` | 법령해석 전문 조회 | 해석 상세 내용 확인 |
+
+### **지식베이스 도구 (7개)** ⭐ v1.6.0 신규
+| 도구명 | 기능 | 활용 사례 |
+|--------|------|-----------|
+| `get_legal_term_kb` | 법령용어 지식베이스 검색 | 용어 정의/연계정보 조회 |
+| `get_legal_term_detail` | 법령용어 상세 정의 | 정의/출처/분류 확인 |
+| `get_daily_term` | 일상용어 검색 | 일상 표현→법률 용어 매핑 |
+| `get_daily_to_legal` | 일상용어→법령용어 | "월세"→"임대차" |
+| `get_legal_to_daily` | 법령용어→일상용어 | "임대차"→"월세", "전세" |
+| `get_term_articles` | 용어→조문 연계 | 용어가 사용된 조문 찾기 |
+| `get_related_laws` | 관련법령 조회 | 연관된 법령 목록 |
+
+### **AI 검색 도구 (1개)** ⭐ v1.6.0 신규
+| 도구명 | 기능 | 활용 사례 |
+|--------|------|-----------|
+| `search_ai_law` | 자연어 지능형 검색 | "음주운전 처벌", "퇴직금 계산" |
 
 ---
 
@@ -429,7 +462,7 @@ Claude: [Calls search_interpretations("근로기준법 제74조")]
 │  STDIO Mode          SSE Mode           │
 │  (Claude Desktop)    (Remote Deployment)│
 ├─────────────────────────────────────────┤
-│         51 Tools (Zod-validated)        │
+│         58 Tools (Zod-validated)        │
 ├─────────────────────────────────────────┤
 │  Cache Layer (1hr/24hr TTL)             │
 ├─────────────────────────────────────────┤
@@ -465,10 +498,10 @@ Response to Claude
 
 ### **4. Production Quality**
 - ✅ **100% TypeScript** with strict mode
-- ✅ **Zod schema validation** on all 51 tools
+- ✅ **Zod schema validation** on all 58 tools
 - ✅ **Comprehensive error handling** (HTML detection, graceful fallbacks)
 - ✅ **Battle-tested code** (imported from LexDiff production service)
-- ✅ **Full test coverage** (51/51 integration tests passing)
+- ✅ **Full test coverage** (58/58 integration tests passing)
 
 ---
 
@@ -476,7 +509,7 @@ Response to Claude
 
 | Document | Description |
 |----------|-------------|
-| [API.md](docs/API.md) | Complete reference for all 51 tools |
+| [API.md](docs/API.md) | Complete reference for all 58 tools |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design and data flow |
 | [DEVELOPMENT.md](docs/DEVELOPMENT.md) | Developer guide and contribution |
 | [CLAUDE.md](CLAUDE.md) | Project-specific Claude Code instructions |

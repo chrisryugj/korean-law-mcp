@@ -22,7 +22,7 @@ export async function searchLegalTerms(
 
     const params = new URLSearchParams({
       OC: apiKey,
-      target: "lsTrm",
+      target: "lstrm",
       type: "XML",
       query: args.query,
       display: (args.display || 20).toString(),
@@ -110,13 +110,15 @@ export async function searchLegalTerms(
 function parseLegalTermsXML(xml: string): any {
   const obj: any = {};
 
-  // Try different root element patterns
-  const searchMatch = xml.match(/<LsTrmSearch[^>]*>([\s\S]*?)<\/LsTrmSearch>/) ||
-                      xml.match(/<lsTrmSearch[^>]*>([\s\S]*?)<\/lsTrmSearch>/) ||
-                      xml.match(/<TrmSearch[^>]*>([\s\S]*?)<\/TrmSearch>/);
-  if (!searchMatch) return obj;
+  // Find root element using indexOf/lastIndexOf for accurate matching
+  const rootStartTag = "<LsTrmSearch>";
+  const rootEndTag = "</LsTrmSearch>";
+  const startIdx = xml.indexOf(rootStartTag);
+  const endIdx = xml.lastIndexOf(rootEndTag);
 
-  const content = searchMatch[1];
+  if (startIdx === -1 || endIdx === -1) return obj;
+
+  const content = xml.substring(startIdx + rootStartTag.length, endIdx);
   obj.LsTrmSearch = {};
 
   const totalCntMatch = content.match(/<totalCnt>([^<]*)<\/totalCnt>/);
@@ -125,9 +127,8 @@ function parseLegalTermsXML(xml: string): any {
   obj.LsTrmSearch.totalCnt = totalCntMatch ? totalCntMatch[1] : "0";
   obj.LsTrmSearch.page = pageMatch ? pageMatch[1] : "1";
 
-  // Extract lsTrm items
-  const itemMatches = content.matchAll(/<lsTrm[^>]*>([\s\S]*?)<\/lsTrm>/gi) ||
-                      content.matchAll(/<trm[^>]*>([\s\S]*?)<\/trm>/gi);
+  // Extract lstrm items (lowercase)
+  const itemMatches = content.matchAll(/<lstrm[^>]*>([\s\S]*?)<\/lstrm>/g);
   obj.LsTrmSearch.lsTrm = [];
 
   for (const match of itemMatches) {
@@ -135,20 +136,23 @@ function parseLegalTermsXML(xml: string): any {
     const item: any = {};
 
     const extractTag = (tag: string) => {
-      const cdataRegex = new RegExp(`<${tag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\/${tag}>`, 'i');
+      const cdataRegex = new RegExp(`<${tag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>`, 'i');
       const cdataMatch = itemContent.match(cdataRegex);
       if (cdataMatch) return cdataMatch[1];
 
-      const regex = new RegExp(`<${tag}>([^<]*)<\/${tag}>`, 'i');
+      const regex = new RegExp(`<${tag}>([^<]*)<\\/${tag}>`, 'i');
       const match = itemContent.match(regex);
       return match ? match[1] : "";
     };
 
-    item.용어명 = extractTag("용어명") || extractTag("용어");
+    // Match actual API field names
+    item.용어명 = extractTag("법령용어명") || extractTag("용어명") || extractTag("용어");
+    item.용어ID = extractTag("법령용어ID");
     item.용어정의 = extractTag("용어정의") || extractTag("정의");
     item.관련법령 = extractTag("관련법령") || extractTag("법령명");
     item.일상용어 = extractTag("일상용어");
     item.영문용어 = extractTag("영문용어") || extractTag("영문");
+    item.상세링크 = extractTag("법령용어상세링크") || extractTag("법령용어상세검색");
 
     obj.LsTrmSearch.lsTrm.push(item);
   }

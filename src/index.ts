@@ -46,7 +46,9 @@ import { searchConstitutionalDecisions, searchConstitutionalDecisionsSchema, get
 import { searchAdminAppeals, searchAdminAppealsSchema, getAdminAppealText, getAdminAppealTextSchema } from "./tools/admin-appeals.js"
 import { searchEnglishLaw, searchEnglishLawSchema, getEnglishLawText, getEnglishLawTextSchema } from "./tools/english-law.js"
 import { searchLegalTerms, searchLegalTermsSchema } from "./tools/legal-terms.js"
-import { searchLifeLaw, searchLifeLawSchema, getLifeLawGuide, getLifeLawGuideSchema } from "./tools/life-law.js"
+import { searchAiLaw, searchAiLawSchema } from "./tools/life-law.js"
+// v1.6.0 - Knowledge Base APIs
+import { getLegalTermKB, getLegalTermKBSchema, getLegalTermDetail, getLegalTermDetailSchema, getDailyTerm, getDailyTermSchema, getDailyToLegal, getDailyToLegalSchema, getLegalToDaily, getLegalToDailySchema, getTermArticles, getTermArticlesSchema, getRelatedLaws, getRelatedLawsSchema } from "./tools/knowledge-base.js"
 import { searchFtcDecisions, searchFtcDecisionsSchema, getFtcDecisionText, getFtcDecisionTextSchema, searchPipcDecisions, searchPipcDecisionsSchema, getPipcDecisionText, getPipcDecisionTextSchema, searchNlrcDecisions, searchNlrcDecisionsSchema, getNlrcDecisionText, getNlrcDecisionTextSchema } from "./tools/committee-decisions.js"
 import { getHistoricalLaw, getHistoricalLawSchema, searchHistoricalLaw, searchHistoricalLawSchema } from "./tools/historical-law.js"
 import { getLawSystemTree, getLawSystemTreeSchema } from "./tools/law-system-tree.js"
@@ -62,7 +64,7 @@ const apiClient = new LawApiClient({ apiKey: LAW_OC })
 const server = new Server(
   {
     name: "korean-law",
-    version: "1.5.1",
+    version: "1.6.0",
   },
   {
     capabilities: {
@@ -1090,14 +1092,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         }
       },
       {
-        name: "search_life_law",
-        description: `[생활] 가이드 검색(창업/부동산/이혼/상속/교통사고 등). → get_life_law_guide로 상세.`,
+        name: "search_ai_law",
+        description: `[AI검색] 자연어로 법령 검색. 정확한 법령명 모를 때 사용. 예: "음주운전 처벌", "임대차 보증금". 법령명 알면 search_law 사용.`,
         inputSchema: {
           type: "object",
           properties: {
             query: {
               type: "string",
-              description: "검색 주제 주제"
+              description: "자연어 질문/상황"
+            },
+            search: {
+              type: "string",
+              enum: ["0", "1", "2", "3"],
+              description: "검색범위: 0=법령조문, 1=법령별표서식, 2=행정규칙조문, 3=행정규칙별표서식",
+              default: "0"
             },
             display: {
               type: "number",
@@ -1111,20 +1119,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             }
           },
           required: ["query"]
-        }
-      },
-      {
-        name: "get_life_law_guide",
-        description: `[생활] 가이드 상세. id 필수(search_life_law에서). 목차/핵심내용/관련법령/FAQ 포함.`,
-        inputSchema: {
-          type: "object",
-          properties: {
-            id: {
-              type: "string",
-              description: "생활법령ID"
-            }
-          },
-          required: ["id"]
         }
       },
       {
@@ -1332,6 +1326,91 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "string",
               description: "법령명"
             }
+          },
+          required: []
+        }
+      },
+      // v1.6.0 - Knowledge Base APIs
+      {
+        name: "get_legal_term_kb",
+        description: `[지식베이스] 법령용어 조회. 용어 정의/연계정보 포함. 상세 정의는 get_legal_term_detail.`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "검색할 법령용어" },
+            display: { type: "number", description: "결과 수 (기본:20)", default: 20 },
+            page: { type: "number", description: "페이지 (기본:1)", default: 1 }
+          },
+          required: ["query"]
+        }
+      },
+      {
+        name: "get_legal_term_detail",
+        description: `[지식베이스] 법령용어 상세 정의. 정의/출처/분류 포함.`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "조회할 법령용어명" }
+          },
+          required: ["query"]
+        }
+      },
+      {
+        name: "get_daily_term",
+        description: `[지식베이스] 일상용어 검색. 일상 표현→법률 용어 매핑 확인.`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "일상용어 (예: '월세', '뺑소니')" },
+            display: { type: "number", description: "결과 수 (기본:20)", default: 20 },
+            page: { type: "number", description: "페이지 (기본:1)", default: 1 }
+          },
+          required: ["query"]
+        }
+      },
+      {
+        name: "get_daily_to_legal",
+        description: `[지식베이스] 일상용어→법령용어 연계. 예: '월세'→'임대차'.`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            dailyTerm: { type: "string", description: "일상용어" }
+          },
+          required: ["dailyTerm"]
+        }
+      },
+      {
+        name: "get_legal_to_daily",
+        description: `[지식베이스] 법령용어→일상용어 연계. 예: '임대차'→'월세', '전세'.`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            legalTerm: { type: "string", description: "법령용어" }
+          },
+          required: ["legalTerm"]
+        }
+      },
+      {
+        name: "get_term_articles",
+        description: `[지식베이스] 용어→조문 연계. 해당 용어가 사용된 법령 조문 목록.`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            term: { type: "string", description: "검색할 법령용어" },
+            display: { type: "number", description: "결과 수 (기본:20)", default: 20 }
+          },
+          required: ["term"]
+        }
+      },
+      {
+        name: "get_related_laws",
+        description: `[지식베이스] 관련법령 조회. 특정 법령과 연관된 법령 목록.`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            lawId: { type: "string", description: "법령ID" },
+            lawName: { type: "string", description: "법령명" },
+            display: { type: "number", description: "결과 수 (기본:20)", default: 20 }
           },
           required: []
         }
@@ -1547,14 +1626,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return await searchLegalTerms(apiClient, input)
       }
 
-      case "search_life_law": {
-        const input = searchLifeLawSchema.parse(args)
-        return await searchLifeLaw(apiClient, input)
-      }
-
-      case "get_life_law_guide": {
-        const input = getLifeLawGuideSchema.parse(args)
-        return await getLifeLawGuide(apiClient, input)
+      case "search_ai_law": {
+        const input = searchAiLawSchema.parse(args)
+        return await searchAiLaw(apiClient, input)
       }
 
       case "search_ftc_decisions": {
@@ -1600,6 +1674,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "get_law_system_tree": {
         const input = getLawSystemTreeSchema.parse(args)
         return await getLawSystemTree(apiClient, input)
+      }
+
+      // v1.6.0 - Knowledge Base APIs
+      case "get_legal_term_kb": {
+        const input = getLegalTermKBSchema.parse(args)
+        return await getLegalTermKB(apiClient, input)
+      }
+
+      case "get_legal_term_detail": {
+        const input = getLegalTermDetailSchema.parse(args)
+        return await getLegalTermDetail(apiClient, input)
+      }
+
+      case "get_daily_term": {
+        const input = getDailyTermSchema.parse(args)
+        return await getDailyTerm(apiClient, input)
+      }
+
+      case "get_daily_to_legal": {
+        const input = getDailyToLegalSchema.parse(args)
+        return await getDailyToLegal(apiClient, input)
+      }
+
+      case "get_legal_to_daily": {
+        const input = getLegalToDailySchema.parse(args)
+        return await getLegalToDaily(apiClient, input)
+      }
+
+      case "get_term_articles": {
+        const input = getTermArticlesSchema.parse(args)
+        return await getTermArticles(apiClient, input)
+      }
+
+      case "get_related_laws": {
+        const input = getRelatedLawsSchema.parse(args)
+        return await getRelatedLaws(apiClient, input)
       }
 
       default:

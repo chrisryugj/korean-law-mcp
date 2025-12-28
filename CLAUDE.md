@@ -1,13 +1,13 @@
 # CLAUDE.md
 
-Korean Law MCP Server - 법제처 API 기반 MCP 서버 (51개 도구)
+Korean Law MCP Server - 법제처 API 기반 MCP 서버 (58개 도구)
 
 ## Structure
 
 ```
 src/
 ├── index.ts          # 엔트리포인트 (STDIO/SSE 모드)
-├── tools/            # 51개 도구 (각 파일 200줄 미만)
+├── tools/            # 58개 도구 (각 파일 200줄 미만)
 ├── lib/              # API 클라이언트, 파서, 정규화
 └── server/           # HTTP/SSE 서버 (Express)
 ```
@@ -41,6 +41,6 @@ LAW_OC=키 node build/index.js  # 로컬 실행
 ## Docs
 
 상세 정보는 별도 문서 참조:
-- [docs/API.md](docs/API.md) - 51개 도구 레퍼런스
+- [docs/API.md](docs/API.md) - 58개 도구 레퍼런스
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - 시스템 설계, 데이터 플로우
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) - 개발 가이드

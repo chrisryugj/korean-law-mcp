@@ -25,7 +25,7 @@ export async function searchConstitutionalDecisions(
 
     const params = new URLSearchParams({
       OC: apiKey,
-      target: "ccJudg",
+      target: "detc",
       type: "XML",
       display: (args.display || 20).toString(),
       page: (args.page || 1).toString(),
@@ -45,14 +45,14 @@ export async function searchConstitutionalDecisions(
     const xmlText = await response.text();
     const result = parseConstitutionalXML(xmlText);
 
-    if (!result.CcJudgSearch) {
+    if (!result.DetcSearch) {
       throw new Error("Invalid response format from API");
     }
 
-    const data = result.CcJudgSearch;
+    const data = result.DetcSearch;
     const totalCount = parseInt(data.totalCnt || "0");
     const currentPage = parseInt(data.page || "1");
-    const decisions = data.ccJudg ? (Array.isArray(data.ccJudg) ? data.ccJudg : [data.ccJudg]) : [];
+    const decisions = data.detc ? (Array.isArray(data.detc) ? data.detc : [data.detc]) : [];
 
     if (totalCount === 0) {
       let errorMsg = "검색 결과가 없습니다.";
@@ -81,18 +81,16 @@ export async function searchConstitutionalDecisions(
     let output = `헌재결정례 검색 결과 (총 ${totalCount}건, ${currentPage}페이지):\n\n`;
 
     for (const decision of decisions) {
-      output += `[${decision.헌재결정일련번호}] ${decision.사건명}\n`;
+      output += `[${decision.헌재결정례일련번호}] ${decision.사건명}\n`;
       output += `  사건번호: ${decision.사건번호 || "N/A"}\n`;
-      output += `  선고일: ${decision.선고일자 || "N/A"}\n`;
-      output += `  결정유형: ${decision.결정유형 || "N/A"}\n`;
-      output += `  사건종류: ${decision.사건종류명 || "N/A"}\n`;
-      if (decision.판례상세링크) {
-        output += `  링크: ${decision.판례상세링크}\n`;
+      output += `  종국일: ${decision.종국일자 || "N/A"}\n`;
+      if (decision.헌재결정례상세링크) {
+        output += `  링크: ${decision.헌재결정례상세링크}\n`;
       }
       output += `\n`;
     }
 
-    output += `\n💡 전문을 조회하려면 get_constitutional_decision_text(id="헌재결정일련번호")를 사용하세요.`;
+    output += `\n💡 전문을 조회하려면 get_constitutional_decision_text(id="헌재결정례일련번호")를 사용하세요.`;
 
     return {
       content: [{
@@ -113,7 +111,7 @@ export async function searchConstitutionalDecisions(
 
 // Constitutional Court decision text retrieval tool
 export const getConstitutionalDecisionTextSchema = z.object({
-  id: z.string().describe("헌재결정일련번호 (검색 결과에서 획득)"),
+  id: z.string().describe("헌재결정례일련번호 (검색 결과에서 획득)"),
   caseName: z.string().optional().describe("사건명 (선택사항, 검증용)"),
   apiKey: z.string().optional().describe("API 키"),
 });
@@ -132,14 +130,10 @@ export async function getConstitutionalDecisionText(
 
     const params = new URLSearchParams({
       OC: apiKey,
-      target: "ccJudg",
+      target: "detc",
       type: "JSON",
       ID: args.id,
     });
-
-    if (args.caseName) {
-      params.append("LM", args.caseName);
-    }
 
     const url = `https://www.law.go.kr/DRF/lawService.do?${params.toString()}`;
     const response = await fetch(url);
@@ -157,57 +151,39 @@ export async function getConstitutionalDecisionText(
       throw new Error("Failed to parse JSON response from API");
     }
 
-    if (!data.CcJudgService) {
+    if (!data.DetcService && !data.헌재결정례) {
       throw new Error("헌재결정례를 찾을 수 없거나 응답 형식이 올바르지 않습니다.");
     }
 
-    const decision = data.CcJudgService;
-    const basic = {
-      사건명: decision.사건명,
-      사건번호: decision.사건번호,
-      선고일자: decision.선고일자,
-      사건종류명: decision.사건종류명,
-      결정유형: decision.결정유형,
-      청구인: decision.청구인,
-      피청구인: decision.피청구인,
-    };
-    const content = {
-      판시사항: decision.판시사항,
-      결정요지: decision.결정요지 || decision.판결요지,
-      참조조문: decision.참조조문,
-      참조판례: decision.참조판례,
-      전문: decision.판례내용 || decision.결정내용,
-    };
+    const decision = data.DetcService || data.헌재결정례;
 
-    let output = `=== ${basic.사건명 || "헌재결정례"} ===\n\n`;
+    let output = `=== ${decision.사건명 || "헌재결정례"} ===\n\n`;
 
     output += `📋 기본 정보:\n`;
-    output += `  사건번호: ${basic.사건번호 || "N/A"}\n`;
-    output += `  선고일자: ${basic.선고일자 || "N/A"}\n`;
-    output += `  사건종류: ${basic.사건종류명 || "N/A"}\n`;
-    output += `  결정유형: ${basic.결정유형 || "N/A"}\n`;
-    if (basic.청구인) output += `  청구인: ${basic.청구인}\n`;
-    if (basic.피청구인) output += `  피청구인: ${basic.피청구인}\n`;
+    output += `  사건번호: ${decision.사건번호 || "N/A"}\n`;
+    output += `  종국일자: ${decision.종국일자 || decision.선고일자 || "N/A"}\n`;
+    if (decision.청구인) output += `  청구인: ${decision.청구인}\n`;
+    if (decision.피청구인) output += `  피청구인: ${decision.피청구인}\n`;
     output += `\n`;
 
-    if (content.판시사항) {
-      output += `📌 판시사항:\n${content.판시사항}\n\n`;
+    if (decision.판시사항) {
+      output += `📌 판시사항:\n${decision.판시사항}\n\n`;
     }
 
-    if (content.결정요지) {
-      output += `📝 결정요지:\n${content.결정요지}\n\n`;
+    if (decision.결정요지 || decision.판결요지) {
+      output += `📝 결정요지:\n${decision.결정요지 || decision.판결요지}\n\n`;
     }
 
-    if (content.참조조문) {
-      output += `📖 참조조문:\n${content.참조조문}\n\n`;
+    if (decision.참조조문) {
+      output += `📖 참조조문:\n${decision.참조조문}\n\n`;
     }
 
-    if (content.참조판례) {
-      output += `⚖️ 참조판례:\n${content.참조판례}\n\n`;
+    if (decision.참조판례) {
+      output += `⚖️ 참조판례:\n${decision.참조판례}\n\n`;
     }
 
-    if (content.전문) {
-      output += `📄 전문:\n${content.전문}\n`;
+    if (decision.판례내용 || decision.결정내용 || decision.전문) {
+      output += `📄 전문:\n${decision.판례내용 || decision.결정내용 || decision.전문}\n`;
     }
 
     return {
@@ -231,47 +207,48 @@ export async function getConstitutionalDecisionText(
 function parseConstitutionalXML(xml: string): any {
   const obj: any = {};
 
-  // Try different root element patterns
-  const searchMatch = xml.match(/<CcJudgSearch[^>]*>([\s\S]*?)<\/CcJudgSearch>/) ||
-                      xml.match(/<ccJudgSearch[^>]*>([\s\S]*?)<\/ccJudgSearch>/);
-  if (!searchMatch) return obj;
+  // Find root element using indexOf/lastIndexOf
+  const rootStartTag = "<DetcSearch>";
+  const rootEndTag = "</DetcSearch>";
+  const startIdx = xml.indexOf(rootStartTag);
+  const endIdx = xml.lastIndexOf(rootEndTag);
 
-  const content = searchMatch[1];
-  obj.CcJudgSearch = {};
+  if (startIdx === -1 || endIdx === -1) return obj;
+
+  const content = xml.substring(startIdx + rootStartTag.length, endIdx);
+  obj.DetcSearch = {};
 
   const totalCntMatch = content.match(/<totalCnt>([^<]*)<\/totalCnt>/);
   const pageMatch = content.match(/<page>([^<]*)<\/page>/);
 
-  obj.CcJudgSearch.totalCnt = totalCntMatch ? totalCntMatch[1] : "0";
-  obj.CcJudgSearch.page = pageMatch ? pageMatch[1] : "1";
+  obj.DetcSearch.totalCnt = totalCntMatch ? totalCntMatch[1] : "0";
+  obj.DetcSearch.page = pageMatch ? pageMatch[1] : "1";
 
-  // Extract ccJudg items
-  const itemMatches = content.matchAll(/<ccJudg[^>]*>([\s\S]*?)<\/ccJudg>/gi);
-  obj.CcJudgSearch.ccJudg = [];
+  // Extract Detc items (capital D)
+  const itemMatches = content.matchAll(/<Detc[^>]*>([\s\S]*?)<\/Detc>/g);
+  obj.DetcSearch.detc = [];
 
   for (const match of itemMatches) {
     const itemContent = match[1];
     const item: any = {};
 
     const extractTag = (tag: string) => {
-      const cdataRegex = new RegExp(`<${tag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\/${tag}>`, 'i');
+      const cdataRegex = new RegExp(`<${tag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>`, 'i');
       const cdataMatch = itemContent.match(cdataRegex);
       if (cdataMatch) return cdataMatch[1];
 
-      const regex = new RegExp(`<${tag}>([^<]*)<\/${tag}>`, 'i');
+      const regex = new RegExp(`<${tag}>([^<]*)<\\/${tag}>`, 'i');
       const match = itemContent.match(regex);
       return match ? match[1] : "";
     };
 
-    item.헌재결정일련번호 = extractTag("헌재결정일련번호") || extractTag("판례일련번호");
+    item.헌재결정례일련번호 = extractTag("헌재결정례일련번호");
     item.사건명 = extractTag("사건명");
     item.사건번호 = extractTag("사건번호");
-    item.선고일자 = extractTag("선고일자");
-    item.결정유형 = extractTag("결정유형") || extractTag("판결유형");
-    item.사건종류명 = extractTag("사건종류명");
-    item.판례상세링크 = extractTag("판례상세링크");
+    item.종국일자 = extractTag("종국일자");
+    item.헌재결정례상세링크 = extractTag("헌재결정례상세링크");
 
-    obj.CcJudgSearch.ccJudg.push(item);
+    obj.DetcSearch.detc.push(item);
   }
 
   return obj;
