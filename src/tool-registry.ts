@@ -101,7 +101,7 @@ export const allTools: McpTool[] = [
   // === 자치법규 ===
   {
     name: "search_ordinance",
-    description: "[자치법규] 조례/규칙 검색.",
+    description: "[자치법규] 조례/규칙 검색. 💡 공무원 휴직/복무/징계 등 결과 없으면 상위법령(지방공무원법) 검색 권장.",
     schema: SearchOrdinanceSchema,
     handler: searchOrdinance
   },
