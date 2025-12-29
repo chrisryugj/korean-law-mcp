@@ -1,6 +1,7 @@
 import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 import { parseInterpretationXML } from "../lib/xml-parser.js"
+import { truncateResponse } from "../lib/schemas.js"
 
 // Legal interpretation search tool - Search for statutory interpretations
 export const searchInterpretationsSchema = z.object({
@@ -192,7 +193,7 @@ export async function getInterpretationText(
     return {
       content: [{
         type: "text",
-        text: output
+        text: truncateResponse(output)
       }]
     };
   } catch (error) {

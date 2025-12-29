@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { truncateResponse } from "../lib/schemas.js";
 
 // Customs legal interpretation search tool - Search for customs law interpretations
 export const searchCustomsInterpretationsSchema = z.object({
@@ -204,7 +205,7 @@ export async function getCustomsInterpretationText(
     return {
       content: [{
         type: "text",
-        text: output
+        text: truncateResponse(output)
       }]
     };
   } catch (error) {

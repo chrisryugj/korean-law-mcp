@@ -27,13 +27,16 @@ export const ArticleHistorySchema = z.object({
   lawId: z.string().optional().describe("법령ID (예: '003440'). search_law 결과의 법령ID 사용. lawName과 함께 사용 불가"),
   lawName: z.string().optional().describe("법령명 (예: '공정거래법 시행령'). 법령명으로 검색 후 자동으로 법령ID를 찾음"),
   jo: z.string().optional().describe("조문번호 (예: '제38조', 선택)"),
-  regDt: z.string().optional().describe("조문 개정일 (YYYYMMDD, 선택)"),
-  fromRegDt: z.string().optional().describe("조회기간 시작일 (YYYYMMDD, 예: '20240101')"),
-  toRegDt: z.string().optional().describe("조회기간 종료일 (YYYYMMDD, 예: '20241231')"),
+  regDt: z.string().regex(/^\d{8}$/, "YYYYMMDD 형식").optional().describe("조문 개정일 (YYYYMMDD, 선택)"),
+  fromRegDt: z.string().regex(/^\d{8}$/, "YYYYMMDD 형식").optional().describe("조회기간 시작일 (YYYYMMDD, 예: '20240101')"),
+  toRegDt: z.string().regex(/^\d{8}$/, "YYYYMMDD 형식").optional().describe("조회기간 종료일 (YYYYMMDD, 예: '20241231')"),
   org: z.string().optional().describe("소관부처코드 (선택)"),
   page: z.number().optional().default(1).describe("페이지 번호 (기본값: 1)"),
   apiKey: z.string().optional().describe("API 키")
-})
+}).refine(
+  data => data.lawId || data.lawName,
+  { message: "lawId 또는 lawName 중 하나는 필수입니다" }
+)
 
 export type ArticleHistoryInput = z.infer<typeof ArticleHistorySchema>
 

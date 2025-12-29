@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { parseTaxTribunalXML } from "../lib/xml-parser.js";
+import { truncateResponse } from "../lib/schemas.js";
 
 // Tax tribunal decision search tool - Search for special administrative appeals decisions
 export const searchTaxTribunalDecisionsSchema = z.object({
@@ -215,7 +216,7 @@ export async function getTaxTribunalDecisionText(
     return {
       content: [{
         type: "text",
-        text: output
+        text: truncateResponse(output)
       }]
     };
   } catch (error) {

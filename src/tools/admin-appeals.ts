@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { parseAdminAppealXML as parseAdminAppealXMLShared } from "../lib/xml-parser.js"
+import { truncateResponse } from "../lib/schemas.js"
 
 // Administrative appeal decision search tool - Search for administrative tribunal rulings
 export const searchAdminAppealsSchema = z.object({
@@ -186,7 +187,7 @@ export async function getAdminAppealText(
     return {
       content: [{
         type: "text",
-        text: output
+        text: truncateResponse(output)
       }]
     };
   } catch (error) {

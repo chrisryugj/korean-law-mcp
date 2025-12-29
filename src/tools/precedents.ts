@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { parsePrecedentXML } from "../lib/xml-parser.js"
+import { truncateResponse } from "../lib/schemas.js"
 
 // Precedent search tool - Search for case law by keyword, court, or case number
 export const searchPrecedentsSchema = z.object({
@@ -210,7 +211,7 @@ export async function getPrecedentText(
   return {
     content: [{
       type: "text",
-      text: output
+      text: truncateResponse(output)
     }]
   };
   } catch (error) {

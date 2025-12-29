@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { parseConstitutionalXML } from "../lib/xml-parser.js";
+import { truncateResponse } from "../lib/schemas.js";
 
 // Constitutional Court decision search tool - Search for Constitutional Court rulings
 export const searchConstitutionalDecisionsSchema = z.object({
@@ -186,7 +187,7 @@ export async function getConstitutionalDecisionText(
     return {
       content: [{
         type: "text",
-        text: output
+        text: truncateResponse(output)
       }]
     };
   } catch (error) {
