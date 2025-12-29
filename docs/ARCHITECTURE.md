@@ -1,8 +1,10 @@
 # Korean Law MCP - System Architecture
 
-> **v1.4.0** | Last Updated: December 2025
+> **v1.6.0** | Last Updated: December 2025
 
 This document provides a comprehensive technical overview of the Korean Law MCP Server's architecture, data flows, and design decisions.
+
+> **Note**: 대규모 리팩토링 완료 (2025-12). 상세 내용은 [REFACTORING.md](REFACTORING.md) 참조.
 
 ---
 
@@ -37,40 +39,35 @@ This document provides a comprehensive technical overview of the Korean Law MCP 
                      ├────────────────────┤
                      │                    │
 ┌────────────────────▼────────────────────▼────────────────────┐
-│               Korean Law MCP Server (v1.4.0)                  │
+│               Korean Law MCP Server (v1.6.0)                  │
 │                                                               │
 │  ┌───────────────────────────────────────────────────────┐   │
-│  │           Tool Layer (33 Zod-Validated Tools)         │   │
+│  │     Tool Registry (58 Zod-Validated Tools)            │   │
+│  │         tool-registry.ts → allTools[]                 │   │
 │  ├───────────────────────────────────────────────────────┤   │
-│  │  Search (11)  │  Retrieval (9)  │  Analysis (9)       │   │
-│  │  Specialized (4) - Tax Tribunal & Customs             │   │
+│  │  Statutes (12) │ Case Law (11) │ Knowledge Base (7)   │   │
+│  │  Admin (4)     │ Committee (6) │ Analysis (8)         │   │
+│  │  Tax/Customs (4)│ English (2)  │ Utils (4)            │   │
 │  └───────────────────────────────────────────────────────┘   │
 │                             ▲                                 │
 │                             │                                 │
 │  ┌───────────────────────────────────────────────────────┐   │
-│  │            Business Logic Layer                       │   │
+│  │            Shared Libraries (src/lib/)                │   │
 │  ├───────────────────────────────────────────────────────┤   │
-│  │  • Search Normalizer (Abbreviation Resolution)        │   │
-│  │  • Law Parser (JO Code Conversion)                    │   │
-│  │  • Three-Tier Parser (Delegation Hierarchy)           │   │
+│  │  • xml-parser.ts    (6 domain parsers)                │   │
+│  │  • errors.ts        (LawApiError class)               │   │
+│  │  • schemas.ts       (date/size validation)            │   │
+│  │  • search-normalizer.ts (abbreviation resolution)     │   │
+│  │  • law-parser.ts    (JO code conversion)              │   │
 │  └───────────────────────────────────────────────────────┘   │
 │                             ▲                                 │
 │                             │                                 │
 │  ┌───────────────────────────────────────────────────────┐   │
-│  │            Cache Layer (SimpleCache)                  │   │
+│  │        API Client Layer (LawApiClient)                │   │
 │  ├───────────────────────────────────────────────────────┤   │
-│  │  • Search Results (1hr TTL)                           │   │
-│  │  • Article Text (24hr TTL)                            │   │
-│  │  • LRU Eviction (100 entries max)                     │   │
-│  └───────────────────────────────────────────────────────┘   │
-│                             ▲                                 │
-│                             │                                 │
-│  ┌───────────────────────────────────────────────────────┐   │
-│  │        API Client Layer (LawApiClient Singleton)      │   │
-│  ├───────────────────────────────────────────────────────┤   │
-│  │  • HTTP Request Construction                          │   │
-│  │  • URL Parameter Encoding                             │   │
-│  │  • Error Detection (HTML vs JSON/XML)                 │   │
+│  │  • fetch-with-retry.ts (30s timeout, 3 retries)       │   │
+│  │  • session-state.ts (per-session API key isolation)   │   │
+│  │  • Cache: 1hr search, 24hr text, LRU 100 entries      │   │
 │  └───────────────────────────────────────────────────────┘   │
 └───────────────────────────┬───────────────────────────────────┘
                             │
@@ -81,19 +78,20 @@ This document provides a comprehensive technical overview of the Korean Law MCP 
 │                    (law.go.kr Open API)                       │
 ├──────────────────────────────────────────────────────────────┤
 │  Endpoints:                                                   │
-│  • lawSearch.do  - Search (law/admrul/ordin/prec/expc)        │
-│  • lawService.do - Retrieve (eflaw/admrul/ordin/prec/expc)    │
+│  • lawSearch.do  - Search (law/admrul/ordin/prec/expc/...)   │
+│  • lawService.do - Retrieve (eflaw/admrul/ordin/prec/...)    │
 └──────────────────────────────────────────────────────────────┘
 ```
 
 ### Key Architectural Principles
 
-1. **Separation of Concerns**: Tools → Business Logic → Cache → API Client
-2. **Single Responsibility**: Each component has one primary function
-3. **Dependency Injection**: API client and cache injected into tools
+1. **Separation of Concerns**: Tools → Shared Libs → API Client
+2. **Single Responsibility**: Each file < 200 lines, one primary function
+3. **Centralized Tool Registry**: All 58 tools in `tool-registry.ts` array
 4. **Type Safety**: 100% TypeScript with strict mode + Zod validation
-5. **Performance First**: Multi-layer caching with intelligent TTLs
-6. **Error Resilience**: Graceful degradation at every layer
+5. **Session Isolation**: Per-session API key (no race conditions)
+6. **Network Resilience**: 30s timeout, 3 retries with exponential backoff
+7. **Error Standardization**: `LawApiError` class with suggestions
 
 ---
 

@@ -122,7 +122,7 @@ registerTools(server, apiClient)
 
 ---
 
-## Phase 3: 코드 통합 (⏳ 진행중)
+## Phase 3: 코드 통합 (✅ 완료)
 
 ### 3.1 xml-parser.ts (✅ 완료)
 **파일**: `src/lib/xml-parser.ts`
@@ -132,64 +132,37 @@ registerTools(server, apiClient)
 export function extractTag(content: string, tag: string): string
 export function parseSearchXML<T>(xml, rootTag, itemTag, fieldExtractor): {totalCnt, page, items}
 
-// 도메인별 파서
-export function parsePrecedentXML(xml: string)       // 판례
-export function parseInterpretationXML(xml: string)  // 해석례
-export function parseAdminAppealXML(xml: string)     // 행정심판
-export function parseConstitutionalXML(xml: string)  // 헌재결정
-export function parseTaxTribunalXML(xml: string)     // 조세심판
-export function parseCustomsXML(xml: string)         // 관세해석
+// 도메인별 파서 (6개)
+export function parsePrecedentXML(xml: string)       // 판례 (PrecSearch/prec)
+export function parseInterpretationXML(xml: string)  // 해석례 (Expc/expc)
+export function parseAdminAppealXML(xml: string)     // 행정심판 (Decc/decc)
+export function parseConstitutionalXML(xml: string)  // 헌재결정 (DetcSearch/Detc)
+export function parseTaxTribunalXML(xml: string)     // 조세심판 (Decc/decc)
+export function parseCustomsXML(xml: string)         // 관세해석 (CgmExpc/cgmExpc)
 ```
 
-### 3.2 도구별 XML 파싱 리팩토링 (❌ 대기)
-**대상 파일** (12개):
-- `precedents.ts` - parseXML() 제거, parsePrecedentXML() 사용
-- `interpretations.ts` - parseXML() 제거, parseInterpretationXML() 사용
-- `admin-appeals.ts`
-- `constitutional-decisions.ts`
-- `tax-tribunal-decisions.ts`
-- `customs-interpretations.ts`
-- `committee-decisions.ts`
-- `knowledge-base.ts`
-- `legal-terms.ts`
-- `life-law.ts`
-- `ordinance-search.ts`
-- `english-law.ts`
+### 3.2 도구별 XML 파싱 리팩토링 (✅ 완료)
+**완료된 파일** (5개):
+- ✅ `precedents.ts` - 281→226줄 (-20%)
+- ✅ `interpretations.ts` - 로컬 함수 제거
+- ✅ `admin-appeals.ts` - 257→201줄 (-22%)
+- ✅ `constitutional-decisions.ts` - 253→201줄 (-21%)
+- ✅ `tax-tribunal-decisions.ts` - 290→230줄 (-21%)
 
-**예시 변경**:
-```diff
-- import { DOMParser } from "@xmldom/xmldom"
-+ import { parsePrecedentXML } from "../lib/xml-parser.js"
+**남은 파일** (6개, 선택적 - 각각 200줄 미만):
+- `customs-interpretations.ts` - CgmExpc/cgmExpc 고유 구조
+- `committee-decisions.ts` - 3개 위원회별 구조
+- `legal-terms.ts`, `life-law.ts`, `ordinance-search.ts`, `english-law.ts`
 
-- function parseXML(xml: string): any {
--   // 50줄의 커스텀 파싱 로직
-- }
-
-- const parsed = parseXML(xmlText)
-+ const parsed = parsePrecedentXML(xmlText)
-```
-
-### 3.3 knowledge-base.ts 분리 (⏳ 진행중)
-**현재**: 641줄 (200줄 제한 위반)
+### 3.3 knowledge-base.ts 분리 (✅ 완료)
+**변경**: 641줄 → 520줄 (-19%)
 
 **생성된 파일**:
-- `src/tools/kb-utils.ts` ✅ - 공통 헬퍼 (extractTag, parseKBXML, fallbackTermSearch)
+- `src/tools/kb-utils.ts` - 공통 헬퍼 (extractTag, parseKBXML, fallbackTermSearch)
 
-**남은 작업**:
-1. knowledge-base.ts에서 kb-utils.ts import
-2. 중복 코드 제거
-3. (선택) 함수별 파일 분리
-
-**분리 계획**:
-```
-src/tools/
-├── kb-utils.ts         (✅ 생성됨) - 공통 유틸리티
-├── knowledge-base.ts   (수정 필요) - 메인 함수들
-└── (선택사항)
-    ├── kb-term-links.ts    - getDailyToLegal, getLegalToDaily
-    ├── kb-term-articles.ts - getTermArticles
-    └── kb-related-laws.ts  - getRelatedLaws
-```
+**적용된 변경**:
+- knowledge-base.ts에서 kb-utils.ts import
+- 중복 코드 제거
 
 ### 3.4 Schema 검증 보완 (❌ 대기)
 **대상**: 선택적 필수 조합이 있는 스키마들
@@ -208,44 +181,56 @@ export const ArticleHistorySchema = z.object({
 
 ---
 
-## Phase 4: Production Hardening (❌ 대기)
+## Phase 4: Production Hardening (✅ 완료)
 
-### 4.1 errors.ts
-**계획**: `src/lib/errors.ts`
+### 4.1 errors.ts (✅ 완료)
+**파일**: `src/lib/errors.ts`
 
 ```typescript
 export class LawApiError extends Error {
-  code: string
+  code: ErrorCode
   suggestions: string[]
+  format(): string  // 사용자 친화적 포맷
 }
 
 export const ErrorCodes = {
   NOT_FOUND: 'LAW_NOT_FOUND',
   INVALID_PARAM: 'INVALID_PARAMETER',
   API_ERROR: 'EXTERNAL_API_ERROR',
-  RATE_LIMITED: 'RATE_LIMITED'
+  RATE_LIMITED: 'RATE_LIMITED',
+  TIMEOUT: 'REQUEST_TIMEOUT',
+  PARSE_ERROR: 'PARSE_ERROR'
 }
 
-export function formatToolError(error: unknown, context: string): ToolResponse
+export function formatToolError(error: unknown, context?: string): ToolResponse
+export function notFoundError(lawName: string, suggestions?: string[]): LawApiError
+export function apiError(status: number, endpoint?: string): LawApiError
+export function invalidParamError(param: string, expected: string): LawApiError
 ```
 
-### 4.2 날짜 형식 검증
-**계획**: `src/lib/schemas.ts`
+### 4.2 schemas.ts (✅ 완료)
+**파일**: `src/lib/schemas.ts`
 
 ```typescript
+// 날짜 검증 (YYYYMMDD, 윤년 지원)
 export const dateSchema = z.string()
   .regex(/^\d{8}$/, "날짜 형식: YYYYMMDD")
   .refine(isValidDate, "유효하지 않은 날짜")
+
+export const optionalDateSchema = dateSchema.optional()
+export const paginationSchema = z.object({ display, page })
+
+// 응답 크기 제한
+export const MAX_RESPONSE_SIZE = 50000
+export function truncateResponse(text: string, maxSize?: number): string
 ```
 
-### 4.3 응답 크기 제한
-**현재**: `law-text.ts`만 50KB 제한
+### 4.3 응답 크기 제한 전역 적용 (❌ 대기)
+**현재**: `law-text.ts`만 적용
 
-**계획**: 모든 전문 조회 도구에 적용
-- get_precedent_text
-- get_interpretation_text
-- get_admin_appeal_text
-- get_constitutional_decision_text
+**계획**: 모든 전문 조회 도구에 `truncateResponse()` 적용
+- get_precedent_text, get_interpretation_text
+- get_admin_appeal_text, get_constitutional_decision_text
 - 등
 
 ---
@@ -257,9 +242,11 @@ export const dateSchema = z.string()
 |------|-------|------|
 | `src/lib/fetch-with-retry.ts` | ~80 | 재시도/타임아웃 |
 | `src/lib/session-state.ts` | ~25 | 세션 상태 관리 |
-| `src/lib/xml-parser.ts` | ~180 | 공통 XML 파싱 |
+| `src/lib/xml-parser.ts` | ~200 | 공통 XML 파싱 (6개 파서) |
+| `src/lib/errors.ts` | ~110 | 에러 표준화 |
+| `src/lib/schemas.ts` | ~65 | 날짜/응답크기 검증 |
 | `src/tool-registry.ts` | ~470 | 도구 등록 |
-| `src/tools/kb-utils.ts` | ~145 | KB 공통 유틸 |
+| `src/tools/kb-utils.ts` | ~150 | KB 공통 유틸 |
 
 ### 수정된 파일
 | 파일 | 변경 | 설명 |
@@ -268,21 +255,20 @@ export const dateSchema = z.string()
 | `src/lib/api-client.ts` | +15줄 | fetchWithRetry, 세션 API 키 |
 | `src/lib/types.ts` | +18줄 | McpTool 인터페이스 |
 | `src/server/http-server.ts` | ~50줄 변경 | 세션 관리 개선 |
+| `src/tools/precedents.ts` | 281→226줄 | -20%, 공통 파서 |
+| `src/tools/admin-appeals.ts` | 257→201줄 | -22%, 공통 파서 |
+| `src/tools/constitutional-decisions.ts` | 253→201줄 | -21%, 공통 파서 |
+| `src/tools/tax-tribunal-decisions.ts` | 290→230줄 | -21%, 공통 파서 |
+| `src/tools/knowledge-base.ts` | 641→520줄 | -19%, kb-utils 분리 |
 
 ---
 
-## 새 세션에서 이어가기
-
-### 명령어
-```
-리팩토링 이어서 진행해줘. docs/REFACTORING.md 확인하고 Phase 3.2부터 시작해.
-```
+## 남은 작업 (선택적)
 
 ### 우선순위
-1. **Phase 3.3** - knowledge-base.ts 분리 (641줄 → 200줄 미만)
-2. **Phase 3.2** - 12개 도구 XML 파싱 리팩토링
-3. **Phase 3.4** - Schema 검증 보완
-4. **Phase 4** - 에러 표준화, 날짜 검증, 응답 크기 제한
+1. **Phase 3.4** - Schema 검증 보완 (refine 추가)
+2. **Phase 4.3** - 응답 크기 제한 전역 적용
+3. **남은 6개 도구** - XML 파싱 리팩토링 (각각 200줄 미만이라 급하지 않음)
 
 ### 제약 조건
 - **수정 금지**: `search-normalizer.ts`, `law-parser.ts` (LexDiff 코드)
