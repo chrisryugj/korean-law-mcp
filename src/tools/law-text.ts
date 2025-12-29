@@ -7,6 +7,9 @@ import type { LawApiClient } from "../lib/api-client.js"
 import { buildJO } from "../lib/law-parser.js"
 import { lawCache } from "../lib/cache.js"
 
+// MCP 응답 크기 제한 (50KB) - 클라이언트 측 100-200KB 제한 대비 안전 마진
+const MAX_RESPONSE_SIZE = 50000
+
 export const GetLawTextSchema = z.object({
   mst: z.string().optional().describe("법령일련번호 (search_law에서 획득)"),
   lawId: z.string().optional().describe("법령ID (search_law에서 획득)"),
@@ -162,6 +165,41 @@ export async function getLawText(
       }
     }
 
+    // 조문 미지정 시 전체 법령 대신 목차(조문 제목 목록)만 반환
+    // 대형 법령(국가공무원법 등)의 "too large content" 에러 방지
+    if (!input.jo && articleUnits.length > 20) {
+      const tocItems: string[] = []
+      for (const unit of articleUnits) {
+        if (unit.조문여부 !== "조문") continue
+        const joNum = unit.조문번호 || ""
+        const joBranch = unit.조문가지번호 || ""
+        const joTitle = unit.조문제목 || ""
+        if (joNum) {
+          const displayNum = joBranch && joBranch !== "0" ? `제${joNum}조의${joBranch}` : `제${joNum}조`
+          tocItems.push(`${displayNum}${joTitle ? ` ${joTitle}` : ""}`)
+        }
+      }
+
+      let tocText = resultText
+      tocText += `📋 목차 (총 ${tocItems.length}개 조문)\n\n`
+      tocText += tocItems.join("\n")
+      tocText += `\n\n💡 특정 조문 조회: get_law_text(`
+      if (input.mst) {
+        tocText += `mst="${input.mst}", jo="제XX조")`
+      } else if (input.lawId) {
+        tocText += `lawId="${input.lawId}", jo="제XX조")`
+      }
+      tocText += `\n💡 여러 조문 일괄 조회: get_batch_articles 도구 사용`
+
+      lawCache.set(cacheKey, tocText)
+      return {
+        content: [{
+          type: "text",
+          text: tocText
+        }]
+      }
+    }
+
     // Helper: 중첩 배열 평탄화 후 문자열 결합 (<img> 태그 제외)
     const flattenContent = (value: any): string => {
       if (typeof value === "string") return value
@@ -289,6 +327,19 @@ export async function getLawText(
       if (finalContent) {
         const cleanContent = cleanHtml(finalContent)
         resultText += `${cleanContent}\n\n`
+      }
+    }
+
+    // 응답 크기 제한 - MCP 클라이언트 한계 대비
+    if (resultText.length > MAX_RESPONSE_SIZE) {
+      const articleCount = articleUnits.filter(u => u.조문여부 === "조문").length
+      resultText = resultText.slice(0, MAX_RESPONSE_SIZE)
+      resultText += `\n\n⚠️ 응답이 너무 길어 잘렸습니다 (${articleCount}개 조문 중 일부만 표시)`
+      resultText += `\n💡 특정 조문 조회: get_law_text(`
+      if (input.mst) {
+        resultText += `mst="${input.mst}", jo="제XX조")`
+      } else if (input.lawId) {
+        resultText += `lawId="${input.lawId}", jo="제XX조")`
       }
     }
 

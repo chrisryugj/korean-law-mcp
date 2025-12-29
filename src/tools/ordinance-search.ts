@@ -4,6 +4,7 @@
 
 import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
+import { normalizeLawSearchText } from "../lib/search-normalizer.js"
 
 export const SearchOrdinanceSchema = z.object({
   query: z.string().describe("검색할 자치법규명 (예: '서울', '환경')"),
@@ -18,8 +19,11 @@ export async function searchOrdinance(
   input: SearchOrdinanceInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
+    // 검색어 정규화 (약칭 해결, 오타 보정)
+    const normalizedQuery = normalizeLawSearchText(input.query)
+
     const xmlText = await apiClient.searchOrdinance({
-      query: input.query,
+      query: normalizedQuery,
       display: input.display || 20,
       apiKey: input.apiKey
     })

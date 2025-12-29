@@ -98,7 +98,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_law_text",
-        description: `[법령] 조문 조회. mst/lawId 필수(search_law에서). jo 생략시 전문 반환. 한글 조문번호 자동변환(제38조→003800).`,
+        description: `[법령] 조문 조회. mst/lawId 필수(search_law에서). jo 생략시 목차 반환(20조 초과 법령). 한글 조문번호 자동변환(제38조→003800).`,
         inputSchema: {
           type: "object",
           properties: {
