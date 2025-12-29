@@ -374,7 +374,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             partial: {
               type: "string",
-              description: "부분 입력된 법령명 부분 입력"
+              description: "부분 입력된 법령명"
             }
           },
           required: ["partial"]
@@ -388,7 +388,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             query: {
               type: "string",
-              description: "검색 키워드 키워드"
+              description: "검색 키워드"
             },
             court: {
               type: "string",
@@ -443,7 +443,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             query: {
               type: "string",
-              description: "검색 키워드 키워드"
+              description: "검색 키워드"
             },
             display: {
               type: "number",
@@ -501,7 +501,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               items: {
                 type: "string"
               },
-              description: "조문 번호 배열 조문 배열"
+              description: "조문 번호 배열 (예: ['제1조', '제2조'])"
             },
             efYd: {
               type: "string",
@@ -799,7 +799,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             query: {
               type: "string",
-              description: "검색 키워드 키워드"
+              description: "검색 키워드"
             },
             display: {
               type: "number",
@@ -862,7 +862,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             query: {
               type: "string",
-              description: "검색 키워드 키워드"
+              description: "검색 키워드"
             },
             display: {
               type: "number",
@@ -926,7 +926,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             query: {
               type: "string",
-              description: "검색 키워드 키워드"
+              description: "검색 키워드"
             },
             caseNumber: {
               type: "string",
@@ -977,7 +977,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             query: {
               type: "string",
-              description: "검색 키워드 키워드"
+              description: "검색 키워드"
             },
             display: {
               type: "number",
@@ -1075,7 +1075,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             query: {
               type: "string",
-              description: "검색할 법령용어 용어"
+              description: "검색할 법령용어"
             },
             display: {
               type: "number",
@@ -1129,7 +1129,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             query: {
               type: "string",
-              description: "검색 키워드 키워드"
+              description: "검색 키워드"
             },
             display: {
               type: "number",
@@ -1172,7 +1172,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             query: {
               type: "string",
-              description: "검색 키워드 키워드"
+              description: "검색 키워드"
             },
             display: {
               type: "number",
@@ -1215,7 +1215,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             query: {
               type: "string",
-              description: "검색 키워드 키워드"
+              description: "검색 키워드"
             },
             display: {
               type: "number",
