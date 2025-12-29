@@ -1,4 +1,5 @@
-import { z } from "zod";
+import { z } from "zod"
+import { parseAdminAppealXML as parseAdminAppealXMLShared } from "../lib/xml-parser.js"
 
 // Administrative appeal decision search tool - Search for administrative tribunal rulings
 export const searchAdminAppealsSchema = z.object({
@@ -41,16 +42,12 @@ export async function searchAdminAppeals(
     }
 
     const xmlText = await response.text();
-    const result = parseAdminAppealXML(xmlText);
 
-    if (!result.Decc) {
-      throw new Error("Invalid response format from API");
-    }
-
-    const data = result.Decc;
-    const totalCount = parseInt(data.totalCnt || "0");
-    const currentPage = parseInt(data.page || "1");
-    const appeals = data.decc ? (Array.isArray(data.decc) ? data.decc : [data.decc]) : [];
+    // 공통 파서 사용
+    const result = parseAdminAppealXMLShared(xmlText);
+    const totalCount = result.totalCnt;
+    const currentPage = result.page;
+    const appeals = result.items;
 
     if (totalCount === 0) {
       let errorMsg = "검색 결과가 없습니다.";
@@ -201,60 +198,4 @@ export async function getAdminAppealText(
       isError: true
     };
   }
-}
-
-// XML parser for Administrative appeal decisions
-function parseAdminAppealXML(xml: string): any {
-  const obj: any = {};
-
-  // Find root element using indexOf/lastIndexOf
-  const rootStartTag = "<Decc>";
-  const rootEndTag = "</Decc>";
-  const startIdx = xml.indexOf(rootStartTag);
-  const endIdx = xml.lastIndexOf(rootEndTag);
-
-  if (startIdx === -1 || endIdx === -1) return obj;
-
-  const content = xml.substring(startIdx + rootStartTag.length, endIdx);
-  obj.Decc = {};
-
-  const totalCntMatch = content.match(/<totalCnt>([^<]*)<\/totalCnt>/);
-  const pageMatch = content.match(/<page>([^<]*)<\/page>/);
-
-  obj.Decc.totalCnt = totalCntMatch ? totalCntMatch[1] : "0";
-  obj.Decc.page = pageMatch ? pageMatch[1] : "1";
-
-  // Extract decc items (lowercase)
-  const itemMatches = content.matchAll(/<decc[^>]*>([\s\S]*?)<\/decc>/g);
-  obj.Decc.decc = [];
-
-  for (const match of itemMatches) {
-    const itemContent = match[1];
-    const item: any = {};
-
-    const extractTag = (tag: string) => {
-      const cdataRegex = new RegExp(`<${tag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>`, 'i');
-      const cdataMatch = itemContent.match(cdataRegex);
-      if (cdataMatch) return cdataMatch[1];
-
-      const regex = new RegExp(`<${tag}>([^<]*)<\\/${tag}>`, 'i');
-      const match = itemContent.match(regex);
-      return match ? match[1] : "";
-    };
-
-    item.행정심판재결례일련번호 = extractTag("행정심판재결례일련번호");
-    item.사건명 = extractTag("사건명");
-    item.사건번호 = extractTag("사건번호");
-    item.처분일자 = extractTag("처분일자");
-    item.의결일자 = extractTag("의결일자");
-    item.처분청 = extractTag("처분청");
-    item.재결청 = extractTag("재결청");
-    item.재결구분명 = extractTag("재결구분명");
-    item.재결구분코드 = extractTag("재결구분코드");
-    item.행정심판례상세링크 = extractTag("행정심판례상세링크");
-
-    obj.Decc.decc.push(item);
-  }
-
-  return obj;
 }

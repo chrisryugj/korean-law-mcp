@@ -8,13 +8,36 @@ import type { Server } from "@modelcontextprotocol/sdk/server/index.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
 import { InMemoryEventStore } from "@modelcontextprotocol/sdk/examples/shared/inMemoryEventStore.js"
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js"
+import { setCurrentSessionId, setSessionApiKey, deleteSession } from "../lib/session-state.js"
+
+// 세션 정보 (Transport + 마지막 접근 시간)
+interface SessionInfo {
+  transport: StreamableHTTPServerTransport
+  lastAccess: number
+}
+
+// 세션 맵
+const sessions = new Map<string, SessionInfo>()
 
 export async function startHTTPServer(server: Server, port: number) {
   const app = express()
   app.use(express.json())
 
-  // 세션 ID별 Transport 맵
-  const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {}
+  // 30분 idle 세션 자동 정리 (5분마다 체크)
+  const SESSION_MAX_IDLE = 30 * 60 * 1000 // 30분
+  setInterval(() => {
+    const now = Date.now()
+    for (const [sessionId, session] of sessions) {
+      if (now - session.lastAccess > SESSION_MAX_IDLE) {
+        console.error(`[Session Cleanup] Removing idle session: ${sessionId}`)
+        try {
+          session.transport.close()
+        } catch { /* ignore */ }
+        sessions.delete(sessionId)
+        deleteSession(sessionId)
+      }
+    }
+  }, 5 * 60 * 1000)
 
   // CORS 설정
   app.use((req, res, next) => {
@@ -50,8 +73,6 @@ export async function startHTTPServer(server: Server, port: number) {
     console.error(`[POST /mcp] Received request`)
 
     // Extract API key from various possible header locations
-    // PlayMCP converts field names to lowercase (apiKey → apikey, LAW_OC → law_oc)
-    // But also check uppercase variants for manual header injection
     const apiKeyFromHeader =
       req.headers["apikey"] ||
       req.headers["law_oc"] ||
@@ -61,19 +82,25 @@ export async function startHTTPServer(server: Server, port: number) {
       req.headers["authorization"]?.replace(/^Bearer\s+/i, "") ||
       req.headers["x-law-oc"]
 
-    if (apiKeyFromHeader) {
-      process.env.LAW_OC = apiKeyFromHeader as string
-      console.error(`[POST /mcp] ✓ API Key configured from HTTP header`)
-    }
-
     try {
       const sessionId = req.headers["mcp-session-id"] as string | undefined
       let transport: StreamableHTTPServerTransport
 
-      if (sessionId && transports[sessionId]) {
+      const existingSession = sessionId ? sessions.get(sessionId) : undefined
+
+      if (existingSession) {
         // 기존 세션 재사용
         console.error(`[POST /mcp] Reusing session: ${sessionId}`)
-        transport = transports[sessionId]
+        transport = existingSession.transport
+        existingSession.lastAccess = Date.now()
+
+        // API 키 업데이트 (헤더에서 제공된 경우)
+        if (apiKeyFromHeader) {
+          setSessionApiKey(sessionId!, apiKeyFromHeader as string)
+        }
+
+        // 현재 세션 ID 설정 (도구 호출에서 사용)
+        setCurrentSessionId(sessionId)
       } else if (!sessionId && isInitializeRequest(req.body)) {
         // 새 세션 초기화
         console.error(`[POST /mcp] New initialization request`)
@@ -85,16 +112,24 @@ export async function startHTTPServer(server: Server, port: number) {
           eventStore,
           onsessioninitialized: (sid) => {
             console.error(`[POST /mcp] Session initialized: ${sid}`)
-            transports[sid] = transport
+            sessions.set(sid, {
+              transport,
+              lastAccess: Date.now()
+            })
+            if (apiKeyFromHeader) {
+              setSessionApiKey(sid, apiKeyFromHeader as string)
+            }
+            setCurrentSessionId(sid)
           }
         })
 
         // Transport 종료 시 정리
         transport.onclose = () => {
           const sid = transport.sessionId
-          if (sid && transports[sid]) {
+          if (sid && sessions.has(sid)) {
             console.error(`[POST /mcp] Transport closed for session ${sid}`)
-            delete transports[sid]
+            sessions.delete(sid)
+            deleteSession(sid)
           }
         }
 
@@ -130,6 +165,8 @@ export async function startHTTPServer(server: Server, port: number) {
           id: null
         })
       }
+    } finally {
+      setCurrentSessionId(undefined)
     }
   })
 
@@ -139,19 +176,21 @@ export async function startHTTPServer(server: Server, port: number) {
 
     try {
       const sessionId = req.headers["mcp-session-id"] as string | undefined
-      if (!sessionId || !transports[sessionId]) {
+      const session = sessionId ? sessions.get(sessionId) : undefined
+
+      if (!session) {
         console.error(`[GET /mcp] Invalid session ID: ${sessionId}`)
         res.status(400).send("Invalid or missing session ID")
         return
       }
 
-      const transport = transports[sessionId]
+      session.lastAccess = Date.now()
 
       res.on("close", () => {
         console.error(`[GET /mcp] SSE connection closed for session ${sessionId}`)
       })
 
-      await transport.handleRequest(req, res)
+      await session.transport.handleRequest(req, res)
     } catch (error) {
       console.error("[GET /mcp] Error:", error)
       if (!res.headersSent) {
@@ -166,20 +205,18 @@ export async function startHTTPServer(server: Server, port: number) {
 
     try {
       const sessionId = req.headers["mcp-session-id"] as string | undefined
-      if (!sessionId || !transports[sessionId]) {
+      const session = sessionId ? sessions.get(sessionId) : undefined
+
+      if (!session) {
         console.error(`[DELETE /mcp] Invalid session ID: ${sessionId}`)
         res.status(400).send("Invalid or missing session ID")
         return
       }
 
-      const transport = transports[sessionId]
-      await transport.handleRequest(req, res)
-
-      setTimeout(() => {
-        if (!transports[sessionId]) {
-          console.error(`[DELETE /mcp] Transport removed for session ${sessionId}`)
-        }
-      }, 100)
+      await session.transport.handleRequest(req, res)
+      sessions.delete(sessionId!)
+      deleteSession(sessionId!)
+      console.error(`[DELETE /mcp] Session removed: ${sessionId}`)
     } catch (error) {
       console.error("[DELETE /mcp] Error:", error)
       if (!res.headersSent) {
@@ -200,10 +237,11 @@ export async function startHTTPServer(server: Server, port: number) {
   process.on("SIGINT", async () => {
     console.error("Shutting down server...")
 
-    for (const sessionId in transports) {
+    for (const [sessionId, session] of sessions) {
       try {
-        await transports[sessionId].close()
-        delete transports[sessionId]
+        await session.transport.close()
+        sessions.delete(sessionId)
+        deleteSession(sessionId)
       } catch (error) {
         console.error(`Error closing transport for session ${sessionId}:`, error)
       }

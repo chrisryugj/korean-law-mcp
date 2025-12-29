@@ -1,4 +1,5 @@
-import { z } from "zod";
+import { z } from "zod"
+import { parsePrecedentXML } from "../lib/xml-parser.js"
 
 // Precedent search tool - Search for case law by keyword, court, or case number
 export const searchPrecedentsSchema = z.object({
@@ -46,17 +47,11 @@ export async function searchPrecedents(
 
   const xmlText = await response.text();
 
-  // Simple XML parsing
-  const result = parseXML(xmlText);
-
-  if (!result.PrecSearch) {
-    throw new Error("Invalid response format from API");
-  }
-
-  const data = result.PrecSearch;
-  const totalCount = parseInt(data.totalCnt || "0");
-  const currentPage = parseInt(data.page || "1");
-  const precs = data.prec ? (Array.isArray(data.prec) ? data.prec : [data.prec]) : [];
+  // 공통 파서 사용
+  const result = parsePrecedentXML(xmlText);
+  const totalCount = result.totalCnt;
+  const currentPage = result.page;
+  const precs = result.items;
 
   if (totalCount === 0) {
     let errorMsg = "검색 결과가 없습니다."
@@ -229,53 +224,3 @@ export async function getPrecedentText(
   }
 }
 
-// Simple XML parser helper
-function parseXML(xml: string): any {
-  const obj: any = {};
-
-  // Extract PrecSearch
-  const precSearchMatch = xml.match(/<PrecSearch[^>]*>([\s\S]*?)<\/PrecSearch>/);
-  if (!precSearchMatch) return obj;
-
-  const content = precSearchMatch[1];
-  obj.PrecSearch = {};
-
-  // Extract totalCnt and page
-  const totalCntMatch = content.match(/<totalCnt>([^<]*)<\/totalCnt>/);
-  const pageMatch = content.match(/<page>([^<]*)<\/page>/);
-
-  obj.PrecSearch.totalCnt = totalCntMatch ? totalCntMatch[1] : "0";
-  obj.PrecSearch.page = pageMatch ? pageMatch[1] : "1";
-
-  // Extract prec items (with id attribute)
-  const precMatches = content.matchAll(/<prec[^>]*>([\s\S]*?)<\/prec>/g);
-  obj.PrecSearch.prec = [];
-
-  for (const match of precMatches) {
-    const precContent = match[1];
-    const prec: any = {};
-
-    const extractTag = (tag: string) => {
-      // CDATA 지원
-      const cdataRegex = new RegExp(`<${tag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\/${tag}>`);
-      const cdataMatch = precContent.match(cdataRegex);
-      if (cdataMatch) return cdataMatch[1];
-
-      const regex = new RegExp(`<${tag}>([^<]*)<\/${tag}>`);
-      const match = precContent.match(regex);
-      return match ? match[1] : "";
-    };
-
-    prec.판례일련번호 = extractTag("판례일련번호");
-    prec.판례명 = extractTag("사건명");  // ← 수정: 사건명 사용
-    prec.사건번호 = extractTag("사건번호");
-    prec.법원명 = extractTag("법원명");
-    prec.선고일자 = extractTag("선고일자");
-    prec.판결유형 = extractTag("판결유형");
-    prec.판례상세링크 = extractTag("판례상세링크");
-
-    obj.PrecSearch.prec.push(prec);
-  }
-
-  return obj;
-}

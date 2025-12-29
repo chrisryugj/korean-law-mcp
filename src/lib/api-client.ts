@@ -3,6 +3,8 @@
  */
 
 import { normalizeLawSearchText, resolveLawAlias } from "./search-normalizer.js"
+import { fetchWithRetry } from "./fetch-with-retry.js"
+import { currentSessionId, getSessionApiKey } from "./session-state.js"
 
 const LAW_API_BASE = "https://www.law.go.kr/DRF"
 
@@ -14,10 +16,15 @@ export class LawApiClient {
   }
 
   /**
-   * API 키 결정 (요청별 키 우선, 없으면 환경변수, 마지막으로 기본 키)
+   * API 키 결정 순서:
+   * 1. 요청별 override 키
+   * 2. 현재 세션의 API 키 (HTTP 모드)
+   * 3. 환경변수 LAW_OC
+   * 4. 생성자에서 받은 기본 키
    */
   private getApiKey(overrideKey?: string): string {
-    const key = overrideKey || process.env.LAW_OC || this.defaultApiKey
+    const sessionApiKey = currentSessionId ? getSessionApiKey(currentSessionId) : undefined
+    const key = overrideKey || sessionApiKey || process.env.LAW_OC || this.defaultApiKey
     if (!key) {
       throw new Error("API 키가 필요합니다. 법제처(https://www.law.go.kr/DRF/lawService.do)에서 발급받으세요.")
     }
@@ -40,7 +47,7 @@ export class LawApiClient {
     })
 
     const url = `${LAW_API_BASE}/lawSearch.do?${params.toString()}`
-    const response = await fetch(url)
+    const response = await fetchWithRetry(url)
 
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`)
@@ -71,7 +78,7 @@ export class LawApiClient {
     if (params.efYd) apiParams.append("efYd", params.efYd)
 
     const url = `${LAW_API_BASE}/lawService.do?${apiParams.toString()}`
-    const response = await fetch(url)
+    const response = await fetchWithRetry(url)
 
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`)
@@ -128,7 +135,7 @@ export class LawApiClient {
     if (params.ln) apiParams.append("LN", params.ln)
 
     const url = `${LAW_API_BASE}/lawService.do?${apiParams.toString()}`
-    const response = await fetch(url)
+    const response = await fetchWithRetry(url)
 
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`)
@@ -157,7 +164,7 @@ export class LawApiClient {
     if (params.lawId) apiParams.append("ID", params.lawId)
 
     const url = `${LAW_API_BASE}/lawService.do?${apiParams.toString()}`
-    const response = await fetch(url)
+    const response = await fetchWithRetry(url)
 
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`)
@@ -184,7 +191,7 @@ export class LawApiClient {
     if (params.knd) apiParams.append("knd", params.knd)
 
     const url = `${LAW_API_BASE}/lawSearch.do?${apiParams.toString()}`
-    const response = await fetch(url)
+    const response = await fetchWithRetry(url)
 
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`)
@@ -205,7 +212,7 @@ export class LawApiClient {
     })
 
     const url = `${LAW_API_BASE}/lawService.do?${apiParams.toString()}`
-    const response = await fetch(url)
+    const response = await fetchWithRetry(url)
 
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`)
@@ -253,7 +260,7 @@ export class LawApiClient {
     }
 
     const url = `${LAW_API_BASE}/lawSearch.do?${apiParams.toString()}`
-    const response = await fetch(url)
+    const response = await fetchWithRetry(url)
 
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`)
@@ -303,7 +310,7 @@ export class LawApiClient {
     })
 
     const url = `${LAW_API_BASE}/lawSearch.do?${apiParams.toString()}`
-    const response = await fetch(url)
+    const response = await fetchWithRetry(url)
 
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`)
@@ -324,7 +331,7 @@ export class LawApiClient {
     })
 
     const url = `${LAW_API_BASE}/lawService.do?${apiParams.toString()}`
-    const response = await fetch(url)
+    const response = await fetchWithRetry(url)
 
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`)
@@ -367,7 +374,7 @@ export class LawApiClient {
     if (params.page) apiParams.append("page", params.page.toString())
 
     const url = `${LAW_API_BASE}/lawSearch.do?${apiParams.toString()}`
-    const response = await fetch(url)
+    const response = await fetchWithRetry(url)
 
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`)
@@ -398,7 +405,7 @@ export class LawApiClient {
     if (params.page) apiParams.append("page", params.page.toString())
 
     const url = `${LAW_API_BASE}/lawSearch.do?${apiParams.toString()}`
-    const response = await fetch(url)
+    const response = await fetchWithRetry(url)
 
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`)

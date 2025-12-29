@@ -1,5 +1,6 @@
-import { z } from "zod";
+import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
+import { parseInterpretationXML } from "../lib/xml-parser.js"
 
 // Legal interpretation search tool - Search for statutory interpretations
 export const searchInterpretationsSchema = z.object({
@@ -43,17 +44,11 @@ export async function searchInterpretations(
 
     const xmlText = await response.text();
 
-    // Simple XML parsing
-    const result = parseXML(xmlText);
-
-    if (!result.LawSearch) {
-      throw new Error("Invalid response format from API");
-    }
-
-    const data = result.LawSearch;
-    const totalCount = parseInt(data.totalCnt || "0");
-    const currentPage = parseInt(data.page || "1");
-    const expcs = data.expc ? (Array.isArray(data.expc) ? data.expc : [data.expc]) : [];
+    // 공통 파서 사용
+    const result = parseInterpretationXML(xmlText);
+    const totalCount = result.totalCnt;
+    const currentPage = result.page;
+    const expcs = result.items;
 
     if (totalCount === 0) {
       let errorMsg = "검색 결과가 없습니다."
@@ -211,52 +206,3 @@ export async function getInterpretationText(
   }
 }
 
-// Simple XML parser helper
-function parseXML(xml: string): any {
-  const obj: any = {};
-
-  // Extract Expc (not LawSearch!)
-  const expcMatch = xml.match(/<Expc[^>]*>([\s\S]*?)<\/Expc>/);
-  if (!expcMatch) return obj;
-
-  const content = expcMatch[1];  // ← 수정
-  obj.LawSearch = {};
-
-  // Extract totalCnt and page
-  const totalCntMatch = content.match(/<totalCnt>([^<]*)<\/totalCnt>/);
-  const pageMatch = content.match(/<page>([^<]*)<\/page>/);
-
-  obj.LawSearch.totalCnt = totalCntMatch ? totalCntMatch[1] : "0";
-  obj.LawSearch.page = pageMatch ? pageMatch[1] : "1";
-
-  // Extract expc items
-  const expcMatches = content.matchAll(/<expc[^>]*>([\s\S]*?)<\/expc>/g);
-  obj.LawSearch.expc = [];
-
-  for (const match of expcMatches) {
-    const expcContent = match[1];
-    const expc: any = {};
-
-    const extractTag = (tag: string) => {
-      // CDATA 지원
-      const cdataRegex = new RegExp(`<${tag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\/${tag}>`);
-      const cdataMatch = expcContent.match(cdataRegex);
-      if (cdataMatch) return cdataMatch[1];
-
-      const regex = new RegExp(`<${tag}>([^<]*)<\/${tag}>`);
-      const match = expcContent.match(regex);
-      return match ? match[1] : "";
-    };
-
-    expc.법령해석례일련번호 = extractTag("법령해석례일련번호");
-    expc.안건명 = extractTag("안건명");
-    expc.법령해석례번호 = extractTag("안건번호");  // ← 수정: 안건번호 사용
-    expc.회신일자 = extractTag("회신일자");
-    expc.해석기관명 = extractTag("회신기관명");  // ← 수정: 회신기관명 사용
-    expc.법령해석례상세링크 = extractTag("법령해석례상세링크");
-
-    obj.LawSearch.expc.push(expc);
-  }
-
-  return obj;
-}

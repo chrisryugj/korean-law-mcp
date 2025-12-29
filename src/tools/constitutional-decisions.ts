@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseConstitutionalXML } from "../lib/xml-parser.js";
 
 // Constitutional Court decision search tool - Search for Constitutional Court rulings
 export const searchConstitutionalDecisionsSchema = z.object({
@@ -43,16 +44,12 @@ export async function searchConstitutionalDecisions(
     }
 
     const xmlText = await response.text();
+
+    // 공통 파서 사용
     const result = parseConstitutionalXML(xmlText);
-
-    if (!result.DetcSearch) {
-      throw new Error("Invalid response format from API");
-    }
-
-    const data = result.DetcSearch;
-    const totalCount = parseInt(data.totalCnt || "0");
-    const currentPage = parseInt(data.page || "1");
-    const decisions = data.detc ? (Array.isArray(data.detc) ? data.detc : [data.detc]) : [];
+    const totalCount = result.totalCnt;
+    const currentPage = result.page;
+    const decisions = result.items;
 
     if (totalCount === 0) {
       let errorMsg = "검색 결과가 없습니다.";
@@ -201,55 +198,4 @@ export async function getConstitutionalDecisionText(
       isError: true
     };
   }
-}
-
-// XML parser for Constitutional Court decisions
-function parseConstitutionalXML(xml: string): any {
-  const obj: any = {};
-
-  // Find root element using indexOf/lastIndexOf
-  const rootStartTag = "<DetcSearch>";
-  const rootEndTag = "</DetcSearch>";
-  const startIdx = xml.indexOf(rootStartTag);
-  const endIdx = xml.lastIndexOf(rootEndTag);
-
-  if (startIdx === -1 || endIdx === -1) return obj;
-
-  const content = xml.substring(startIdx + rootStartTag.length, endIdx);
-  obj.DetcSearch = {};
-
-  const totalCntMatch = content.match(/<totalCnt>([^<]*)<\/totalCnt>/);
-  const pageMatch = content.match(/<page>([^<]*)<\/page>/);
-
-  obj.DetcSearch.totalCnt = totalCntMatch ? totalCntMatch[1] : "0";
-  obj.DetcSearch.page = pageMatch ? pageMatch[1] : "1";
-
-  // Extract Detc items (capital D)
-  const itemMatches = content.matchAll(/<Detc[^>]*>([\s\S]*?)<\/Detc>/g);
-  obj.DetcSearch.detc = [];
-
-  for (const match of itemMatches) {
-    const itemContent = match[1];
-    const item: any = {};
-
-    const extractTag = (tag: string) => {
-      const cdataRegex = new RegExp(`<${tag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>`, 'i');
-      const cdataMatch = itemContent.match(cdataRegex);
-      if (cdataMatch) return cdataMatch[1];
-
-      const regex = new RegExp(`<${tag}>([^<]*)<\\/${tag}>`, 'i');
-      const match = itemContent.match(regex);
-      return match ? match[1] : "";
-    };
-
-    item.헌재결정례일련번호 = extractTag("헌재결정례일련번호");
-    item.사건명 = extractTag("사건명");
-    item.사건번호 = extractTag("사건번호");
-    item.종국일자 = extractTag("종국일자");
-    item.헌재결정례상세링크 = extractTag("헌재결정례상세링크");
-
-    obj.DetcSearch.detc.push(item);
-  }
-
-  return obj;
 }

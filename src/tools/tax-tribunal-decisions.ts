@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseTaxTribunalXML } from "../lib/xml-parser.js";
 
 // Tax tribunal decision search tool - Search for special administrative appeals decisions
 export const searchTaxTribunalDecisionsSchema = z.object({
@@ -50,17 +51,11 @@ export async function searchTaxTribunalDecisions(
 
     const xmlText = await response.text();
 
-    // Simple XML parsing
-    const result = parseXML(xmlText);
-
-    if (!result.TtSpecialDeccSearch) {
-      throw new Error("Invalid response format from API");
-    }
-
-    const data = result.TtSpecialDeccSearch;
-    const totalCount = parseInt(data.totalCnt || "0");
-    const currentPage = parseInt(data.page || "1");
-    const deccs = data.decc ? (Array.isArray(data.decc) ? data.decc : [data.decc]) : [];
+    // 공통 파서 사용
+    const result = parseTaxTribunalXML(xmlText);
+    const totalCount = result.totalCnt;
+    const currentPage = result.page;
+    const deccs = result.items;
 
     if (totalCount === 0) {
       return {
@@ -232,58 +227,4 @@ export async function getTaxTribunalDecisionText(
       isError: true
     };
   }
-}
-
-// Simple XML parser helper
-function parseXML(xml: string): any {
-  const obj: any = {};
-
-  // Extract Decc (actual API response uses <Decc>, not <TtSpecialDeccSearch>)
-  const searchMatch = xml.match(/<Decc[^>]*>([\s\S]*?)<\/Decc>/);
-  if (!searchMatch) return obj;
-
-  const content = searchMatch[1];
-  obj.TtSpecialDeccSearch = {};
-
-  // Extract totalCnt and page
-  const totalCntMatch = content.match(/<totalCnt>([^<]*)<\/totalCnt>/);
-  const pageMatch = content.match(/<page>([^<]*)<\/page>/);
-
-  obj.TtSpecialDeccSearch.totalCnt = totalCntMatch ? totalCntMatch[1] : "0";
-  obj.TtSpecialDeccSearch.page = pageMatch ? pageMatch[1] : "1";
-
-  // Extract decc items
-  const deccMatches = content.matchAll(/<decc[^>]*>([\s\S]*?)<\/decc>/g);
-  obj.TtSpecialDeccSearch.decc = [];
-
-  for (const match of deccMatches) {
-    const deccContent = match[1];
-    const decc: any = {};
-
-    const extractTag = (tag: string) => {
-      // CDATA support
-      const cdataRegex = new RegExp(`<${tag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\/${tag}>`);
-      const cdataMatch = deccContent.match(cdataRegex);
-      if (cdataMatch) return cdataMatch[1];
-
-      const regex = new RegExp(`<${tag}>([^<]*)<\/${tag}>`);
-      const match = deccContent.match(regex);
-      return match ? match[1] : "";
-    };
-
-    decc.특별행정심판재결례일련번호 = extractTag("특별행정심판재결례일련번호");
-    decc.사건명 = extractTag("사건명");
-    decc.청구번호 = extractTag("청구번호");
-    decc.처분일자 = extractTag("처분일자");
-    decc.의결일자 = extractTag("의결일자");
-    decc.처분청 = extractTag("처분청");
-    decc.재결청 = extractTag("재결청");
-    decc.재결구분명 = extractTag("재결구분명");
-    decc.재결구분코드 = extractTag("재결구분코드");
-    decc.행정심판재결례상세링크 = extractTag("행정심판재결례상세링크");
-
-    obj.TtSpecialDeccSearch.decc.push(decc);
-  }
-
-  return obj;
 }
