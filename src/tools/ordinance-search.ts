@@ -4,7 +4,7 @@
 
 import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
-import { normalizeLawSearchText } from "../lib/search-normalizer.js"
+import { normalizeLawSearchText, expandOrdinanceQuery } from "../lib/search-normalizer.js"
 
 export const SearchOrdinanceSchema = z.object({
   query: z.string().describe("검색할 자치법규명 (예: '서울', '환경')"),
@@ -22,29 +22,57 @@ export async function searchOrdinance(
     // 검색어 정규화 (약칭 해결, 오타 보정)
     const normalizedQuery = normalizeLawSearchText(input.query)
 
-    const xmlText = await apiClient.searchOrdinance({
+    // 1차 검색 시도
+    let xmlText = await apiClient.searchOrdinance({
       query: normalizedQuery,
       display: input.display || 20,
       apiKey: input.apiKey
     })
 
-    // Simple XML parsing
-    const result = parseOrdinanceXML(xmlText)
+    let result = parseOrdinanceXML(xmlText)
+    let totalCount = parseInt(result.OrdinSearch?.totalCnt || "0")
+    let usedQuery = normalizedQuery
+
+    // 검색 결과 없으면 확장 쿼리로 자동 재시도
+    if (totalCount === 0) {
+      const { expanded } = expandOrdinanceQuery(input.query)
+
+      for (const expandedQuery of expanded) {
+        console.log(`[search_ordinance] 재시도: "${expandedQuery}"`)
+
+        xmlText = await apiClient.searchOrdinance({
+          query: expandedQuery,
+          display: input.display || 20,
+          apiKey: input.apiKey
+        })
+
+        result = parseOrdinanceXML(xmlText)
+        totalCount = parseInt(result.OrdinSearch?.totalCnt || "0")
+
+        if (totalCount > 0) {
+          console.log(`[search_ordinance] ✅ "${expandedQuery}"로 ${totalCount}건 발견`)
+          usedQuery = expandedQuery
+          break
+        }
+      }
+    }
 
     if (!result.OrdinSearch) {
       throw new Error("Invalid response format from API")
     }
 
     const data = result.OrdinSearch
-    const totalCount = parseInt(data.totalCnt || "0")
     const currentPage = parseInt(data.page || "1")
     const ordinances = data.ordin ? (Array.isArray(data.ordin) ? data.ordin : [data.ordin]) : []
 
     if (totalCount === 0) {
+      // 확장 검색도 실패한 경우, 시도한 쿼리들 안내
+      const { expanded } = expandOrdinanceQuery(input.query)
+      const triedQueries = [normalizedQuery, ...expanded].slice(0, 3).join("', '")
       return {
         content: [{
           type: "text",
-          text: `'${input.query}' 검색 결과가 없습니다.`
+          text: `'${input.query}' 검색 결과가 없습니다.\n\n시도한 검색어: '${triedQueries}'\n\n💡 다른 키워드로 다시 검색해보세요.`
         }]
       }
     }
