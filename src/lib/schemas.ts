@@ -50,6 +50,17 @@ export const paginationSchema = z.object({
 })
 
 /**
+ * 날짜 포맷터 (YYYYMMDD → "2024년 1월 1일")
+ */
+export function formatDateKorean(dateStr: string | undefined | null): string {
+  if (!dateStr || dateStr.length < 8) return dateStr || "N/A"
+  const y = dateStr.substring(0, 4)
+  const m = parseInt(dateStr.substring(4, 6), 10)
+  const d = parseInt(dateStr.substring(6, 8), 10)
+  return `${y}년 ${m}월 ${d}일`
+}
+
+/**
  * 응답 크기 제한 (50KB)
  */
 export const MAX_RESPONSE_SIZE = 50000

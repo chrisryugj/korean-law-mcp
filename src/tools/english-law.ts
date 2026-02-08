@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { truncateResponse } from "../lib/schemas.js";
 
 // English law search tool - Search for English translations of Korean laws
 export const searchEnglishLawSchema = z.object({
@@ -17,30 +18,19 @@ export async function searchEnglishLaw(
   args: SearchEnglishLawInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const apiKey = args.apiKey || process.env.LAW_OC;
-    if (!apiKey) {
-      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 LAW_OC 환경변수를 설정하세요.");
-    }
-
-    const params = new URLSearchParams({
-      OC: apiKey,
-      target: "elaw",
-      type: "XML",
+    const extraParams: Record<string, string> = {
       display: (args.display || 20).toString(),
       page: (args.page || 1).toString(),
+    };
+    if (args.query) extraParams.query = args.query;
+    if (args.sort) extraParams.sort = args.sort;
+
+    const xmlText = await apiClient.fetchApi({
+      endpoint: "lawSearch.do",
+      target: "elaw",
+      extraParams,
+      apiKey: args.apiKey,
     });
-
-    if (args.query) params.append("query", args.query);
-    if (args.sort) params.append("sort", args.sort);
-
-    const url = `https://www.law.go.kr/DRF/lawSearch.do?${params.toString()}`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    const xmlText = await response.text();
     const result = parseEnglishLawXML(xmlText);
 
     if (!result.ElawSearch) {
@@ -118,33 +108,22 @@ export async function getEnglishLawText(
   args: GetEnglishLawTextInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const apiKey = args.apiKey || process.env.LAW_OC;
-    if (!apiKey) {
-      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 LAW_OC 환경변수를 설정하세요.");
-    }
-
     if (!args.lawId && !args.mst && !args.lawName) {
       throw new Error("lawId, mst, 또는 lawName 중 하나가 필요합니다.");
     }
 
-    const params = new URLSearchParams({
-      OC: apiKey,
+    const extraParams: Record<string, string> = {};
+    if (args.lawId) extraParams.ID = args.lawId;
+    if (args.mst) extraParams.MST = args.mst;
+    if (args.lawName) extraParams.LM = args.lawName;
+
+    const responseText = await apiClient.fetchApi({
+      endpoint: "lawService.do",
       target: "elaw",
       type: "JSON",
+      extraParams,
+      apiKey: args.apiKey,
     });
-
-    if (args.lawId) params.append("ID", args.lawId);
-    if (args.mst) params.append("MST", args.mst);
-    if (args.lawName) params.append("LM", args.lawName);
-
-    const url = `https://www.law.go.kr/DRF/lawService.do?${params.toString()}`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    const responseText = await response.text();
 
     let data: any;
     try {
@@ -206,7 +185,7 @@ export async function getEnglishLawText(
     return {
       content: [{
         type: "text",
-        text: output
+        text: truncateResponse(output)
       }]
     };
   } catch (error) {

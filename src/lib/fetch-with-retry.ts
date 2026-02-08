@@ -56,7 +56,8 @@ export async function fetchWithRetry(
 
       // Retryable error - check if we have retries left
       if (attempt < retries) {
-        const delay = retryDelay * Math.pow(2, attempt)
+        const baseDelay = retryDelay * Math.pow(2, attempt)
+        const delay = baseDelay + Math.random() * baseDelay * 0.5
         await sleep(delay)
         continue
       }
@@ -69,7 +70,7 @@ export async function fetchWithRetry(
       // Timeout or network error
       if (error instanceof Error) {
         if (error.name === "AbortError") {
-          lastError = new Error(`Request timeout after ${timeout}ms`)
+          lastError = new Error(`Request timeout after ${timeout}ms for ${url}`)
         } else {
           lastError = error
         }
@@ -77,7 +78,8 @@ export async function fetchWithRetry(
 
       // Retry on network errors
       if (attempt < retries) {
-        const delay = retryDelay * Math.pow(2, attempt)
+        const baseDelay = retryDelay * Math.pow(2, attempt)
+        const delay = baseDelay + Math.random() * baseDelay * 0.5
         await sleep(delay)
         continue
       }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { truncateResponse } from "../lib/schemas.js";
 
 // Legal terms search tool - Search for legal terminology definitions
 export const searchLegalTermsSchema = z.object({
@@ -15,28 +16,16 @@ export async function searchLegalTerms(
   args: SearchLegalTermsInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const apiKey = args.apiKey || process.env.LAW_OC;
-    if (!apiKey) {
-      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 LAW_OC 환경변수를 설정하세요.");
-    }
-
-    const params = new URLSearchParams({
-      OC: apiKey,
+    const xmlText = await apiClient.fetchApi({
+      endpoint: "lawSearch.do",
       target: "lstrm",
-      type: "XML",
-      query: args.query,
-      display: (args.display || 20).toString(),
-      page: (args.page || 1).toString(),
+      extraParams: {
+        query: args.query,
+        display: (args.display || 20).toString(),
+        page: (args.page || 1).toString(),
+      },
+      apiKey: args.apiKey,
     });
-
-    const url = `https://www.law.go.kr/DRF/lawSearch.do?${params.toString()}`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    const xmlText = await response.text();
     const result = parseLegalTermsXML(xmlText);
 
     if (!result.LsTrmSearch) {
@@ -92,7 +81,7 @@ export async function searchLegalTerms(
     return {
       content: [{
         type: "text",
-        text: output
+        text: truncateResponse(output)
       }]
     };
   } catch (error) {

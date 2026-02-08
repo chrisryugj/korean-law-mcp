@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { truncateResponse } from "../lib/schemas.js";
 
 // Law system tree tool - Get hierarchical structure of laws
 export const getLawSystemTreeSchema = z.object({
@@ -15,34 +16,22 @@ export async function getLawSystemTree(
   args: GetLawSystemTreeInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const apiKey = args.apiKey || process.env.LAW_OC;
-    if (!apiKey) {
-      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 LAW_OC 환경변수를 설정하세요.");
-    }
-
     if (!args.lawId && !args.mst && !args.lawName) {
       throw new Error("lawId, mst, 또는 lawName 중 하나가 필요합니다.");
     }
 
-    const params = new URLSearchParams({
-      OC: apiKey,
+    const extraParams: Record<string, string> = {};
+    if (args.lawId) extraParams.ID = args.lawId;
+    if (args.mst) extraParams.MST = args.mst;
+    if (args.lawName) extraParams.LM = args.lawName;
+
+    const responseText = await apiClient.fetchApi({
+      endpoint: "lawService.do",
       target: "lsStmd",
       type: "JSON",
+      extraParams,
+      apiKey: args.apiKey,
     });
-
-    // lsStmd uses ID/MST/LM parameters
-    if (args.lawId) params.append("ID", args.lawId);
-    if (args.mst) params.append("MST", args.mst);
-    if (args.lawName) params.append("LM", args.lawName);
-
-    const url = `https://www.law.go.kr/DRF/lawService.do?${params.toString()}`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    const responseText = await response.text();
 
     let data: any;
     try {
@@ -136,7 +125,7 @@ export async function getLawSystemTree(
     return {
       content: [{
         type: "text",
-        text: output
+        text: truncateResponse(output)
       }]
     };
   } catch (error) {

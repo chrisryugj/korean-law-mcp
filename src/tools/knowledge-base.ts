@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { truncateResponse } from "../lib/schemas.js"
 import { extractTag, parseKBXML, fallbackTermSearch } from "./kb-utils.js"
 
 // ============================================================================
@@ -23,29 +24,16 @@ export async function getLegalTermKB(
   args: GetLegalTermKBInput
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
   try {
-    const apiKey = args.apiKey || process.env.LAW_OC;
-    if (!apiKey) {
-      throw new Error("API 키가 필요합니다.");
-    }
-
-    // lstrmAI가 없으면 lstrm으로 폴백
-    const params = new URLSearchParams({
-      OC: apiKey,
+    const xmlText = await apiClient.fetchApi({
+      endpoint: "lawSearch.do",
       target: "lstrm",
-      type: "XML",
-      query: args.query,
-      display: (args.display || 20).toString(),
-      page: (args.page || 1).toString(),
+      extraParams: {
+        query: args.query,
+        display: (args.display || 20).toString(),
+        page: (args.page || 1).toString(),
+      },
+      apiKey: args.apiKey,
     });
-
-    const url = `https://www.law.go.kr/DRF/lawSearch.do?${params.toString()}`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    const xmlText = await response.text();
     const result = parseKBXML(xmlText, "LsTrmAISearch");
 
     if (!result.data) {
@@ -97,26 +85,12 @@ export async function getLegalTermDetail(
   args: GetLegalTermDetailInput
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
   try {
-    const apiKey = args.apiKey || process.env.LAW_OC;
-    if (!apiKey) {
-      throw new Error("API 키가 필요합니다.");
-    }
-
-    const params = new URLSearchParams({
-      OC: apiKey,
+    const xmlText = await apiClient.fetchApi({
+      endpoint: "lawService.do",
       target: "lstrm",
-      type: "XML",
-      query: args.query,
+      extraParams: { query: args.query },
+      apiKey: args.apiKey,
     });
-
-    const url = `https://www.law.go.kr/DRF/lawService.do?${params.toString()}`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    const xmlText = await response.text();
 
     // Parse the detail response
     const termName = extractTag(xmlText, "법령용어명_한글") || extractTag(xmlText, "법령용어명");
@@ -171,30 +145,17 @@ export async function getDailyTerm(
   args: GetDailyTermInput
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
   try {
-    const apiKey = args.apiKey || process.env.LAW_OC;
-    if (!apiKey) {
-      throw new Error("API 키가 필요합니다.");
-    }
-
-    // 일상용어는 dicKndCd=011402 (일상용어사전)
-    const params = new URLSearchParams({
-      OC: apiKey,
+    const xmlText = await apiClient.fetchApi({
+      endpoint: "lawSearch.do",
       target: "lstrm",
-      type: "XML",
-      query: args.query,
-      display: (args.display || 20).toString(),
-      page: (args.page || 1).toString(),
-      dicKndCd: "011402", // 일상용어사전 코드
+      extraParams: {
+        query: args.query,
+        display: (args.display || 20).toString(),
+        page: (args.page || 1).toString(),
+        dicKndCd: "011402",
+      },
+      apiKey: args.apiKey,
     });
-
-    const url = `https://www.law.go.kr/DRF/lawSearch.do?${params.toString()}`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    const xmlText = await response.text();
     const result = parseKBXML(xmlText, "LsTrmSearch");
 
     const totalCount = parseInt(result.totalCnt || "0");
@@ -243,35 +204,23 @@ export async function getDailyToLegal(
   args: GetDailyToLegalInput
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
   try {
-    const apiKey = args.apiKey || process.env.LAW_OC;
-    if (!apiKey) {
-      throw new Error("API 키가 필요합니다.");
+    let xmlText: string;
+    try {
+      xmlText = await apiClient.fetchApi({
+        endpoint: "lawSearch.do",
+        target: "lstrmRel",
+        extraParams: { query: args.dailyTerm, relType: "DL" },
+        apiKey: args.apiKey,
+      });
+    } catch {
+      return await fallbackTermSearch(apiClient, args.dailyTerm, "일상용어");
     }
-
-    // 일상용어-법령용어 연계 API
-    const params = new URLSearchParams({
-      OC: apiKey,
-      target: "lstrmRel", // 용어 연계
-      type: "XML",
-      query: args.dailyTerm,
-      relType: "DL", // Daily to Legal
-    });
-
-    const url = `https://www.law.go.kr/DRF/lawSearch.do?${params.toString()}`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      // Fallback: 일반 용어 검색으로 연계 정보 확인
-      return await fallbackTermSearch(apiKey, args.dailyTerm, "일상용어");
-    }
-
-    const xmlText = await response.text();
     const result = parseKBXML(xmlText, "LsTrmRelSearch");
 
     const items = result.data || [];
 
     if (items.length === 0) {
-      return await fallbackTermSearch(apiKey, args.dailyTerm, "일상용어");
+      return await fallbackTermSearch(apiClient, args.dailyTerm, "일상용어");
     }
 
     let output = `🔗 일상용어 → 법령용어 연계\n\n`;
@@ -304,33 +253,23 @@ export async function getLegalToDaily(
   args: GetLegalToDailyInput
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
   try {
-    const apiKey = args.apiKey || process.env.LAW_OC;
-    if (!apiKey) {
-      throw new Error("API 키가 필요합니다.");
+    let xmlText: string;
+    try {
+      xmlText = await apiClient.fetchApi({
+        endpoint: "lawSearch.do",
+        target: "lstrmRel",
+        extraParams: { query: args.legalTerm, relType: "LD" },
+        apiKey: args.apiKey,
+      });
+    } catch {
+      return await fallbackTermSearch(apiClient, args.legalTerm, "법령용어");
     }
-
-    const params = new URLSearchParams({
-      OC: apiKey,
-      target: "lstrmRel",
-      type: "XML",
-      query: args.legalTerm,
-      relType: "LD", // Legal to Daily
-    });
-
-    const url = `https://www.law.go.kr/DRF/lawSearch.do?${params.toString()}`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      return await fallbackTermSearch(apiKey, args.legalTerm, "법령용어");
-    }
-
-    const xmlText = await response.text();
     const result = parseKBXML(xmlText, "LsTrmRelSearch");
 
     const items = result.data || [];
 
     if (items.length === 0) {
-      return await fallbackTermSearch(apiKey, args.legalTerm, "법령용어");
+      return await fallbackTermSearch(apiClient, args.legalTerm, "법령용어");
     }
 
     let output = `🔗 법령용어 → 일상용어 연계\n\n`;
@@ -364,25 +303,18 @@ export async function getTermArticles(
   args: GetTermArticlesInput
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
   try {
-    const apiKey = args.apiKey || process.env.LAW_OC;
-    if (!apiKey) {
-      throw new Error("API 키가 필요합니다.");
-    }
-
-    // 법령용어-조문 연계 API
-    const params = new URLSearchParams({
-      OC: apiKey,
-      target: "lstrmJo", // 용어-조문 연계
-      type: "XML",
-      query: args.term,
-      display: (args.display || 20).toString(),
-    });
-
-    const url = `https://www.law.go.kr/DRF/lawSearch.do?${params.toString()}`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      // Fallback: AI 검색 추천
+    let xmlText: string;
+    try {
+      xmlText = await apiClient.fetchApi({
+        endpoint: "lawSearch.do",
+        target: "lstrmJo",
+        extraParams: {
+          query: args.term,
+          display: (args.display || 20).toString(),
+        },
+        apiKey: args.apiKey,
+      });
+    } catch {
       return {
         content: [{
           type: "text",
@@ -391,8 +323,6 @@ export async function getTermArticles(
         isError: true,
       };
     }
-
-    const xmlText = await response.text();
     const result = parseKBXML(xmlText, "LsTrmJoSearch");
 
     const totalCount = parseInt(result.totalCnt || "0");
@@ -423,7 +353,7 @@ export async function getTermArticles(
 
     output += `\n💡 조문 상세: get_law_text(lawId="법령ID", jo="조문번호")`;
 
-    return { content: [{ type: "text", text: output }] };
+    return { content: [{ type: "text", text: truncateResponse(output) }] };
   } catch (error) {
     return {
       content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
@@ -447,31 +377,25 @@ export async function getRelatedLaws(
   args: GetRelatedLawsInput
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
   try {
-    const apiKey = args.apiKey || process.env.LAW_OC;
-    if (!apiKey) {
-      throw new Error("API 키가 필요합니다.");
-    }
-
     if (!args.lawId && !args.lawName) {
       throw new Error("lawId 또는 lawName 중 하나는 필수입니다.");
     }
 
-    // 관련법령 조회 API
-    const params = new URLSearchParams({
-      OC: apiKey,
-      target: "lawRel", // 관련법령
-      type: "XML",
+    const extraParams: Record<string, string> = {
       display: (args.display || 20).toString(),
-    });
+    };
+    if (args.lawId) extraParams.ID = args.lawId;
+    if (args.lawName) extraParams.query = args.lawName;
 
-    if (args.lawId) params.append("ID", args.lawId);
-    if (args.lawName) params.append("query", args.lawName);
-
-    const url = `https://www.law.go.kr/DRF/lawSearch.do?${params.toString()}`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      // Fallback: 법령체계도 추천
+    let xmlText: string;
+    try {
+      xmlText = await apiClient.fetchApi({
+        endpoint: "lawSearch.do",
+        target: "lawRel",
+        extraParams,
+        apiKey: args.apiKey,
+      });
+    } catch {
       return {
         content: [{
           type: "text",
@@ -480,8 +404,6 @@ export async function getRelatedLaws(
         isError: true,
       };
     }
-
-    const xmlText = await response.text();
     const result = parseKBXML(xmlText, "LawRelSearch");
 
     const totalCount = parseInt(result.totalCnt || "0");
@@ -509,7 +431,7 @@ export async function getRelatedLaws(
 
     output += `\n💡 법령 조회: get_law_text(lawId="법령ID")`;
 
-    return { content: [{ type: "text", text: output }] };
+    return { content: [{ type: "text", text: truncateResponse(output) }] };
   } catch (error) {
     return {
       content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],

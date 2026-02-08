@@ -7,6 +7,8 @@ import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 import { buildJO } from "../lib/law-parser.js"
 import { lawCache } from "../lib/cache.js"
+import { flattenContent, extractHangContent, cleanHtml } from "../lib/article-parser.js"
+import { truncateResponse } from "../lib/schemas.js"
 
 export const GetBatchArticlesSchema = z.object({
   mst: z.string().optional().describe("법령일련번호"),
@@ -97,72 +99,6 @@ export async function getBatchArticles(
     let resultText = `법령명: ${lawName}\n`
     resultText += `조회 조문: ${input.articles.join(', ')}\n\n`
 
-    // Helper functions (from law-text.ts)
-    const flattenContent = (value: any): string => {
-      if (typeof value === "string") return value
-      if (!Array.isArray(value)) return ""
-
-      const result: string[] = []
-      for (const item of value) {
-        if (typeof item === "string") {
-          if (!item.startsWith("<img") && !item.startsWith("</img")) {
-            result.push(item)
-          }
-        } else if (Array.isArray(item)) {
-          result.push(flattenContent(item))
-        }
-      }
-      return result.join("\n")
-    }
-
-    const extractHangContent = (hangArray: any[]): string => {
-      let content = ""
-
-      for (const hang of hangArray) {
-        if (hang.항내용) {
-          const hangContent = flattenContent(hang.항내용)
-          if (hangContent) {
-            content += (content ? "\n" : "") + hangContent
-          }
-        }
-
-        if (hang.호 && Array.isArray(hang.호)) {
-          for (const ho of hang.호) {
-            if (ho.호내용) {
-              const hoContent = flattenContent(ho.호내용)
-              if (hoContent) {
-                content += "\n" + hoContent
-              }
-            }
-
-            if (ho.목 && Array.isArray(ho.목)) {
-              for (const mok of ho.목) {
-                if (mok.목내용) {
-                  const mokContent = flattenContent(mok.목내용)
-                  if (mokContent) {
-                    content += "\n" + mokContent
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-
-      return content
-    }
-
-    const cleanHtml = (text: string): string => {
-      return text
-        .replace(/<[^>]+>/g, '')
-        .replace(/&nbsp;/g, ' ')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&amp;/g, '&')
-        .replace(/&quot;/g, '"')
-        .trim()
-    }
-
     // 요청된 조문만 필터링
     let foundCount = 0
     for (const unit of articleUnits) {
@@ -238,7 +174,7 @@ export async function getBatchArticles(
     return {
       content: [{
         type: "text",
-        text: resultText
+        text: truncateResponse(resultText)
       }]
     }
   } catch (error) {

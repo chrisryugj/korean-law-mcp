@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { truncateResponse } from "../lib/schemas.js";
 
 // Common schema for committee decision search (query optional)
 const baseSearchSchemaOptionalQuery = {
@@ -39,7 +40,7 @@ export async function searchFtcDecisions(
   apiClient: any,
   args: SearchFtcDecisionsInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
-  return searchCommitteeDecisions(args, "ftc", "공정거래위원회 결정문", "get_ftc_decision_text");
+  return searchCommitteeDecisions(apiClient, args, "ftc", "공정거래위원회 결정문", "get_ftc_decision_text");
 }
 
 export const getFtcDecisionTextSchema = z.object(baseTextSchema);
@@ -49,7 +50,7 @@ export async function getFtcDecisionText(
   apiClient: any,
   args: GetFtcDecisionTextInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
-  return getCommitteeDecisionText(args, "ftc", "공정거래위원회 결정문");
+  return getCommitteeDecisionText(apiClient, args, "ftc", "공정거래위원회 결정문");
 }
 
 // ========================================
@@ -67,7 +68,7 @@ export async function searchPipcDecisions(
   apiClient: any,
   args: SearchPipcDecisionsInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
-  return searchCommitteeDecisions(args, "ppc", "개인정보보호위원회 결정문", "get_pipc_decision_text");
+  return searchCommitteeDecisions(apiClient, args, "ppc", "개인정보보호위원회 결정문", "get_pipc_decision_text");
 }
 
 export const getPipcDecisionTextSchema = z.object(baseTextSchema);
@@ -77,7 +78,7 @@ export async function getPipcDecisionText(
   apiClient: any,
   args: GetPipcDecisionTextInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
-  return getCommitteeDecisionText(args, "ppc", "개인정보보호위원회 결정문");
+  return getCommitteeDecisionText(apiClient, args, "ppc", "개인정보보호위원회 결정문");
 }
 
 // ========================================
@@ -95,7 +96,7 @@ export async function searchNlrcDecisions(
   apiClient: any,
   args: SearchNlrcDecisionsInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
-  return searchCommitteeDecisions(args, "nlrc", "중앙노동위원회 결정문", "get_nlrc_decision_text");
+  return searchCommitteeDecisions(apiClient, args, "nlrc", "중앙노동위원회 결정문", "get_nlrc_decision_text");
 }
 
 export const getNlrcDecisionTextSchema = z.object(baseTextSchema);
@@ -105,7 +106,7 @@ export async function getNlrcDecisionText(
   apiClient: any,
   args: GetNlrcDecisionTextInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
-  return getCommitteeDecisionText(args, "nlrc", "중앙노동위원회 결정문");
+  return getCommitteeDecisionText(apiClient, args, "nlrc", "중앙노동위원회 결정문");
 }
 
 // ========================================
@@ -113,36 +114,26 @@ export async function getNlrcDecisionText(
 // ========================================
 
 async function searchCommitteeDecisions(
+  apiClient: any,
   args: any,
   target: string,
   committeeName: string,
   textToolName: string
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const apiKey = args.apiKey || process.env.LAW_OC;
-    if (!apiKey) {
-      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 LAW_OC 환경변수를 설정하세요.");
-    }
-
-    const params = new URLSearchParams({
-      OC: apiKey,
-      target: target,
-      type: "XML",
+    const extraParams: Record<string, string> = {
       display: (args.display || 20).toString(),
       page: (args.page || 1).toString(),
+    };
+    if (args.query) extraParams.query = args.query;
+    if (args.sort) extraParams.sort = args.sort;
+
+    const xmlText = await apiClient.fetchApi({
+      endpoint: "lawSearch.do",
+      target,
+      extraParams,
+      apiKey: args.apiKey,
     });
-
-    if (args.query) params.append("query", args.query);
-    if (args.sort) params.append("sort", args.sort);
-
-    const url = `https://www.law.go.kr/DRF/lawSearch.do?${params.toString()}`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    const xmlText = await response.text();
     const result = parseCommitteeXML(xmlText, target);
 
     const searchKey = getSearchKey(target);
@@ -205,31 +196,19 @@ async function searchCommitteeDecisions(
 }
 
 async function getCommitteeDecisionText(
+  apiClient: any,
   args: any,
   target: string,
   committeeName: string
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const apiKey = args.apiKey || process.env.LAW_OC;
-    if (!apiKey) {
-      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 LAW_OC 환경변수를 설정하세요.");
-    }
-
-    const params = new URLSearchParams({
-      OC: apiKey,
-      target: target,
+    const responseText = await apiClient.fetchApi({
+      endpoint: "lawService.do",
+      target,
       type: "JSON",
-      ID: args.id,
+      extraParams: { ID: args.id },
+      apiKey: args.apiKey,
     });
-
-    const url = `https://www.law.go.kr/DRF/lawService.do?${params.toString()}`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    const responseText = await response.text();
 
     let data: any;
     try {
@@ -278,7 +257,7 @@ async function getCommitteeDecisionText(
     return {
       content: [{
         type: "text",
-        text: output
+        text: truncateResponse(output)
       }]
     };
   } catch (error) {

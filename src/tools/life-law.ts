@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { truncateResponse } from "../lib/schemas.js";
 
 // AI-powered intelligent law search tool
 // 이름은 searchAiLaw가 더 정확하지만, 호환성을 위해 searchLifeLaw alias 유지
@@ -19,31 +20,19 @@ export async function searchAiLaw(
   args: SearchAiLawInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const apiKey = args.apiKey || process.env.LAW_OC;
-    if (!apiKey) {
-      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 LAW_OC 환경변수를 설정하세요.");
-    }
-
     const searchType = args.search || "0";
 
-    const params = new URLSearchParams({
-      OC: apiKey,
+    const xmlText = await apiClient.fetchApi({
+      endpoint: "lawSearch.do",
       target: "aiSearch",
-      type: "XML",
-      query: args.query,
-      search: searchType,
-      display: (args.display || 20).toString(),
-      page: (args.page || 1).toString(),
+      extraParams: {
+        query: args.query,
+        search: searchType,
+        display: (args.display || 20).toString(),
+        page: (args.page || 1).toString(),
+      },
+      apiKey: args.apiKey,
     });
-
-    const url = `https://www.law.go.kr/DRF/lawSearch.do?${params.toString()}`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    const xmlText = await response.text();
     const result = parseAiSearchXML(xmlText, searchType);
 
     if (!result.aiSearch) {
@@ -116,7 +105,7 @@ export async function searchAiLaw(
     return {
       content: [{
         type: "text",
-        text: output
+        text: truncateResponse(output)
       }]
     };
   } catch (error) {

@@ -43,7 +43,7 @@ export async function startSSEServer(server: Server, port: number) {
   app.get("/", (req, res) => {
     res.json({
       name: "Korean Law MCP Server",
-      version: "1.4.0",
+      version: "1.6.0",
       status: "running",
       protocol: "streamable-http",
       endpoints: {

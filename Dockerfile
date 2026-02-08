@@ -1,33 +1,40 @@
 # Korean Law MCP Server - Docker 배포용
 
-FROM node:20-alpine
+# --- Build Stage ---
+FROM node:20-alpine AS builder
 
-# 작업 디렉토리 설정
 WORKDIR /app
 
-# package.json 복사 및 의존성 설치
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm ci
 
-# TypeScript 빌드를 위해 devDependencies도 임시 설치
-RUN npm install --save-dev typescript @types/node @types/express
-
-# 소스 코드 복사
 COPY src ./src
 COPY tsconfig.json ./
 
-# TypeScript 빌드
 RUN npm run build
-
-# devDependencies 제거 (프로덕션 경량화)
 RUN npm prune --production
 
-# 포트 노출
+# --- Runtime Stage ---
+FROM node:20-alpine
+
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+WORKDIR /app
+
+COPY --from=builder /app/build ./build
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
+
+RUN chown -R appuser:appgroup /app
+
+USER appuser
+
 EXPOSE 3000
 
-# 환경변수 (Railway에서 주입됨)
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# SSE 모드로 서버 시작
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+
 CMD ["node", "build/index.js", "--mode", "sse", "--port", "3000"]

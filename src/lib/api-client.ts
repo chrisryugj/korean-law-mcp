@@ -4,7 +4,7 @@
 
 import { normalizeLawSearchText, resolveLawAlias } from "./search-normalizer.js"
 import { fetchWithRetry } from "./fetch-with-retry.js"
-import { currentSessionId, getSessionApiKey } from "./session-state.js"
+import { sessionStore, getSessionApiKey } from "./session-state.js"
 
 const LAW_API_BASE = "https://www.law.go.kr/DRF"
 
@@ -23,6 +23,7 @@ export class LawApiClient {
    * 4. 생성자에서 받은 기본 키
    */
   private getApiKey(overrideKey?: string): string {
+    const currentSessionId = sessionStore.getStore()
     const sessionApiKey = currentSessionId ? getSessionApiKey(currentSessionId) : undefined
     const key = overrideKey || sessionApiKey || process.env.LAW_OC || this.defaultApiKey
     if (!key) {
@@ -381,6 +382,45 @@ export class LawApiClient {
     }
 
     return await response.text()
+  }
+
+  /**
+   * 범용 API 호출 (fetchWithRetry 기반)
+   * 직접 fetch()를 사용하는 도구들이 이 메서드를 통해 retry/timeout 혜택을 받음
+   */
+  async fetchApi(params: {
+    endpoint: "lawSearch.do" | "lawService.do"
+    target: string
+    type?: "XML" | "JSON" | "HTML"
+    extraParams?: Record<string, string>
+    apiKey?: string
+  }): Promise<string> {
+    const apiParams = new URLSearchParams({
+      OC: this.getApiKey(params.apiKey),
+      target: params.target,
+      type: params.type || "XML",
+    })
+
+    if (params.extraParams) {
+      for (const [key, value] of Object.entries(params.extraParams)) {
+        apiParams.append(key, value)
+      }
+    }
+
+    const url = `${LAW_API_BASE}/${params.endpoint}?${apiParams.toString()}`
+    const response = await fetchWithRetry(url)
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`)
+    }
+
+    const text = await response.text()
+
+    if (text.includes("<!DOCTYPE html") || text.includes("<html")) {
+      throw new Error("API가 HTML 에러 페이지를 반환했습니다. 파라미터를 확인해주세요.")
+    }
+
+    return text
   }
 
   /**

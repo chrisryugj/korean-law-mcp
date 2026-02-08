@@ -8,6 +8,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprot
 import { zodToJsonSchema } from "zod-to-json-schema"
 import type { LawApiClient } from "./lib/api-client.js"
 import type { McpTool } from "./lib/types.js"
+import { formatToolError } from "./lib/errors.js"
 
 // Tool imports
 import { searchLaw, SearchLawSchema } from "./tools/search.js"
@@ -87,7 +88,7 @@ export const allTools: McpTool[] = [
   // === 행정규칙 ===
   {
     name: "search_admin_rule",
-    description: "[행정규칙] 훈령/예규/고시/지침 검색.",
+    description: "[행정규칙] 훈령/예규/고시/지침 검색. knd 파라미터로 종류 필터 가능(1=훈령, 2=예규, 3=고시).",
     schema: SearchAdminRuleSchema,
     handler: searchAdminRule
   },
@@ -153,7 +154,7 @@ export const allTools: McpTool[] = [
   },
   {
     name: "get_law_statistics",
-    description: "[통계] 법령 조문/개정 통계.",
+    description: "[통계] 최근 개정 법령 TOP N 조회. 지정 기간(일) 내 개정된 법령 목록 반환.",
     schema: LawStatisticsSchema,
     handler: getLawStatistics
   },
@@ -245,7 +246,7 @@ export const allTools: McpTool[] = [
   // === 조세심판/관세해석 ===
   {
     name: "search_tax_tribunal_decisions",
-    description: "[조세심판] 조세심판원 결정례 검색.",
+    description: "[조세심판] 조세심판원 결정례 검색. 관세·소득세·법인세·부가세 등 세목별 검색 가능.",
     schema: searchTaxTribunalDecisionsSchema,
     handler: searchTaxTribunalDecisions
   },
@@ -257,13 +258,13 @@ export const allTools: McpTool[] = [
   },
   {
     name: "search_customs_interpretations",
-    description: "[관세] 관세행정 해석례 검색.",
+    description: "[관세] 관세청 법령해석(관세 해석례) 검색. 관세법·FTA특례법·대외무역법 해석례.",
     schema: searchCustomsInterpretationsSchema,
     handler: searchCustomsInterpretations
   },
   {
     name: "get_customs_interpretation_text",
-    description: "[관세] 관세해석례 전문.",
+    description: "[관세] 관세 해석례 전문 조회. 질의요지·회답·이유·관련법령 포함.",
     schema: getCustomsInterpretationTextSchema,
     handler: getCustomsInterpretationText
   },
@@ -475,11 +476,9 @@ export function registerTools(server: Server, apiClient: LawApiClient) {
         isError: result.isError
       }
     } catch (error) {
+      const errResult = formatToolError(error, name)
       return {
-        content: [{
-          type: "text" as const,
-          text: `Error: ${error instanceof Error ? error.message : String(error)}`
-        }],
+        content: errResult.content.map(c => ({ type: "text" as const, text: c.text })),
         isError: true
       }
     }

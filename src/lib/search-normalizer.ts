@@ -64,6 +64,29 @@ const LAW_ALIAS_ENTRIES: LawAliasEntry[] = [
     aliases: ["원산지 표시법", "원산지표시"],
     alternatives: ["대외무역법", "관세법"],
   },
+  // 관세 관련
+  {
+    canonical: "관세법 시행령",
+    aliases: ["관시령", "관세시행령", "관세법시행령"],
+  },
+  {
+    canonical: "관세법 시행규칙",
+    aliases: ["관시규", "관세시행규칙", "관세법시행규칙"],
+  },
+  // 지방공무원 관련
+  {
+    canonical: "지방공무원법",
+    aliases: ["지방공무원", "지공법", "지방공무원 법"],
+    alternatives: ["지방공무원 임용령", "지방공무원 보수규정"],
+  },
+  {
+    canonical: "지방공무원 임용령",
+    aliases: ["지방공무원임용령", "지공임용령"],
+  },
+  {
+    canonical: "지방공무원 보수규정",
+    aliases: ["지방공무원보수규정", "지공보수규정"],
+  },
 ]
 
 const aliasLookup = new Map<string, LawAliasEntry>()
@@ -159,6 +182,17 @@ const KEYWORD_EXPANSIONS: Record<string, string[]> = {
   "친환경": ["녹색", "환경친화"],
   "복무": ["복무규정", "근무"],
   "지원": ["육성", "진흥", "촉진"],
+  // 관세·통관
+  "관세": ["관세법", "관세율", "통관"],
+  "hs": ["HS코드", "세번", "관세율표"],
+  "보세": ["보세구역", "보세창고", "보세운송"],
+  "통관": ["수출입통관", "통관절차", "수입신고"],
+  "aeo": ["수출입안전관리우수업체", "AEO"],
+  // 지방공무원 업무
+  "휴직": ["휴직", "병가", "육아휴직"],
+  "징계": ["징계", "징계처분", "파면", "해임"],
+  "임용": ["임용", "채용", "전보", "승진"],
+  "수당": ["수당", "급여", "보수", "성과급"],
 }
 
 export interface ExpandedQueries {
@@ -187,7 +221,25 @@ export function expandOrdinanceQuery(query: string): ExpandedQueries {
     }
   }
 
-  // 2. 키워드 확장
+  // 2. 광역시·도 확장
+  const METRO_FULL: Record<string, string> = {
+    "부산": "부산광역시", "대구": "대구광역시", "인천": "인천광역시",
+    "광주": "광주광역시", "대전": "대전광역시", "울산": "울산광역시",
+    "세종": "세종특별자치시",
+  }
+  const PROVINCE_FULL: Record<string, string> = {
+    "경기": "경기도", "강원": "강원특별자치도", "충북": "충청북도",
+    "충남": "충청남도", "전북": "전북특별자치도", "전남": "전라남도",
+    "경북": "경상북도", "경남": "경상남도", "제주": "제주특별자치도",
+  }
+  for (const [short, full] of Object.entries({ ...METRO_FULL, ...PROVINCE_FULL })) {
+    if (normalized.includes(short) && !normalized.includes(full)) {
+      const withFull = normalized.replace(short, full)
+      if (!expanded.includes(withFull)) expanded.push(withFull)
+    }
+  }
+
+  // 3. 키워드 확장
   for (const [keyword, alternatives] of Object.entries(KEYWORD_EXPANSIONS)) {
     if (normalized.toLowerCase().includes(keyword.toLowerCase())) {
       for (const alt of alternatives) {
@@ -199,7 +251,7 @@ export function expandOrdinanceQuery(query: string): ExpandedQueries {
     }
   }
 
-  // 3. 조례/규칙 확장
+  // 4. 조례/규칙 확장
   if (normalized.includes("조례") && !expanded.some(e => e.includes("규칙"))) {
     expanded.push(normalized.replace("조례", "규칙"))
   }

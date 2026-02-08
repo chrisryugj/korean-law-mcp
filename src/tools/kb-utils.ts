@@ -91,33 +91,17 @@ export function parseKBXML(xml: string, _rootTag: string): KBParseResult {
  * 용어 검색 폴백
  */
 export async function fallbackTermSearch(
-  apiKey: string,
+  apiClient: any,
   term: string,
   termType: string
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
-  const params = new URLSearchParams({
-    OC: apiKey,
-    target: "lstrm",
-    type: "XML",
-    query: term,
-    display: "10",
-  })
-
   try {
-    const url = `https://www.law.go.kr/DRF/lawSearch.do?${params.toString()}`
-    const response = await fetch(url)
+    const xmlText = await apiClient.fetchApi({
+      endpoint: "lawSearch.do",
+      target: "lstrm",
+      extraParams: { query: term, display: "10" },
+    })
 
-    if (!response.ok) {
-      return {
-        content: [{
-          type: "text",
-          text: `'${term}' ${termType} 연계 정보를 찾을 수 없습니다.\n\n💡 search_legal_terms(query="${term}")로 기본 검색을 시도해보세요.`,
-        }],
-        isError: true,
-      }
-    }
-
-    const xmlText = await response.text()
     const result = parseKBXML(xmlText, "LsTrmSearch")
     const items = result.data || []
 
@@ -143,7 +127,7 @@ export async function fallbackTermSearch(
     return {
       content: [{
         type: "text",
-        text: `'${term}' ${termType} 연계 정보를 찾을 수 없습니다.`,
+        text: `'${term}' ${termType} 연계 정보를 찾을 수 없습니다.\n\n💡 search_legal_terms(query="${term}")로 기본 검색을 시도해보세요.`,
       }],
       isError: true,
     }

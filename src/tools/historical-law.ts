@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { truncateResponse } from "../lib/schemas.js";
 
 /**
  * 법령 연혁 조회 도구
@@ -29,28 +30,17 @@ export async function searchHistoricalLaw(
   args: SearchHistoricalLawInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const apiKey = args.apiKey || process.env.LAW_OC;
-    if (!apiKey) {
-      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 LAW_OC 환경변수를 설정하세요.");
-    }
-
-    const params = new URLSearchParams({
-      OC: apiKey,
+    const html = await apiClient.fetchApi({
+      endpoint: "lawSearch.do",
       target: "lsHistory",
       type: "HTML",
-      query: args.lawName,
-      display: (args.display || 50).toString(),
-      sort: "efdes", // 시행일자 내림차순
+      extraParams: {
+        query: args.lawName,
+        display: (args.display || 50).toString(),
+        sort: "efdes",
+      },
+      apiKey: args.apiKey,
     });
-
-    const url = `https://www.law.go.kr/DRF/lawSearch.do?${params.toString()}`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    const html = await response.text();
     const histories = parseHistoryHtml(html, args.lawName);
 
     if (histories.length === 0) {
@@ -91,7 +81,7 @@ export async function searchHistoricalLaw(
     return {
       content: [{
         type: "text",
-        text: output
+        text: truncateResponse(output)
       }]
     };
   } catch (error) {
@@ -119,26 +109,13 @@ export async function getHistoricalLaw(
   args: GetHistoricalLawInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const apiKey = args.apiKey || process.env.LAW_OC;
-    if (!apiKey) {
-      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 LAW_OC 환경변수를 설정하세요.");
-    }
-
-    const params = new URLSearchParams({
-      OC: apiKey,
+    const responseText = await apiClient.fetchApi({
+      endpoint: "lawService.do",
       target: "law",
       type: "JSON",
-      MST: args.mst,
+      extraParams: { MST: args.mst },
+      apiKey: args.apiKey,
     });
-
-    const url = `https://www.law.go.kr/DRF/lawService.do?${params.toString()}`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    const responseText = await response.text();
 
     let data: any;
     try {
@@ -215,7 +192,7 @@ export async function getHistoricalLaw(
     return {
       content: [{
         type: "text",
-        text: output
+        text: truncateResponse(output)
       }]
     };
   } catch (error) {

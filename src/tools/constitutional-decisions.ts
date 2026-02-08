@@ -20,31 +20,20 @@ export async function searchConstitutionalDecisions(
   args: SearchConstitutionalDecisionsInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const apiKey = args.apiKey || process.env.LAW_OC;
-    if (!apiKey) {
-      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 LAW_OC 환경변수를 설정하세요.");
-    }
-
-    const params = new URLSearchParams({
-      OC: apiKey,
-      target: "detc",
-      type: "XML",
+    const extraParams: Record<string, string> = {
       display: (args.display || 20).toString(),
       page: (args.page || 1).toString(),
+    };
+    if (args.query) extraParams.query = args.query;
+    if (args.caseNumber) extraParams.nb = args.caseNumber;
+    if (args.sort) extraParams.sort = args.sort;
+
+    const xmlText = await apiClient.fetchApi({
+      endpoint: "lawSearch.do",
+      target: "detc",
+      extraParams,
+      apiKey: args.apiKey,
     });
-
-    if (args.query) params.append("query", args.query);
-    if (args.caseNumber) params.append("nb", args.caseNumber);
-    if (args.sort) params.append("sort", args.sort);
-
-    const url = `https://www.law.go.kr/DRF/lawSearch.do?${params.toString()}`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    const xmlText = await response.text();
 
     // 공통 파서 사용
     const result = parseConstitutionalXML(xmlText);
@@ -121,26 +110,15 @@ export async function getConstitutionalDecisionText(
   args: GetConstitutionalDecisionTextInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const apiKey = args.apiKey || process.env.LAW_OC;
-    if (!apiKey) {
-      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 LAW_OC 환경변수를 설정하세요.");
-    }
+    const extraParams: Record<string, string> = { ID: args.id };
 
-    const params = new URLSearchParams({
-      OC: apiKey,
+    const responseText = await apiClient.fetchApi({
+      endpoint: "lawService.do",
       target: "detc",
       type: "JSON",
-      ID: args.id,
+      extraParams,
+      apiKey: args.apiKey,
     });
-
-    const url = `https://www.law.go.kr/DRF/lawService.do?${params.toString()}`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    const responseText = await response.text();
 
     let data: any;
     try {

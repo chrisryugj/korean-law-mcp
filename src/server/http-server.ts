@@ -8,7 +8,7 @@ import type { Server } from "@modelcontextprotocol/sdk/server/index.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
 import { InMemoryEventStore } from "@modelcontextprotocol/sdk/examples/shared/inMemoryEventStore.js"
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js"
-import { setCurrentSessionId, setSessionApiKey, deleteSession } from "../lib/session-state.js"
+import { sessionStore, setSessionApiKey, deleteSession } from "../lib/session-state.js"
 
 // 세션 정보 (Transport + 마지막 접근 시간)
 interface SessionInfo {
@@ -39,9 +39,45 @@ export async function startHTTPServer(server: Server, port: number) {
     }
   }, 5 * 60 * 1000)
 
-  // CORS 설정
+  // Rate Limiting (RATE_LIMIT_RPM 환경변수, 기본: 60 req/min per IP)
+  const rateLimitRpm = parseInt(process.env.RATE_LIMIT_RPM || "60", 10)
+  const rateBuckets = new Map<string, { count: number; resetAt: number }>()
+
+  if (rateLimitRpm > 0) {
+    app.use((req, res, next) => {
+      if (req.path === "/health" || req.path === "/") return next()
+
+      const ip = req.ip || req.socket.remoteAddress || "unknown"
+      const now = Date.now()
+      let bucket = rateBuckets.get(ip)
+
+      if (!bucket || now >= bucket.resetAt) {
+        bucket = { count: 0, resetAt: now + 60_000 }
+        rateBuckets.set(ip, bucket)
+      }
+
+      bucket.count++
+
+      if (bucket.count > rateLimitRpm) {
+        res.status(429).json({ error: "Too many requests. Try again later." })
+        return
+      }
+      next()
+    })
+
+    // 5분마다 만료된 버킷 정리
+    setInterval(() => {
+      const now = Date.now()
+      for (const [ip, bucket] of rateBuckets) {
+        if (now >= bucket.resetAt) rateBuckets.delete(ip)
+      }
+    }, 5 * 60 * 1000)
+  }
+
+  // CORS 설정 (CORS_ORIGIN 환경변수로 제어, 기본: *)
+  const corsOrigin = process.env.CORS_ORIGIN || "*"
   app.use((req, res, next) => {
-    res.header("Access-Control-Allow-Origin", "*")
+    res.header("Access-Control-Allow-Origin", corsOrigin)
     res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
     res.header("Access-Control-Allow-Headers", "Content-Type, mcp-session-id, last-event-id")
     if (req.method === "OPTIONS") {
@@ -54,7 +90,7 @@ export async function startHTTPServer(server: Server, port: number) {
   app.get("/", (req, res) => {
     res.json({
       name: "Korean Law MCP Server",
-      version: "1.4.0",
+      version: "1.6.0",
       status: "running",
       transport: "streamable-http",
       endpoints: {
@@ -99,8 +135,11 @@ export async function startHTTPServer(server: Server, port: number) {
           setSessionApiKey(sessionId!, apiKeyFromHeader as string)
         }
 
-        // 현재 세션 ID 설정 (도구 호출에서 사용)
-        setCurrentSessionId(sessionId)
+        // AsyncLocalStorage로 세션 ID 격리 (동시 요청 안전)
+        await sessionStore.run(sessionId, async () => {
+          await transport.handleRequest(req, res, req.body)
+        })
+        return
       } else if (!sessionId && isInitializeRequest(req.body)) {
         // 새 세션 초기화
         console.error(`[POST /mcp] New initialization request`)
@@ -119,7 +158,6 @@ export async function startHTTPServer(server: Server, port: number) {
             if (apiKeyFromHeader) {
               setSessionApiKey(sid, apiKeyFromHeader as string)
             }
-            setCurrentSessionId(sid)
           }
         })
 
@@ -150,9 +188,6 @@ export async function startHTTPServer(server: Server, port: number) {
         })
         return
       }
-
-      // 기존 Transport로 요청 처리
-      await transport.handleRequest(req, res, req.body)
     } catch (error) {
       console.error("[POST /mcp] Error:", error)
       if (!res.headersSent) {
@@ -165,8 +200,6 @@ export async function startHTTPServer(server: Server, port: number) {
           id: null
         })
       }
-    } finally {
-      setCurrentSessionId(undefined)
     }
   })
 

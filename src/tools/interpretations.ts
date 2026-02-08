@@ -20,30 +20,19 @@ export async function searchInterpretations(
   args: SearchInterpretationsInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const apiKey = args.apiKey || process.env.LAW_OC;
-    if (!apiKey) {
-      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 LAW_OC 환경변수를 설정하세요.");
-    }
-
-    const params = new URLSearchParams({
-      OC: apiKey,
-      target: "expc",
-      type: "XML",
+    const extraParams: Record<string, string> = {
       query: args.query,
       display: (args.display || 20).toString(),
       page: (args.page || 1).toString(),
+    };
+    if (args.sort) extraParams.sort = args.sort;
+
+    const xmlText = await apiClient.fetchApi({
+      endpoint: "lawSearch.do",
+      target: "expc",
+      extraParams,
+      apiKey: args.apiKey,
     });
-
-    if (args.sort) params.append("sort", args.sort);
-
-    const url = `https://www.law.go.kr/DRF/lawSearch.do?${params.toString()}`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    const xmlText = await response.text();
 
     // 공통 파서 사용
     const result = parseInterpretationXML(xmlText);
@@ -119,30 +108,16 @@ export async function getInterpretationText(
   args: GetInterpretationTextInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const apiKey = args.apiKey || process.env.LAW_OC;
-    if (!apiKey) {
-      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 LAW_OC 환경변수를 설정하세요.");
-    }
+    const extraParams: Record<string, string> = { ID: args.id };
+    if (args.caseName) extraParams.LM = args.caseName;
 
-    const params = new URLSearchParams({
-      OC: apiKey,
+    const responseText = await apiClient.fetchApi({
+      endpoint: "lawService.do",
       target: "expc",
       type: "JSON",
-      ID: args.id,
+      extraParams,
+      apiKey: args.apiKey,
     });
-
-    if (args.caseName) {
-      params.append("LM", args.caseName);
-    }
-
-    const url = `https://www.law.go.kr/DRF/lawService.do?${params.toString()}`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    const responseText = await response.text();
 
     let data: any;
     try {

@@ -21,32 +21,21 @@ export async function searchPrecedents(
   args: SearchPrecedentsInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const apiKey = args.apiKey || process.env.LAW_OC;
-    if (!apiKey) {
-      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 LAW_OC 환경변수를 설정하세요.");
-    }
-
-    const params = new URLSearchParams({
-      OC: apiKey,
-      target: "prec",
-      type: "XML",
+    const extraParams: Record<string, string> = {
       display: (args.display || 20).toString(),
       page: (args.page || 1).toString(),
+    };
+    if (args.query) extraParams.query = args.query;
+    if (args.court) extraParams.curt = args.court;
+    if (args.caseNumber) extraParams.nb = args.caseNumber;
+    if (args.sort) extraParams.sort = args.sort;
+
+    const xmlText = await apiClient.fetchApi({
+      endpoint: "lawSearch.do",
+      target: "prec",
+      extraParams,
+      apiKey: args.apiKey,
     });
-
-  if (args.query) params.append("query", args.query);
-  if (args.court) params.append("curt", args.court);
-  if (args.caseNumber) params.append("nb", args.caseNumber);
-  if (args.sort) params.append("sort", args.sort);
-
-  const url = `https://www.law.go.kr/DRF/lawSearch.do?${params.toString()}`;
-  const response = await fetch(url);
-
-  if (!response.ok) {
-    throw new Error(`API error: ${response.status}`);
-  }
-
-  const xmlText = await response.text();
 
   // 공통 파서 사용
   const result = parsePrecedentXML(xmlText);
@@ -125,30 +114,16 @@ export async function getPrecedentText(
   args: GetPrecedentTextInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const apiKey = args.apiKey || process.env.LAW_OC;
-    if (!apiKey) {
-      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 LAW_OC 환경변수를 설정하세요.");
-    }
+    const extraParams: Record<string, string> = { ID: args.id };
+    if (args.caseName) extraParams.LM = args.caseName;
 
-  const params = new URLSearchParams({
-    OC: apiKey,
-    target: "prec",
-    type: "JSON",
-    ID: args.id,
-  });
-
-  if (args.caseName) {
-    params.append("LM", args.caseName);
-  }
-
-  const url = `https://www.law.go.kr/DRF/lawService.do?${params.toString()}`;
-  const response = await fetch(url);
-
-  if (!response.ok) {
-    throw new Error(`API error: ${response.status}`);
-  }
-
-  const responseText = await response.text();
+    const responseText = await apiClient.fetchApi({
+      endpoint: "lawService.do",
+      target: "prec",
+      type: "JSON",
+      extraParams,
+      apiKey: args.apiKey,
+    });
 
   let data: any;
   try {
@@ -179,29 +154,29 @@ export async function getPrecedentText(
     전문: prec.판례내용
   };
 
-  let output = `=== ${basic.판례명 || "Precedent"} ===\n\n`;
+  let output = `=== ${basic.판례명 || "판례"} ===\n\n`;
 
-  output += `📋 Basic Information:\n`;
-  output += `  Case Number: ${basic.사건번호 || "N/A"}\n`;
-  output += `  Court: ${basic.법원명 || "N/A"}\n`;
-  output += `  Date: ${basic.선고일자 || "N/A"}\n`;
-  output += `  Case Type: ${basic.사건종류명 || "N/A"}\n`;
-  output += `  Judgment Type: ${basic.판결유형 || "N/A"}\n\n`;
+  output += `📋 기본 정보:\n`;
+  output += `  사건번호: ${basic.사건번호 || "N/A"}\n`;
+  output += `  법원: ${basic.법원명 || "N/A"}\n`;
+  output += `  선고일: ${basic.선고일자 || "N/A"}\n`;
+  output += `  사건종류: ${basic.사건종류명 || "N/A"}\n`;
+  output += `  판결유형: ${basic.판결유형 || "N/A"}\n\n`;
 
   if (content.판시사항) {
-    output += `📌 Holdings (판시사항):\n${content.판시사항}\n\n`;
+    output += `📌 판시사항:\n${content.판시사항}\n\n`;
   }
 
   if (content.판결요지) {
-    output += `📝 Summary (판결요지):\n${content.판결요지}\n\n`;
+    output += `📝 판결요지:\n${content.판결요지}\n\n`;
   }
 
   if (content.참조조문) {
-    output += `📖 Referenced Statutes (참조조문):\n${content.참조조문}\n\n`;
+    output += `📖 참조조문:\n${content.참조조문}\n\n`;
   }
 
   if (content.참조판례) {
-    output += `⚖️ Referenced Precedents (참조판례):\n${content.참조판례}\n\n`;
+    output += `⚖️ 참조판례:\n${content.참조판례}\n\n`;
   }
 
   if (content.전문) {

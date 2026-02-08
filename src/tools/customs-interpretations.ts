@@ -22,34 +22,23 @@ export async function searchCustomsInterpretations(
   args: SearchCustomsInterpretationsInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const apiKey = args.apiKey || process.env.LAW_OC;
-    if (!apiKey) {
-      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 LAW_OC 환경변수를 설정하세요.");
-    }
-
-    const params = new URLSearchParams({
-      OC: apiKey,
-      target: "kcsCgmExpc",
-      type: "XML",
+    const extraParams: Record<string, string> = {
       display: (args.display || 20).toString(),
       page: (args.page || 1).toString(),
+    };
+    if (args.query) extraParams.query = args.query;
+    if (args.inq !== undefined) extraParams.inq = args.inq.toString();
+    if (args.rpl !== undefined) extraParams.rpl = args.rpl.toString();
+    if (args.gana) extraParams.gana = args.gana;
+    if (args.explYd) extraParams.explYd = args.explYd;
+    if (args.sort) extraParams.sort = args.sort;
+
+    const xmlText = await apiClient.fetchApi({
+      endpoint: "lawSearch.do",
+      target: "kcsCgmExpc",
+      extraParams,
+      apiKey: args.apiKey,
     });
-
-    if (args.query) params.append("query", args.query);
-    if (args.inq !== undefined) params.append("inq", args.inq.toString());
-    if (args.rpl !== undefined) params.append("rpl", args.rpl.toString());
-    if (args.gana) params.append("gana", args.gana);
-    if (args.explYd) params.append("explYd", args.explYd);
-    if (args.sort) params.append("sort", args.sort);
-
-    const url = `https://www.law.go.kr/DRF/lawSearch.do?${params.toString()}`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    const xmlText = await response.text();
 
     // Simple XML parsing
     const result = parseXML(xmlText);
@@ -118,30 +107,16 @@ export async function getCustomsInterpretationText(
   args: GetCustomsInterpretationTextInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const apiKey = args.apiKey || process.env.LAW_OC;
-    if (!apiKey) {
-      throw new Error("API 키가 필요합니다. api_key 파라미터를 전달하거나 LAW_OC 환경변수를 설정하세요.");
-    }
+    const extraParams: Record<string, string> = { ID: args.id };
+    if (args.interpretationName) extraParams.LM = args.interpretationName;
 
-    const params = new URLSearchParams({
-      OC: apiKey,
+    const responseText = await apiClient.fetchApi({
+      endpoint: "lawService.do",
       target: "kcsCgmExpc",
       type: "JSON",
-      ID: args.id,
+      extraParams,
+      apiKey: args.apiKey,
     });
-
-    if (args.interpretationName) {
-      params.append("LM", args.interpretationName);
-    }
-
-    const url = `https://www.law.go.kr/DRF/lawService.do?${params.toString()}`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    const responseText = await response.text();
 
     let data: any;
     try {
