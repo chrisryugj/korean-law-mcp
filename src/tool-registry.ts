@@ -135,7 +135,7 @@ export const allTools: McpTool[] = [
   // === 부가정보 ===
   {
     name: "get_annexes",
-    description: "[별표] 법령 별표/서식 목록 조회. bylSeq(별표번호) 지정 시 해당 별표 파일을 다운로드하여 텍스트로 추출합니다. 사용법: 1) lawName만으로 목록 조회 → 2) 반환된 별표번호를 bylSeq에 넣어 재호출하면 내용 추출.",
+    description: "[별표] 법령 별표/서식 목록 조회. bylSeq(별표번호) 지정 시 해당 별표 파일을 텍스트로 추출합니다. 커넥터 제약 시 lawName에 '별표4'를 함께 입력해 단일 호출 가능. 사용법: 1) lawName만으로 목록 조회 → 2) bylSeq 재호출 또는 lawName+'별표N'으로 내용 추출.",
     schema: GetAnnexesSchema,
     handler: getAnnexes
   },
@@ -425,6 +425,23 @@ export const allTools: McpTool[] = [
   },
 ]
 
+function toMcpInputSchema(schema: unknown) {
+  const rawSchema = zodToJsonSchema(schema as any, { $refStrategy: "none" }) as any
+
+  // 일부 커넥터는 $schema/$ref가 포함된 스키마를 축약 처리해 선택 파라미터를 누락시키므로
+  // MCP에서 필요한 핵심 필드만 노출합니다.
+  if (rawSchema?.type === "object" && rawSchema?.properties) {
+    return {
+      type: "object",
+      properties: rawSchema.properties,
+      required: Array.isArray(rawSchema.required) ? rawSchema.required : [],
+      additionalProperties: rawSchema.additionalProperties ?? false
+    }
+  }
+
+  return rawSchema
+}
+
 /**
  * 서버에 모든 도구 등록
  */
@@ -434,8 +451,7 @@ export function registerTools(server: Server, apiClient: LawApiClient) {
     tools: allTools.map(tool => ({
       name: tool.name,
       description: tool.description,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      inputSchema: zodToJsonSchema(tool.schema as any, { $refStrategy: "none" })
+      inputSchema: toMcpInputSchema(tool.schema)
     }))
   }))
 
