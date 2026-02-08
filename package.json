@@ -29,6 +29,8 @@
     "@xmldom/xmldom": "^0.9.5",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
+    "hwp.js": "^0.0.3",
+    "jszip": "^3.10.1",
     "zod": "^3.24.1",
     "zod-to-json-schema": "^3.25.1"
   },
