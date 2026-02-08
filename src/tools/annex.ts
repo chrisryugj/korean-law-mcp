@@ -171,17 +171,6 @@ function formatAnnexList(
     if (annexType) resultText += ` (${annexType})`
     resultText += `\n`
 
-    let fileLink = ""
-    if (lawType === "law") {
-      fileLink = annex.별표서식PDF파일링크 || annex.별표서식파일링크 || ""
-    } else {
-      fileLink = annex.별표서식파일링크 || ""
-    }
-
-    if (fileLink) {
-      resultText += `   📎 파일: ${fileLink}\n`
-    }
-
     if (lawType === "ordinance") {
       const relatedLaw = annex.관련자치법규명
       const localGov = annex.지자체기관명
@@ -205,7 +194,7 @@ function formatAnnexList(
     resultText += `\n... 외 ${annexList.length - maxItems}개 항목 (생략)\n`
   }
 
-  resultText += `\n💡 bylSeq 파라미터에 별표번호를 지정하면 해당 별표 내용을 텍스트로 추출합니다.`
+  resultText += `\n⚠️ 별표 내용을 확인하려면 이 도구(get_annexes)를 bylSeq 파라미터와 함께 다시 호출하세요.\n예: get_annexes({ lawName: "${input.lawName}", bylSeq: "${annexList[0]?.별표번호 || '000100'}" })`
 
   return { content: [{ type: "text", text: resultText }] }
 }

@@ -135,7 +135,7 @@ export const allTools: McpTool[] = [
   // === 부가정보 ===
   {
     name: "get_annexes",
-    description: "[별표] 법령 별표/서식 조회.",
+    description: "[별표] 법령 별표/서식 목록 조회. bylSeq(별표번호) 지정 시 해당 별표 파일을 다운로드하여 텍스트로 추출합니다. 사용법: 1) lawName만으로 목록 조회 → 2) 반환된 별표번호를 bylSeq에 넣어 재호출하면 내용 추출.",
     schema: GetAnnexesSchema,
     handler: getAnnexes
   },
