@@ -83,4 +83,3 @@ get_law_text(mst, jo="006300") → 제63조(휴직) 조회
 - [docs/API.md](docs/API.md) - 58개 도구 레퍼런스
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - 시스템 설계, 데이터 플로우
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) - 개발 가이드
-- [docs/REFACTORING.md](docs/REFACTORING.md) - 리팩토링 가이드
