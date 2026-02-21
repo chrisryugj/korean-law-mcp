@@ -21,5 +21,5 @@
       "Bash(git commit -m \"$\\(cat <<''EOF''\ndocs: Simplify CLAUDE.md \\(230 → 47 lines\\)\n\nApply WHAT/WHY/HOW principle with progressive disclosure.\nRemove duplicated content \\(already in README.md, docs/\\).\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   },
-  "outputStyle": "chris-v2"
+  "outputStyle": "chris-v3"
 }

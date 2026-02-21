@@ -74,12 +74,17 @@ export async function startHTTPServer(server: Server, port: number) {
     }, 5 * 60 * 1000)
   }
 
-  // CORS 설정 (CORS_ORIGIN 환경변수로 제어, 기본: *)
+  // CORS 및 보안 헤더 설정
   const corsOrigin = process.env.CORS_ORIGIN || "*"
   app.use((req, res, next) => {
+    // CORS
     res.header("Access-Control-Allow-Origin", corsOrigin)
     res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
     res.header("Access-Control-Allow-Headers", "Content-Type, mcp-session-id, last-event-id")
+    // Security headers
+    res.header("X-Content-Type-Options", "nosniff")
+    res.header("X-Frame-Options", "DENY")
+    res.header("Referrer-Policy", "strict-origin-when-cross-origin")
     if (req.method === "OPTIONS") {
       return res.sendStatus(200)
     }
@@ -90,7 +95,7 @@ export async function startHTTPServer(server: Server, port: number) {
   app.get("/", (req, res) => {
     res.json({
       name: "Korean Law MCP Server",
-      version: "1.6.0",
+      version: "1.7.0",
       status: "running",
       transport: "streamable-http",
       endpoints: {
@@ -282,8 +287,8 @@ export async function startHTTPServer(server: Server, port: number) {
   })
 
   // 종료 처리
-  process.on("SIGINT", async () => {
-    console.error("Shutting down server...")
+  async function gracefulShutdown(signal: string) {
+    console.error(`${signal} received, shutting down server...`)
 
     for (const [sessionId, session] of sessions) {
       try {
@@ -299,5 +304,8 @@ export async function startHTTPServer(server: Server, port: number) {
     await server.close()
     console.error("Server shutdown complete")
     process.exit(0)
-  })
+  }
+
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"))
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"))
 }

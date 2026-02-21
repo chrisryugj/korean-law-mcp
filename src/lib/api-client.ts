@@ -27,7 +27,7 @@ export class LawApiClient {
     const sessionApiKey = currentSessionId ? getSessionApiKey(currentSessionId) : undefined
     const key = overrideKey || sessionApiKey || process.env.LAW_OC || this.defaultApiKey
     if (!key) {
-      throw new Error("API 키가 필요합니다. 법제처(https://www.law.go.kr/DRF/lawService.do)에서 발급받으세요.")
+      throw new Error("API 키가 필요합니다. 법제처(https://open.law.go.kr/LSO/openApi/guideResult.do)에서 발급받으세요.")
     }
     return key
   }

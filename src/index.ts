@@ -13,13 +13,18 @@ import { startHTTPServer } from "./server/http-server.js"
 
 // API 클라이언트 초기화
 const LAW_OC = process.env.LAW_OC || ""
+if (!LAW_OC) {
+  console.error("⚠️  LAW_OC 환경변수 미설정. STDIO 모드에서는 API 호출이 실패합니다.")
+  console.error("   API 키 발급: https://open.law.go.kr/LSO/openApi/guideResult.do")
+  console.error("   HTTP 모드에서는 클라이언트가 헤더로 API 키를 제공할 수 있습니다.")
+}
 const apiClient = new LawApiClient({ apiKey: LAW_OC })
 
 // MCP 서버 생성
 const server = new Server(
   {
     name: "korean-law",
-    version: "1.6.0",
+    version: "1.7.0",
   },
   {
     capabilities: {
