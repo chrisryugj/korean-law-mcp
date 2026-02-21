@@ -140,6 +140,19 @@ export async function startHTTPServer(server: Server, port: number) {
           await transport.handleRequest(req, res, req.body)
         })
         return
+      } else if (sessionId && !existingSession) {
+        // 세션 ID가 있지만 서버에 없음 (suspend 후 재시작 등)
+        // MCP 스펙: 404 반환 → 클라이언트가 새 세션으로 재초기화
+        console.error(`[POST /mcp] Unknown session ID: ${sessionId} (returning 404 for re-init)`)
+        res.status(404).json({
+          jsonrpc: "2.0",
+          error: {
+            code: -32001,
+            message: "Session not found. Please reinitialize."
+          },
+          id: null
+        })
+        return
       } else if (!sessionId && isInitializeRequest(req.body)) {
         // 새 세션 초기화
         console.error(`[POST /mcp] New initialization request`)
@@ -212,8 +225,9 @@ export async function startHTTPServer(server: Server, port: number) {
       const session = sessionId ? sessions.get(sessionId) : undefined
 
       if (!session) {
-        console.error(`[GET /mcp] Invalid session ID: ${sessionId}`)
-        res.status(400).send("Invalid or missing session ID")
+        // MCP 스펙: 모르는 세션 → 404 (클라이언트 재초기화 유도)
+        console.error(`[GET /mcp] Unknown session ID: ${sessionId} (returning 404)`)
+        res.status(404).send("Session not found. Please reinitialize.")
         return
       }
 
@@ -241,8 +255,9 @@ export async function startHTTPServer(server: Server, port: number) {
       const session = sessionId ? sessions.get(sessionId) : undefined
 
       if (!session) {
-        console.error(`[DELETE /mcp] Invalid session ID: ${sessionId}`)
-        res.status(400).send("Invalid or missing session ID")
+        // 이미 없는 세션 → 404 (idempotent하게 처리)
+        console.error(`[DELETE /mcp] Unknown session ID: ${sessionId} (returning 404)`)
+        res.status(404).send("Session not found")
         return
       }
 
