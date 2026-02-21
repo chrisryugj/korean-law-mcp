@@ -9,6 +9,7 @@
 ## 주요 특징
 
 - **법률 도메인 특화**: 약칭 자동 인식(`화관법` → `화학물질관리법`), 조문번호 변환(`제38조` ↔ `003800`), 3단 위임 구조 시각화
+- **별표/별지서식 본문 추출**: HWPX·HWP 파일을 자동 다운로드 → 텍스트/표를 Markdown으로 변환. PDF는 링크 반환
 - **58개 도구**: 법령·판례·행정규칙·자치법규·헌재결정·행정심판·조세심판·관세해석·법령용어 등 포괄
 - **STDIO + SSE**: 로컬(Claude Desktop 등) 및 원격 배포 모두 지원
 - **캐시**: 검색 1시간, 조문 24시간 TTL
@@ -93,7 +94,7 @@ MCP 엔드포인트: `https://your-host:3000/mcp`
 | `suggest_law_names` | 법령명 자동완성 |
 | `advanced_search` | 고급 검색 (기간/키워드 필터) |
 | `get_law_history` | 날짜별 법령 변경이력 |
-| `get_annexes` | 별표/서식 조회 |
+| `get_annexes` | 별표/별지서식 조회 + HWPX/HWP 본문 추출 |
 | `parse_jo_code` | 조문번호 ↔ JO 코드 변환 |
 
 ### 조회 (9개)
@@ -176,6 +177,9 @@ MCP 엔드포인트: `https://your-host:3000/mcp`
 
 사용자: "근로기준법 제74조 해석례"
 → search_interpretations("근로기준법 제74조") → get_interpretation_text(id)
+
+사용자: "산업안전보건법 별표1 내용 알려줘"
+→ get_annexes(lawName="산업안전보건법 별표1") → HWPX 파일 다운로드 → 표/텍스트 Markdown 변환
 ```
 
 ## 환경변수
