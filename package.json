@@ -25,13 +25,13 @@
   "author": "Chris",
   "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "@xmldom/xmldom": "^0.9.8",
-    "dotenv": "^17.2.3",
-    "express": "^4.22.1",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
     "hwp.js": "^0.0.3",
     "jszip": "^3.10.1",
-    "zod": "^3.25.76",
+    "zod": "^3.25.76 || ^4.0.0",
     "zod-to-json-schema": "^3.25.1"
   },
   "devDependencies": {
