@@ -144,8 +144,15 @@ export async function startSSEServer(server: Server, port: number) {
       console.error(`Establishing SSE stream for session ${sessionId}`)
     }
 
-    const transport = transports[sessionId].transport
-    await transport.handleRequest(req, res)
+    try {
+      const transport = transports[sessionId].transport
+      await transport.handleRequest(req, res)
+    } catch (error) {
+      console.error("[GET /mcp] Error:", error)
+      if (!res.headersSent) {
+        res.status(500).send("Internal server error")
+      }
+    }
   })
 
   // MCP DELETE 엔드포인트 (세션 종료)
