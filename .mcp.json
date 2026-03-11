@@ -3,7 +3,7 @@
     "korean-law": {
       "type": "stdio",
       "command": "node",
-      "args": ["c:\\github_project\\korean-law-mcp\\build\\index.js"],
+      "args": ["C:\\Users\\Mong NAS\\.openclaw\\workspace\\korean-law-mcp\\build\\index.js"],
       "env": {
         "LAW_OC": "ryuseungin"
       }

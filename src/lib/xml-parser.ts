@@ -4,6 +4,14 @@
  */
 
 /**
+ * HTML 태그 제거 (검색 결과의 하이라이트 태그 등)
+ * 예: <strong class="tbl_tx_type">지방</strong>자치법 → 지방자치법
+ */
+export function stripHtml(text: string): string {
+  return text.replace(/<[^>]+>/g, "")
+}
+
+/**
  * XML 태그에서 텍스트 추출 (CDATA 지원)
  */
 export function extractTag(content: string, tag: string): string {
