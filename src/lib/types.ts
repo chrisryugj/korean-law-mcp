@@ -8,6 +8,11 @@ import type { LawApiClient } from "./api-client.js"
 /**
  * MCP 도구 응답 타입
  */
+/**
+ * MCP 도구 응답 타입
+ * Note: type은 실질적으로 항상 "text"이지만, 도구 함수들이 inline 타입으로
+ * 반환하므로 string으로 유지. tool-registry.ts에서 "text" as const로 강제함.
+ */
 export interface ToolResponse {
   content: Array<{ type: string; text: string }>
   isError?: boolean
@@ -23,7 +28,7 @@ export interface McpTool {
   description: string
   /** Zod 입력 스키마 */
   schema: z.ZodSchema
-  /** 도구 핸들러 함수 (타입 안전성은 Zod에서 보장) */
+  /** 도구 핸들러 함수 (input 타입은 Zod 런타임 검증으로 보장, 도구별 구체 타입은 handler 내부에서 적용) */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   handler: (apiClient: LawApiClient, input: any) => Promise<ToolResponse>
 }

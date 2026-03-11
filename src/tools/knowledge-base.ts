@@ -1,4 +1,5 @@
 import { z } from "zod"
+import type { LawApiClient } from "../lib/api-client.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { extractTag, parseKBXML, fallbackTermSearch } from "./kb-utils.js"
 
@@ -20,7 +21,7 @@ export const getLegalTermKBSchema = z.object({
 export type GetLegalTermKBInput = z.infer<typeof getLegalTermKBSchema>;
 
 export async function getLegalTermKB(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: GetLegalTermKBInput
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
   try {
@@ -81,7 +82,7 @@ export const getLegalTermDetailSchema = z.object({
 export type GetLegalTermDetailInput = z.infer<typeof getLegalTermDetailSchema>;
 
 export async function getLegalTermDetail(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: GetLegalTermDetailInput
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
   try {
@@ -141,7 +142,7 @@ export const getDailyTermSchema = z.object({
 export type GetDailyTermInput = z.infer<typeof getDailyTermSchema>;
 
 export async function getDailyTerm(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: GetDailyTermInput
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
   try {
@@ -200,7 +201,7 @@ export const getDailyToLegalSchema = z.object({
 export type GetDailyToLegalInput = z.infer<typeof getDailyToLegalSchema>;
 
 export async function getDailyToLegal(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: GetDailyToLegalInput
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
   try {
@@ -249,7 +250,7 @@ export const getLegalToDailySchema = z.object({
 export type GetLegalToDailyInput = z.infer<typeof getLegalToDailySchema>;
 
 export async function getLegalToDaily(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: GetLegalToDailyInput
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
   try {
@@ -299,7 +300,7 @@ export const getTermArticlesSchema = z.object({
 export type GetTermArticlesInput = z.infer<typeof getTermArticlesSchema>;
 
 export async function getTermArticles(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: GetTermArticlesInput
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
   try {
@@ -373,7 +374,7 @@ export const getRelatedLawsSchema = z.object({
 export type GetRelatedLawsInput = z.infer<typeof getRelatedLawsSchema>;
 
 export async function getRelatedLaws(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: GetRelatedLawsInput
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
   try {

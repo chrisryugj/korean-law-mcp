@@ -10,7 +10,7 @@ import type { LawApiClient } from "../lib/api-client.js"
 export const SearchAdminRuleSchema = z.object({
   query: z.string().describe("검색할 행정규칙명"),
   knd: z.string().optional().describe("행정규칙 종류 (1=훈령, 2=예규, 3=고시, 4=공고, 5=일반)"),
-  maxResults: z.number().optional().default(20).describe("최대 결과 개수"),
+  display: z.number().optional().default(20).describe("최대 결과 개수"),
   apiKey: z.string().optional().describe("API 키")
 })
 
@@ -56,9 +56,9 @@ export async function searchAdminRule(
 
     let resultText = `행정규칙 검색 결과 (총 ${rules.length}건):\n\n`
 
-    const maxResults = Math.min(rules.length, input.maxResults)
+    const display = Math.min(rules.length, input.display)
 
-    for (let i = 0; i < maxResults; i++) {
+    for (let i = 0; i < display; i++) {
       const rule = rules[i]
 
       const ruleName = rule.getElementsByTagName("행정규칙명")[0]?.textContent || "알 수 없음"

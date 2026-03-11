@@ -24,7 +24,7 @@ const apiClient = new LawApiClient({ apiKey: LAW_OC })
 const server = new Server(
   {
     name: "korean-law",
-    version: "1.7.0",
+    version: "1.8.0",
   },
   {
     capabilities: {

@@ -9,7 +9,7 @@ import { searchPrecedents } from "./precedents.js"
 
 export const FindSimilarPrecedentsSchema = z.object({
   query: z.string().describe("검색 키워드 또는 판례 내용"),
-  maxResults: z.number().optional().default(5).describe("최대 결과 개수 (기본값: 5)"),
+  display: z.number().optional().default(5).describe("최대 결과 개수 (기본값: 5)"),
   apiKey: z.string().optional().describe("API 키")
 })
 
@@ -41,7 +41,7 @@ export async function findSimilarPrecedents(
     const searchQuery = keywords.join(" ")
     const searchResult = await searchPrecedents(apiClient, {
       query: searchQuery,
-      display: input.maxResults * 2,  // 여유있게 가져오기
+      display: input.display * 2,  // 여유있게 가져오기
       page: 1,
       apiKey: input.apiKey
     })
@@ -52,7 +52,7 @@ export async function findSimilarPrecedents(
 
     // 3. 유사도 기반 정렬 (간단한 키워드 매칭)
     const resultText = searchResult.content[0].text
-    const rankedResults = rankByKeywordSimilarity(resultText, keywords, input.maxResults)
+    const rankedResults = rankByKeywordSimilarity(resultText, keywords, input.display)
 
     return {
       content: [{

@@ -8,8 +8,11 @@
  * 포팅 원본: lexdiff/lib/hwpx-parser.ts, lexdiff/app/api/hwp-to-html/route.ts
  */
 
+import { createRequire } from "module"
 import JSZip from "jszip"
 import { DOMParser } from "@xmldom/xmldom"
+
+const esmRequire = createRequire(import.meta.url)
 
 // ─── 매직바이트 감지 ─────────────────────────────────
 
@@ -301,8 +304,7 @@ function formatToMarkdown(lines: string[]): string {
 
 async function parseHwp(buffer: ArrayBuffer): Promise<AnnexParseResult> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const hwpjs = require("hwp.js")
+    const hwpjs = esmRequire("hwp.js")
     const parse = hwpjs.parse
     const nodeBuffer = Buffer.from(buffer)
 

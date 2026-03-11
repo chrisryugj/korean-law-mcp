@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { LawApiClient } from "../lib/api-client.js";
 import { truncateResponse } from "../lib/schemas.js";
 
 // Legal terms search tool - Search for legal terminology definitions
@@ -12,7 +13,7 @@ export const searchLegalTermsSchema = z.object({
 export type SearchLegalTermsInput = z.infer<typeof searchLegalTermsSchema>;
 
 export async function searchLegalTerms(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: SearchLegalTermsInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {

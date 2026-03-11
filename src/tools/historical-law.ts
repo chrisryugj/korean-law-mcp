@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { LawApiClient } from "../lib/api-client.js";
 import { truncateResponse } from "../lib/schemas.js";
 
 /**
@@ -26,7 +27,7 @@ export const searchHistoricalLawSchema = z.object({
 export type SearchHistoricalLawInput = z.infer<typeof searchHistoricalLawSchema>;
 
 export async function searchHistoricalLaw(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: SearchHistoricalLawInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
@@ -105,7 +106,7 @@ export const getHistoricalLawSchema = z.object({
 export type GetHistoricalLawInput = z.infer<typeof getHistoricalLawSchema>;
 
 export async function getHistoricalLaw(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: GetHistoricalLawInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {

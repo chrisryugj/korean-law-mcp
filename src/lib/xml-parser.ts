@@ -12,10 +12,16 @@ export function extractTag(content: string, tag: string): string {
   const cdataMatch = content.match(cdataRegex)
   if (cdataMatch) return cdataMatch[1]
 
-  // 일반 형식
-  const regex = new RegExp(`<${tag}>([^<]*)<\\/${tag}>`)
+  // 일반 형식 (태그 내 중첩 태그 허용: [\s\S]*? 사용)
+  const regex = new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`)
   const match = content.match(regex)
-  return match ? match[1] : ""
+  if (match) return match[1].trim()
+
+  // Self-closing 태그: <tag/>
+  const selfClosingRegex = new RegExp(`<${tag}\\s*/>`)
+  if (selfClosingRegex.test(content)) return ""
+
+  return ""
 }
 
 /**

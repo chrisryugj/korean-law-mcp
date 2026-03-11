@@ -1,4 +1,5 @@
 import { z } from "zod"
+import type { LawApiClient } from "../lib/api-client.js"
 import { parseAdminAppealXML as parseAdminAppealXMLShared } from "../lib/xml-parser.js"
 import { truncateResponse } from "../lib/schemas.js"
 
@@ -15,7 +16,7 @@ export const searchAdminAppealsSchema = z.object({
 export type SearchAdminAppealsInput = z.infer<typeof searchAdminAppealsSchema>;
 
 export async function searchAdminAppeals(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: SearchAdminAppealsInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
@@ -104,7 +105,7 @@ export const getAdminAppealTextSchema = z.object({
 export type GetAdminAppealTextInput = z.infer<typeof getAdminAppealTextSchema>;
 
 export async function getAdminAppealText(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: GetAdminAppealTextInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {

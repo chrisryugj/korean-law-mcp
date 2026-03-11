@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { LawApiClient } from "../lib/api-client.js";
 import { truncateResponse } from "../lib/schemas.js";
 
 // Customs legal interpretation search tool - Search for customs law interpretations
@@ -18,7 +19,7 @@ export const searchCustomsInterpretationsSchema = z.object({
 export type SearchCustomsInterpretationsInput = z.infer<typeof searchCustomsInterpretationsSchema>;
 
 export async function searchCustomsInterpretations(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: SearchCustomsInterpretationsInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
@@ -103,7 +104,7 @@ export const getCustomsInterpretationTextSchema = z.object({
 export type GetCustomsInterpretationTextInput = z.infer<typeof getCustomsInterpretationTextSchema>;
 
 export async function getCustomsInterpretationText(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: GetCustomsInterpretationTextInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {

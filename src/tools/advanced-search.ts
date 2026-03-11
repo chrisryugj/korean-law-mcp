@@ -15,7 +15,7 @@ export const AdvancedSearchSchema = z.object({
   toDate: z.string().optional().describe("제정일 종료 (YYYYMMDD)"),
   org: z.string().optional().describe("소관부처코드"),
   operator: z.enum(["AND", "OR"]).optional().default("AND").describe("키워드 결합 연산자"),
-  maxResults: z.number().optional().default(20).describe("최대 결과 개수"),
+  display: z.number().optional().default(20).describe("최대 결과 개수"),
   apiKey: z.string().optional().describe("API 키")
 })
 
@@ -31,14 +31,16 @@ export async function advancedSearch(
 
     let results: Array<{ name: string, id: string, type: string, date: string }> = []
 
-    // 검색 대상별로 실행
+    // 검색 대상별로 실행 (병렬)
     const searchTargets = input.searchType === "all"
       ? ["law", "admin_rule", "ordinance"]
       : [input.searchType]
 
-    for (const target of searchTargets) {
-      const targetResults = await searchByType(apiClient, target, keywords, input, input.apiKey)
-      results = results.concat(targetResults)
+    const targetResults = await Promise.all(
+      searchTargets.map(target => searchByType(apiClient, target, keywords, input, input.apiKey))
+    )
+    for (const r of targetResults) {
+      results = results.concat(r)
     }
 
     // AND/OR 연산 적용
@@ -52,7 +54,7 @@ export async function advancedSearch(
     }
 
     // 상위 N개만
-    results = results.slice(0, input.maxResults)
+    results = results.slice(0, input.display)
 
     // 결과 포맷
     let resultText = `🔍 고급 검색 결과 (${results.length}건)\n\n`
@@ -148,8 +150,9 @@ function filterByAnd(
   results: Array<{ name: string, id: string, type: string, date: string }>,
   keywords: string[]
 ): Array<{ name: string, id: string, type: string, date: string }> {
+  // 안전: includes() 사용 (regex가 아님) → injection 위험 없음
   return results.filter(result => {
-    const name = result.name.toLowerCase()
+    const name = (result.name || "").toLowerCase()
     return keywords.every(keyword => name.includes(keyword.toLowerCase()))
   })
 }

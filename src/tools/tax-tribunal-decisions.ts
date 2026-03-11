@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { LawApiClient } from "../lib/api-client.js";
 import { parseTaxTribunalXML } from "../lib/xml-parser.js";
 import { truncateResponse } from "../lib/schemas.js";
 
@@ -19,7 +20,7 @@ export const searchTaxTribunalDecisionsSchema = z.object({
 export type SearchTaxTribunalDecisionsInput = z.infer<typeof searchTaxTribunalDecisionsSchema>;
 
 export async function searchTaxTribunalDecisions(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: SearchTaxTribunalDecisionsInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
@@ -100,7 +101,7 @@ export const getTaxTribunalDecisionTextSchema = z.object({
 export type GetTaxTribunalDecisionTextInput = z.infer<typeof getTaxTribunalDecisionTextSchema>;
 
 export async function getTaxTribunalDecisionText(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: GetTaxTribunalDecisionTextInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {

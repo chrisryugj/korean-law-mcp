@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { LawApiClient } from "../lib/api-client.js";
 import { truncateResponse } from "../lib/schemas.js";
 
 // Common schema for committee decision search (query optional)
@@ -37,7 +38,7 @@ export const searchFtcDecisionsSchema = z.object({
 export type SearchFtcDecisionsInput = z.infer<typeof searchFtcDecisionsSchema>;
 
 export async function searchFtcDecisions(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: SearchFtcDecisionsInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   return searchCommitteeDecisions(apiClient, args, "ftc", "공정거래위원회 결정문", "get_ftc_decision_text");
@@ -47,7 +48,7 @@ export const getFtcDecisionTextSchema = z.object(baseTextSchema);
 export type GetFtcDecisionTextInput = z.infer<typeof getFtcDecisionTextSchema>;
 
 export async function getFtcDecisionText(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: GetFtcDecisionTextInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   return getCommitteeDecisionText(apiClient, args, "ftc", "공정거래위원회 결정문");
@@ -65,7 +66,7 @@ export const searchPipcDecisionsSchema = z.object({
 export type SearchPipcDecisionsInput = z.infer<typeof searchPipcDecisionsSchema>;
 
 export async function searchPipcDecisions(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: SearchPipcDecisionsInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   return searchCommitteeDecisions(apiClient, args, "ppc", "개인정보보호위원회 결정문", "get_pipc_decision_text");
@@ -75,7 +76,7 @@ export const getPipcDecisionTextSchema = z.object(baseTextSchema);
 export type GetPipcDecisionTextInput = z.infer<typeof getPipcDecisionTextSchema>;
 
 export async function getPipcDecisionText(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: GetPipcDecisionTextInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   return getCommitteeDecisionText(apiClient, args, "ppc", "개인정보보호위원회 결정문");
@@ -93,7 +94,7 @@ export const searchNlrcDecisionsSchema = z.object({
 export type SearchNlrcDecisionsInput = z.infer<typeof searchNlrcDecisionsSchema>;
 
 export async function searchNlrcDecisions(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: SearchNlrcDecisionsInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   return searchCommitteeDecisions(apiClient, args, "nlrc", "중앙노동위원회 결정문", "get_nlrc_decision_text");
@@ -103,7 +104,7 @@ export const getNlrcDecisionTextSchema = z.object(baseTextSchema);
 export type GetNlrcDecisionTextInput = z.infer<typeof getNlrcDecisionTextSchema>;
 
 export async function getNlrcDecisionText(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: GetNlrcDecisionTextInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   return getCommitteeDecisionText(apiClient, args, "nlrc", "중앙노동위원회 결정문");
@@ -114,8 +115,8 @@ export async function getNlrcDecisionText(
 // ========================================
 
 async function searchCommitteeDecisions(
-  apiClient: any,
-  args: any,
+  apiClient: LawApiClient,
+  args: { query?: string; display?: number; page?: number; sort?: string; apiKey?: string },
   target: string,
   committeeName: string,
   textToolName: string
@@ -196,8 +197,8 @@ async function searchCommitteeDecisions(
 }
 
 async function getCommitteeDecisionText(
-  apiClient: any,
-  args: any,
+  apiClient: LawApiClient,
+  args: { id: string; apiKey?: string },
   target: string,
   committeeName: string
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {

@@ -43,14 +43,18 @@ export async function getAnnexes(
     let annexList: any[] = []
     let lawType: string = "law"
 
-    if (adminResult?.admbyl && Array.isArray(adminResult.admbyl)) {
-      annexList = adminResult.admbyl
+    // 법제처 API는 결과 1건일 때 배열 대신 단일 객체를 반환하므로 정규화
+    const toArray = (v: unknown): any[] =>
+      v == null ? [] : Array.isArray(v) ? v : [v]
+
+    if (adminResult?.admbyl) {
+      annexList = toArray(adminResult.admbyl)
       lawType = "admin"
-    } else if (licResult?.ordinbyl && Array.isArray(licResult.ordinbyl)) {
-      annexList = licResult.ordinbyl
+    } else if (licResult?.ordinbyl) {
+      annexList = toArray(licResult.ordinbyl)
       lawType = "ordinance"
-    } else if (licResult?.licbyl && Array.isArray(licResult.licbyl)) {
-      annexList = licResult.licbyl
+    } else if (licResult?.licbyl) {
+      annexList = toArray(licResult.licbyl)
       lawType = "law"
     }
 

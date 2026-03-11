@@ -9,7 +9,7 @@ import { lawCache } from "../lib/cache.js"
 
 export const SearchLawSchema = z.object({
   query: z.string().describe("검색할 법령명 (예: '관세법', 'fta특례법', '화관법')"),
-  maxResults: z.number().optional().default(20).describe("최대 결과 개수"),
+  display: z.number().optional().default(20).describe("최대 결과 개수"),
   apiKey: z.string().optional().describe("API 키")
 })
 
@@ -21,7 +21,9 @@ export async function searchLaw(
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
     // Check cache first (search results cached for 1 hour)
-    const cacheKey = `search:${input.query.toLowerCase().trim()}:${input.maxResults}`
+    // 캐시 키에 apiKey 해시를 포함하지 않음 — 검색 결과는 API 키에 무관하게 동일함
+    // (법제처 API는 키별로 다른 결과를 반환하지 않음, 단지 인증 용도)
+    const cacheKey = `search:${input.query.toLowerCase().trim()}:${input.display}`
     const cached = lawCache.get<string>(cacheKey)
     if (cached) {
       return {
@@ -50,9 +52,9 @@ export async function searchLaw(
 
     let resultText = `검색 결과 (총 ${laws.length}건):\n\n`
 
-    const maxResults = Math.min(laws.length, input.maxResults)
+    const display = Math.min(laws.length, input.display)
 
-    for (let i = 0; i < maxResults; i++) {
+    for (let i = 0; i < display; i++) {
       const law = laws[i]
 
       const lawName = law.getElementsByTagName("법령명한글")[0]?.textContent || "알 수 없음"

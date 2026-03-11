@@ -66,31 +66,31 @@ export const allTools: McpTool[] = [
   // === 법령 검색/조회 ===
   {
     name: "search_law",
-    description: "[법령] 검색 → lawId, mst 획득. 약칭 자동변환(화관법→화학물질관리법). get_law_text 전 필수 실행.",
+    description: "[법령검색] 법령명으로 검색하여 lawId, mst를 획득하는 기본 도구. 약칭 자동변환(화관법→화학물질관리법). 법령 조회·비교 전 반드시 이 도구로 식별자를 먼저 확보할 것. 법령명을 아는 경우 사용.",
     schema: SearchLawSchema,
     handler: searchLaw
   },
   {
     name: "get_law_text",
-    description: "[법령] 현행법령 조문 조회. mst/lawId 중 하나 필수. jo로 특정 조문만 조회 가능.",
+    description: "[법령조회] 현행법령 조문 전문 조회. search_law로 획득한 mst/lawId 필수. jo 파라미터로 특정 조문만 조회 가능. 전체 법령 또는 특정 조문 내용이 필요할 때 사용.",
     schema: GetLawTextSchema,
     handler: getLawText
   },
   {
     name: "search_all",
-    description: "[검색] 통합검색 - 법령+행정규칙+자치법규 동시 검색.",
+    description: "[통합검색] 법령+행정규칙+자치법규를 동시 검색하여 어떤 영역에 관련 규정이 있는지 빠르게 파악. 결과는 요약본이므로 상세 조회 시 개별 검색 도구 사용 필요. 검색 대상 영역이 불명확할 때 먼저 사용.",
     schema: SearchAllSchema,
     handler: searchAll
   },
   {
     name: "advanced_search",
-    description: "[검색] 고급검색 - 법령구분, 소관부처, 시행일 등 복합 조건.",
+    description: "[고급검색] 법령구분·소관부처·시행일 기간 등 복합 조건 검색. 단순 키워드가 아닌 기간이나 부처 필터가 필요할 때 사용. 단순 법령명 검색은 search_law가 더 적합.",
     schema: AdvancedSearchSchema,
     handler: advancedSearch
   },
   {
     name: "suggest_law_names",
-    description: "[검색] 법령명 자동완성 제안.",
+    description: "[자동완성] 법령명 일부 입력 시 후보 목록 제안. 정확한 법령명을 모를 때 사용.",
     schema: SuggestLawNamesSchema,
     handler: suggestLawNames
   },
@@ -112,7 +112,7 @@ export const allTools: McpTool[] = [
   // === 자치법규 ===
   {
     name: "search_ordinance",
-    description: "[자치법규] 조례/규칙 검색. 💡 공무원 휴직/복무/징계 등 결과 없으면 상위법령(지방공무원법) 검색 권장.",
+    description: "[자치법규] 조례/규칙 검색. 공무원 휴직/복무/징계 등 결과 없으면 상위법령(지방공무원법)을 search_law로 검색 권장.",
     schema: SearchOrdinanceSchema,
     handler: searchOrdinance
   },
@@ -146,19 +146,19 @@ export const allTools: McpTool[] = [
   // === 부가정보 ===
   {
     name: "get_annexes",
-    description: "[별표] 법령 별표/서식 목록 조회. bylSeq(별표번호) 지정 시 해당 별표 파일을 텍스트로 추출합니다. 커넥터 제약 시 lawName에 '별표4'를 함께 입력해 단일 호출 가능. 사용법: 1) lawName만으로 목록 조회 → 2) bylSeq 재호출 또는 lawName+'별표N'으로 내용 추출.",
+    description: "[별표] 법령 별표/서식 목록 조회 및 내용 추출. lawName만 입력하면 목록 반환, bylSeq 또는 lawName에 '별표N'을 함께 입력하면 해당 별표 텍스트 추출. 수수료·과태료·서식 확인 시 사용.",
     schema: GetAnnexesSchema,
     handler: getAnnexes
   },
   {
     name: "get_law_tree",
-    description: "[체계] 법령체계 트리 조회.",
+    description: "[체계] 법령의 편·장·절·관 목차 구조(내부 체계) 조회. 법령 내 조문이 어떤 장/절에 속하는지 확인할 때 사용. 상위/하위 법령 관계는 get_law_system_tree 사용.",
     schema: GetLawTreeSchema,
     handler: getLawTree
   },
   {
     name: "get_law_system_tree",
-    description: "[체계] 법령체계도 (상위/동위/하위법령 관계).",
+    description: "[체계] 법령체계도 -- 상위법(모법)·하위법(시행령/시행규칙)·관련법령 관계 조회. 법령 간 위임 관계를 파악할 때 사용. 법령 내부 목차는 get_law_tree 사용.",
     schema: getLawSystemTreeSchema,
     handler: getLawSystemTree
   },
@@ -358,7 +358,7 @@ export const allTools: McpTool[] = [
   },
   {
     name: "search_legal_terms",
-    description: "[용어] 법령용어사전 검색.",
+    description: "[용어사전] 법령용어 정의·해설 검색. 특정 법률 용어의 뜻을 찾을 때 사용. 용어 간 연계(일상어↔법령어)는 지식베이스 도구 사용.",
     schema: searchLegalTermsSchema,
     handler: searchLegalTerms
   },
@@ -366,7 +366,7 @@ export const allTools: McpTool[] = [
   // === 생활법령/AI검색 ===
   {
     name: "search_ai_law",
-    description: "[AI] 생활법령 AI 검색 (자연어 질문). lawTypes로 법률/대통령령/총리령,부령 등 필터 가능. 예: search_ai_law(query='음주운전 처벌', lawTypes=['법률'])",
+    description: "[AI검색] 법제처 AI 엔진 기반 자연어 법령 검색. 일상 질문('음주운전 처벌')이나 상황 설명으로 관련 조문을 직접 찾아줌. lawTypes로 법률/대통령령 등 필터 가능. 법령명을 모르고 상황만 아는 경우 최적. 법령명을 아는 경우 search_law가 더 정확.",
     schema: searchAiLawSchema,
     handler: searchAiLaw
   },
@@ -374,7 +374,7 @@ export const allTools: McpTool[] = [
   // === 법령용어 지식베이스 ===
   {
     name: "get_legal_term_kb",
-    description: "[지식베이스] 법령용어 검색.",
+    description: "[지식베이스] 법령용어 검색 -- 동음이의어·용어관계·조문연계 메타정보 포함. 용어의 관계망을 탐색할 때 사용. 단순 정의만 필요하면 search_legal_terms가 빠름.",
     schema: getLegalTermKBSchema,
     handler: getLegalTermKB
   },
@@ -386,7 +386,7 @@ export const allTools: McpTool[] = [
   },
   {
     name: "get_daily_term",
-    description: "[지식베이스] 일상용어 검색.",
+    description: "[지식베이스] 일상용어(월세, 뺑소니 등)로 검색하여 대응하는 법령용어를 찾을 때 사용.",
     schema: getDailyTermSchema,
     handler: getDailyTerm
   },
@@ -468,7 +468,7 @@ export const allTools: McpTool[] = [
   },
   {
     name: "chain_full_research",
-    description: "[체인] 종합 리서치 -- AI검색→법령본문→판례→해석례 종합 조회. 자연어 질문에 최적. 예: chain_full_research(query='기간제 근로자 2년 초과 사용')",
+    description: "[체인] 종합 리서치 -- AI검색→법령본문→판례→해석례를 한번에 종합 조회. 자연어 질문에 최적이며 개별 도구를 순차 호출할 필요 없음. 법령+판례+해석을 모두 봐야 할 때 사용. 예: chain_full_research(query='기간제 근로자 2년 초과 사용')",
     schema: chainFullResearchSchema,
     handler: chainFullResearch
   },

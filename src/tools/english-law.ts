@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { LawApiClient } from "../lib/api-client.js";
 import { truncateResponse } from "../lib/schemas.js";
 
 // English law search tool - Search for English translations of Korean laws
@@ -14,7 +15,7 @@ export const searchEnglishLawSchema = z.object({
 export type SearchEnglishLawInput = z.infer<typeof searchEnglishLawSchema>;
 
 export async function searchEnglishLaw(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: SearchEnglishLawInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
@@ -104,7 +105,7 @@ export const getEnglishLawTextSchema = z.object({
 export type GetEnglishLawTextInput = z.infer<typeof getEnglishLawTextSchema>;
 
 export async function getEnglishLawText(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: GetEnglishLawTextInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {

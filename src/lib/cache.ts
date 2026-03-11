@@ -95,9 +95,11 @@ export class SimpleCache {
 }
 
 // Global cache instance
-export const lawCache = new SimpleCache(100)
+// 64개 도구 × 다양한 쿼리 조합 → maxSize=100은 빈번한 eviction 유발
+// 법령 데이터는 변경 빈도가 낮아 캐시 적중률이 높으므로 넉넉하게 설정
+export const lawCache = new SimpleCache(500)
 
 // Cleanup expired entries every hour
 setInterval(() => {
   lawCache.cleanup()
-}, 60 * 60 * 1000)
+}, 60 * 60 * 1000).unref()

@@ -129,12 +129,14 @@ function _extractSummary(text: string, maxSize: number): string {
       collected.push(line)
       budget -= line.length + 2
       // 헤더 다음 2줄까지 포함
-      for (let j = 1; j <= 2 && i + j < lines.length && budget > 0; j++) {
+      let j = 1
+      for (; j <= 2 && i + j < lines.length && budget > 0; j++) {
         const nextLine = lines[i + j]
         if (/^▶|^#{1,4}\s/.test(nextLine)) break // 다음 섹션이면 중단
         collected.push(nextLine)
         budget -= nextLine.length + 1
       }
+      i += j // j 루프로 소비한 만큼 i를 추가 증가
     }
     i++
   }

@@ -40,6 +40,27 @@ interface FetchResult {
   error?: string
 }
 
+/** 법령 API JSON 응답의 조문단위 구조 */
+interface ArticleUnit {
+  조문여부?: string
+  조문번호?: string
+  조문가지번호?: string
+  조문제목?: string
+  조문내용?: unknown
+  항?: unknown[]
+  [key: string]: unknown
+}
+
+/** 법령 API JSON 응답 구조 (사용하는 필드만 정의) */
+interface LawResponse {
+  법령?: {
+    기본정보?: Record<string, string>
+    조문?: { 조문단위?: ArticleUnit | ArticleUnit[] }
+    [key: string]: unknown
+  }
+  [key: string]: unknown
+}
+
 /**
  * 단일 법령에서 조문 추출
  */
@@ -50,9 +71,9 @@ async function fetchArticlesForLaw(
   apiKey?: string
 ): Promise<FetchResult> {
   const cacheKey = `lawtext:${lawReq.mst || lawReq.lawId}:full:${efYd || ''}`
-  let fullLawData: any
+  let fullLawData: LawResponse
 
-  const cached = lawCache.get<any>(cacheKey)
+  const cached = lawCache.get<LawResponse>(cacheKey)
   if (cached) {
     fullLawData = cached
   } else {
@@ -62,7 +83,7 @@ async function fetchArticlesForLaw(
       efYd: efYd,
       apiKey: apiKey,
     })
-    fullLawData = JSON.parse(jsonText)
+    fullLawData = JSON.parse(jsonText) as LawResponse
     lawCache.set(cacheKey, fullLawData)
   }
 
@@ -71,8 +92,8 @@ async function fetchArticlesForLaw(
     return { error: `법령 데이터를 찾을 수 없습니다 (${lawReq.mst || lawReq.lawId}).` }
   }
 
-  const basicInfo = lawData.기본정보 || lawData
-  const lawName = basicInfo?.법령명_한글 || basicInfo?.법령명한글 || basicInfo?.법령명 || "알 수 없음"
+  const basicInfo = lawData.기본정보 ?? {} as Record<string, string>
+  const lawName = basicInfo.법령명_한글 || basicInfo.법령명한글 || basicInfo.법령명 || "알 수 없음"
 
   // 조문 번호를 JO 코드로 변환
   const joCodes = new Set<string>()
@@ -87,7 +108,7 @@ async function fetchArticlesForLaw(
 
   // 조문 추출
   const rawUnits = lawData.조문?.조문단위
-  let articleUnits: any[] = []
+  let articleUnits: ArticleUnit[] = []
 
   if (Array.isArray(rawUnits)) {
     articleUnits = rawUnits
@@ -184,11 +205,14 @@ export async function getBatchArticles(
       }]
     }
 
-    // 각 법령별 조문 일괄 추출
+    // 각 법령별 조문 일괄 추출 (동시성 제한 병렬 처리)
     const results: string[] = []
     const errors: string[] = []
 
-    for (const lawReq of lawRequests) {
+    // 사전 검증: 유효한 요청만 필터링
+    const validRequests: { index: number; lawReq: LawEntry }[] = []
+    for (let i = 0; i < lawRequests.length; i++) {
+      const lawReq = lawRequests[i]
       if (!lawReq.articles || lawReq.articles.length === 0) {
         errors.push(`${lawReq.mst || lawReq.lawId}: articles 배열이 비어 있습니다.`)
         continue
@@ -197,15 +221,44 @@ export async function getBatchArticles(
         errors.push(`법령 식별자(mst 또는 lawId)가 없습니다.`)
         continue
       }
-      try {
-        const result = await fetchArticlesForLaw(apiClient, lawReq, input.efYd, input.apiKey)
-        if (result.error) {
-          errors.push(result.error)
+      validRequests.push({ index: i, lawReq })
+    }
+
+    // 동시성 제한 병렬 처리 (최대 4개씩)
+    const CONCURRENCY = 4
+    const fetchResults: { index: number; result?: FetchResult; error?: string }[] = []
+
+    for (let i = 0; i < validRequests.length; i += CONCURRENCY) {
+      const chunk = validRequests.slice(i, i + CONCURRENCY)
+      const settled = await Promise.allSettled(
+        chunk.map(async ({ index, lawReq }) => {
+          const result = await fetchArticlesForLaw(apiClient, lawReq, input.efYd, input.apiKey)
+          return { index, result }
+        })
+      )
+      for (let j = 0; j < settled.length; j++) {
+        const s = settled[j]
+        if (s.status === 'fulfilled') {
+          fetchResults.push(s.value)
         } else {
-          results.push(result.text!)
+          const lawReq = chunk[j].lawReq
+          fetchResults.push({
+            index: chunk[j].index,
+            error: `${lawReq.mst || lawReq.lawId}: ${s.reason instanceof Error ? s.reason.message : String(s.reason)}`,
+          })
         }
-      } catch (e) {
-        errors.push(`${lawReq.mst || lawReq.lawId}: ${e instanceof Error ? e.message : String(e)}`)
+      }
+    }
+
+    // 원래 순서대로 정렬 후 결과 수집
+    fetchResults.sort((a, b) => a.index - b.index)
+    for (const fr of fetchResults) {
+      if (fr.error) {
+        errors.push(fr.error)
+      } else if (fr.result?.error) {
+        errors.push(fr.result.error)
+      } else if (fr.result?.text) {
+        results.push(fr.result.text)
       }
     }
 

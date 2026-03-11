@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { LawApiClient } from "../lib/api-client.js";
 import { parseConstitutionalXML } from "../lib/xml-parser.js";
 import { truncateResponse } from "../lib/schemas.js";
 
@@ -16,7 +17,7 @@ export const searchConstitutionalDecisionsSchema = z.object({
 export type SearchConstitutionalDecisionsInput = z.infer<typeof searchConstitutionalDecisionsSchema>;
 
 export async function searchConstitutionalDecisions(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: SearchConstitutionalDecisionsInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
@@ -106,7 +107,7 @@ export const getConstitutionalDecisionTextSchema = z.object({
 export type GetConstitutionalDecisionTextInput = z.infer<typeof getConstitutionalDecisionTextSchema>;
 
 export async function getConstitutionalDecisionText(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: GetConstitutionalDecisionTextInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {

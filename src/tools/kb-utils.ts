@@ -91,7 +91,7 @@ export function parseKBXML(xml: string, _rootTag: string): KBParseResult {
  * 용어 검색 폴백
  */
 export async function fallbackTermSearch(
-  apiClient: any,
+  apiClient: Pick<import("../lib/api-client.js").LawApiClient, "fetchApi">,
   term: string,
   termType: string
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {

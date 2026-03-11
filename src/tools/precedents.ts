@@ -1,23 +1,24 @@
 import { z } from "zod"
+import type { LawApiClient } from "../lib/api-client.js"
 import { parsePrecedentXML } from "../lib/xml-parser.js"
 import { truncateResponse } from "../lib/schemas.js"
 
 // Precedent search tool - Search for case law by keyword, court, or case number
 export const searchPrecedentsSchema = z.object({
-  query: z.string().optional().describe("Search keyword (e.g., '자동차', '담보권')"),
-  court: z.string().optional().describe("Court name filter (e.g., '대법원', '서울고등법원')"),
-  caseNumber: z.string().optional().describe("Case number (e.g., '2009느합133')"),
-  display: z.number().min(1).max(100).default(20).describe("Results per page (default: 20, max: 100)"),
-  page: z.number().min(1).default(1).describe("Page number (default: 1)"),
+  query: z.string().optional().describe("검색 키워드 (예: '자동차', '담보권')"),
+  court: z.string().optional().describe("법원명 필터 (예: '대법원', '서울고등법원')"),
+  caseNumber: z.string().optional().describe("사건번호 (예: '2009느합133')"),
+  display: z.number().min(1).max(100).default(20).describe("결과 수 (기본:20, 최대:100)"),
+  page: z.number().min(1).default(1).describe("페이지 번호 (기본:1)"),
   sort: z.enum(["lasc", "ldes", "dasc", "ddes", "nasc", "ndes"]).optional()
-    .describe("Sort option: lasc/ldes (law name), dasc/ddes (date), nasc/ndes (case number)"),
+    .describe("정렬: lasc/ldes(법령명), dasc/ddes(날짜), nasc/ndes(사건번호)"),
   apiKey: z.string().optional().describe("API 키"),
 });
 
 export type SearchPrecedentsInput = z.infer<typeof searchPrecedentsSchema>;
 
 export async function searchPrecedents(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: SearchPrecedentsInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
@@ -102,15 +103,15 @@ export async function searchPrecedents(
 
 // Precedent text retrieval tool - Get full text of a specific case
 export const getPrecedentTextSchema = z.object({
-  id: z.string().describe("Precedent serial number (판례일련번호) from search results"),
-  caseName: z.string().optional().describe("Case name (optional, for verification)"),
+  id: z.string().describe("판례일련번호 (search_precedents 결과에서 획득)"),
+  caseName: z.string().optional().describe("사건명 (선택, 검증용)"),
   apiKey: z.string().optional().describe("API 키"),
 });
 
 export type GetPrecedentTextInput = z.infer<typeof getPrecedentTextSchema>;
 
 export async function getPrecedentText(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: GetPrecedentTextInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {

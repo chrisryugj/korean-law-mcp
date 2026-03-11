@@ -1,5 +1,7 @@
 import { z } from "zod";
+import type { LawApiClient } from "../lib/api-client.js";
 import { truncateResponse } from "../lib/schemas.js";
+import { extractTag as sharedExtractTag } from "../lib/xml-parser.js";
 
 // AI-powered intelligent law search tool
 // 이름은 searchAiLaw가 더 정확하지만, 호환성을 위해 searchLifeLaw alias 유지
@@ -19,7 +21,7 @@ export const searchAiLawSchema = z.object({
 export type SearchAiLawInput = z.infer<typeof searchAiLawSchema>;
 
 export async function searchAiLaw(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: SearchAiLawInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
@@ -188,52 +190,44 @@ function parseAiSearchXML(xml: string, searchType: string): any {
     const itemContent = match[1];
     const item: any = {};
 
-    const extractTag = (tag: string) => {
-      const cdataRegex = new RegExp(`<${tag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>`, 'i');
-      const cdataMatch = itemContent.match(cdataRegex);
-      if (cdataMatch) return cdataMatch[1];
-
-      const regex = new RegExp(`<${tag}>([^<]*)<\\/${tag}>`, 'i');
-      const tagMatch = itemContent.match(regex);
-      return tagMatch ? tagMatch[1] : "";
-    };
+    const extractField = (tag: string) => sharedExtractTag(itemContent, tag);
 
     // Common fields
-    item.시행일자 = extractTag("시행일자");
+    item.시행일자 = extractField("시행일자");
 
     if (searchType === "0") {
       // 법령조문
-      item.법령ID = extractTag("법령ID");
-      item.법령명 = extractTag("법령명");
-      item.법령종류명 = extractTag("법령종류명");
-      item.소관부처명 = extractTag("소관부처명");
-      item.조문번호 = extractTag("조문번호");
-      item.조문가지번호 = extractTag("조문가지번호");
-      item.조문제목 = extractTag("조문제목");
-      item.조문내용 = extractTag("조문내용");
+      item.법령ID = extractField("법령ID");
+      item.법령명 = extractField("법령명");
+      item.법령종류명 = extractField("법령종류명");
+      item.소관부처명 = extractField("소관부처명");
+      item.조문번호 = extractField("조문번호");
+      item.조문가지번호 = extractField("조문가지번호");
+      item.조문제목 = extractField("조문제목");
+      item.조문내용 = extractField("조문내용");
     } else if (searchType === "1") {
       // 법령별표서식
-      item.법령ID = extractTag("법령ID");
-      item.법령명 = extractTag("법령명");
-      item.별표서식번호 = extractTag("별표서식번호");
-      item.별표서식제목 = extractTag("별표서식제목");
-      item.별표서식구분명 = extractTag("별표서식구분명");
+      item.법령ID = extractField("법령ID");
+      item.법령명 = extractField("법령명");
+      item.별표서식번호 = extractField("별표서식번호");
+      item.별표서식제목 = extractField("별표서식제목");
+      item.별표서식구분명 = extractField("별표서식구분명");
     } else if (searchType === "2") {
       // 행정규칙조문
-      item.행정규칙ID = extractTag("행정규칙ID");
-      item.행정규칙명 = extractTag("행정규칙명");
-      item.발령기관명 = extractTag("발령기관명");
-      item.조문번호 = extractTag("조문번호");
-      item.조문가지번호 = extractTag("조문가지번호");
-      item.조문제목 = extractTag("조문제목");
-      item.조문내용 = extractTag("조문내용");
+      item.행정규칙ID = extractField("행정규칙ID");
+      item.행정규칙명 = extractField("행정규칙명");
+      item.발령기관명 = extractField("발령기관명");
+      item.조문번호 = extractField("조문번호");
+      item.조문가지번호 = extractField("조문가지번호");
+      item.조문제목 = extractField("조문제목");
+      item.조문내용 = extractField("조문내용");
     } else {
       // 행정규칙별표서식
-      item.행정규칙ID = extractTag("행정규칙ID");
-      item.행정규칙명 = extractTag("행정규칙명");
-      item.별표서식번호 = extractTag("별표서식번호");
-      item.별표서식제목 = extractTag("별표서식제목");
-      item.별표서식구분명 = extractTag("별표서식구분명");
+      item.행정규칙ID = extractField("행정규칙ID");
+      item.행정규칙명 = extractField("행정규칙명");
+      item.별표서식번호 = extractField("별표서식번호");
+      item.별표서식제목 = extractField("별표서식제목");
+      item.별표서식구분명 = extractField("별표서식구분명");
     }
 
     obj.aiSearch.items.push(item);

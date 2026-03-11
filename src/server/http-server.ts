@@ -95,7 +95,7 @@ export async function startHTTPServer(server: Server, port: number) {
   app.get("/", (req, res) => {
     res.json({
       name: "Korean Law MCP Server",
-      version: "1.7.0",
+      version: "1.8.0",
       status: "running",
       transport: "streamable-http",
       endpoints: {

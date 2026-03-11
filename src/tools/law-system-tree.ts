@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { LawApiClient } from "../lib/api-client.js";
 import { truncateResponse } from "../lib/schemas.js";
 
 // Law system tree tool - Get hierarchical structure of laws
@@ -12,7 +13,7 @@ export const getLawSystemTreeSchema = z.object({
 export type GetLawSystemTreeInput = z.infer<typeof getLawSystemTreeSchema>;
 
 export async function getLawSystemTree(
-  apiClient: any,
+  apiClient: LawApiClient,
   args: GetLawSystemTreeInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {

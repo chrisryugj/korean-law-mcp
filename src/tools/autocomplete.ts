@@ -32,7 +32,7 @@ export async function suggestLawNames(
     // Search for laws matching the partial input
     const searchResult = await searchLaw(apiClient, {
       query: input.partial,
-      maxResults: 20,
+      display: 20,
       apiKey: input.apiKey
     })
 

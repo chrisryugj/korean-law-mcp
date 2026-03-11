@@ -3,8 +3,9 @@
  * 7개 체인 + 키워드 트리거 확장
  */
 import { z } from "zod"
-import { DOMParser } from "@xmldom/xmldom"
-import { truncateResponse } from "../lib/schemas.js"
+import { truncateSections } from "../lib/schemas.js"
+import { formatToolError } from "../lib/errors.js"
+import { extractTag } from "../lib/xml-parser.js"
 import type { LawApiClient } from "../lib/api-client.js"
 import type { ToolResponse } from "../lib/types.js"
 
@@ -50,6 +51,7 @@ type ExpansionType = "annex_fee" | "annex_form" | "annex_table" | "precedent" | 
 // ========================================
 
 async function callTool(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   handler: (apiClient: LawApiClient, input: any) => Promise<ToolResponse>,
   apiClient: LawApiClient,
   input: Record<string, unknown>
@@ -70,19 +72,17 @@ async function findLaws(
 ): Promise<LawInfo[]> {
   try {
     const xmlText = await apiClient.searchLaw(query, apiKey)
-    const doc = new DOMParser().parseFromString(xmlText, "text/xml")
-    const laws = doc.getElementsByTagName("law")
-    if (laws.length === 0) return []
-
+    const lawRegex = /<law[^>]*>([\s\S]*?)<\/law>/g
     const results: LawInfo[] = []
-    const limit = Math.min(laws.length, max)
-    for (let i = 0; i < limit; i++) {
-      const law = laws[i]
+
+    let match
+    while ((match = lawRegex.exec(xmlText)) !== null && results.length < max) {
+      const content = match[1]
       results.push({
-        lawName: law.getElementsByTagName("법령명한글")[0]?.textContent || "",
-        lawId: law.getElementsByTagName("법령ID")[0]?.textContent || "",
-        mst: law.getElementsByTagName("법령일련번호")[0]?.textContent || "",
-        lawType: law.getElementsByTagName("법령구분명")[0]?.textContent || "",
+        lawName: extractTag(content, "법령명한글"),
+        lawId: extractTag(content, "법령ID"),
+        mst: extractTag(content, "법령일련번호"),
+        lawType: extractTag(content, "법령구분명"),
       })
     }
     return results
@@ -115,6 +115,16 @@ function sec(title: string, content: string): string {
   return `\n▶ ${title}\n${content}\n`
 }
 
+/** 부분 실패 시 사용자에게 왜 빠졌는지 알림 */
+function secOrSkip(title: string, result: CallResult): string {
+  if (!result.isError) return sec(title, result.text)
+  // 에러인 경우 간략하게 왜 빠졌는지 표시
+  if (result.text && result.text.trim()) {
+    return `\n▶ ${title} (조회 실패: ${result.text.slice(0, 80)})\n`
+  }
+  return `\n▶ ${title} (조회 실패)\n`
+}
+
 function noResult(query: string): ToolResponse {
   return {
     content: [{ type: "text", text: `'${query}' 관련 법령을 찾을 수 없습니다. 검색어를 확인해주세요.` }],
@@ -123,12 +133,13 @@ function noResult(query: string): ToolResponse {
 }
 
 function wrapResult(text: string): ToolResponse {
-  return { content: [{ type: "text", text: truncateResponse(text) }] }
+  return { content: [{ type: "text", text: truncateSections(text) }] }
 }
 
-function wrapError(error: unknown): ToolResponse {
+function wrapError(error: unknown, toolName?: string): ToolResponse {
+  const resp = formatToolError(error, toolName)
   return {
-    content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+    content: [{ type: "text", text: resp.content[0].type === "text" ? resp.content[0].text : String(error) }],
     isError: true,
   }
 }
@@ -206,18 +217,18 @@ export async function chainActionBasis(
 
     // Step 1: 3단 비교 (요건 체계)
     const threeTier = await callTool(getThreeTier, apiClient, { mst: p.mst, apiKey: input.apiKey })
-    if (!threeTier.isError) parts.push(sec("법령 체계 (법률·시행령·시행규칙)", threeTier.text))
+    parts.push(secOrSkip("법령 체계 (법률·시행령·시행규칙)", threeTier))
 
     // Step 2: 해석례 + 판례 + 행정심판 (병렬)
     const [interpR, precR, appealR] = await Promise.all([
-      callTool(searchInterpretations, apiClient, { query: input.query, maxResults: 5, apiKey: input.apiKey }),
-      callTool(searchPrecedents, apiClient, { query: input.query, maxResults: 5, apiKey: input.apiKey }),
-      callTool(searchAdminAppeals, apiClient, { query: input.query, maxResults: 5, apiKey: input.apiKey }),
+      callTool(searchInterpretations, apiClient, { query: input.query, display: 5, apiKey: input.apiKey }),
+      callTool(searchPrecedents, apiClient, { query: input.query, display: 5, apiKey: input.apiKey }),
+      callTool(searchAdminAppeals, apiClient, { query: input.query, display: 5, apiKey: input.apiKey }),
     ])
 
-    if (!interpR.isError) parts.push(sec("법령 해석례", interpR.text))
-    if (!precR.isError) parts.push(sec("관련 판례", precR.text))
-    if (!appealR.isError) parts.push(sec("행정심판례", appealR.text))
+    parts.push(secOrSkip("법령 해석례", interpR))
+    parts.push(secOrSkip("관련 판례", precR))
+    parts.push(secOrSkip("행정심판례", appealR))
 
     // 키워드 확장
     const exp = detectExpansions(input.query)
@@ -252,18 +263,18 @@ export async function chainDisputePrep(
 
     // Step 1: 판례 + 행정심판 (병렬)
     const parallel: Promise<CallResult>[] = [
-      callTool(searchPrecedents, apiClient, { query: input.query, maxResults: 8, apiKey: input.apiKey }),
-      callTool(searchAdminAppeals, apiClient, { query: input.query, maxResults: 8, apiKey: input.apiKey }),
+      callTool(searchPrecedents, apiClient, { query: input.query, display: 8, apiKey: input.apiKey }),
+      callTool(searchAdminAppeals, apiClient, { query: input.query, display: 8, apiKey: input.apiKey }),
     ]
 
     // Step 2: 도메인별 전문 결정례 추가
     const domain = input.domain || detectDomain(input.query) || "general"
     if (domain === "tax") {
-      parallel.push(callTool(searchTaxTribunalDecisions, apiClient, { query: input.query, maxResults: 5, apiKey: input.apiKey }))
+      parallel.push(callTool(searchTaxTribunalDecisions, apiClient, { query: input.query, display: 5, apiKey: input.apiKey }))
     } else if (domain === "labor") {
-      parallel.push(callTool(searchNlrcDecisions, apiClient, { query: input.query, maxResults: 5, apiKey: input.apiKey }))
+      parallel.push(callTool(searchNlrcDecisions, apiClient, { query: input.query, display: 5, apiKey: input.apiKey }))
     } else if (domain === "privacy") {
-      parallel.push(callTool(searchPipcDecisions, apiClient, { query: input.query, maxResults: 5, apiKey: input.apiKey }))
+      parallel.push(callTool(searchPipcDecisions, apiClient, { query: input.query, display: 5, apiKey: input.apiKey }))
     }
 
     const results = await Promise.all(parallel)
@@ -282,7 +293,7 @@ export async function chainDisputePrep(
     // 해석례 (키워드 확장)
     const exp = detectExpansions(input.query)
     if (exp.includes("interpretation")) {
-      const interp = await callTool(searchInterpretations, apiClient, { query: input.query, maxResults: 5, apiKey: input.apiKey })
+      const interp = await callTool(searchInterpretations, apiClient, { query: input.query, display: 5, apiKey: input.apiKey })
       if (!interp.isError) parts.push(sec("법령 해석례", interp.text))
     }
 
@@ -381,7 +392,7 @@ export async function chainOrdinanceCompare(
     // 키워드 확장
     const exp = detectExpansions(input.query)
     if (exp.includes("interpretation")) {
-      const interp = await callTool(searchInterpretations, apiClient, { query: input.query, maxResults: 5, apiKey: input.apiKey })
+      const interp = await callTool(searchInterpretations, apiClient, { query: input.query, display: 5, apiKey: input.apiKey })
       if (!interp.isError) parts.push(sec("법령 해석례", interp.text))
     }
 
@@ -407,26 +418,25 @@ export async function chainFullResearch(
   try {
     const parts = [`═══ 종합 리서치: ${input.query} ═══`]
 
-    // Step 1: AI 법령 검색
-    const aiResult = await callTool(searchAiLaw, apiClient, { query: input.query, display: 10, apiKey: input.apiKey })
-    if (!aiResult.isError) parts.push(sec("AI 법령검색 결과", aiResult.text))
-
-    // Step 2: 법령 검색으로 MST 확보 + 판례/해석 병렬
-    const [lawsResult, precResult, interpResult] = await Promise.all([
+    // Step 1: AI 검색 + 법령 검색 + 판례/해석 모두 병렬
+    const [aiResult, lawsResult, precResult, interpResult] = await Promise.all([
+      callTool(searchAiLaw, apiClient, { query: input.query, display: 10, apiKey: input.apiKey }),
       findLaws(apiClient, input.query, input.apiKey, 2),
-      callTool(searchPrecedents, apiClient, { query: input.query, maxResults: 5, apiKey: input.apiKey }),
-      callTool(searchInterpretations, apiClient, { query: input.query, maxResults: 5, apiKey: input.apiKey }),
+      callTool(searchPrecedents, apiClient, { query: input.query, display: 5, apiKey: input.apiKey }),
+      callTool(searchInterpretations, apiClient, { query: input.query, display: 5, apiKey: input.apiKey }),
     ])
+
+    parts.push(secOrSkip("AI 법령검색 결과", aiResult))
 
     // 법령 본문 (첫 번째 결과)
     if (lawsResult.length > 0) {
       const p = lawsResult[0]
       const lawText = await callTool(getLawText, apiClient, { mst: p.mst, apiKey: input.apiKey })
-      if (!lawText.isError) parts.push(sec(`${p.lawName} 본문`, lawText.text))
+      parts.push(secOrSkip(`${p.lawName} 본문`, lawText))
     }
 
-    if (!precResult.isError) parts.push(sec("관련 판례", precResult.text))
-    if (!interpResult.isError) parts.push(sec("법령 해석례", interpResult.text))
+    parts.push(secOrSkip("관련 판례", precResult))
+    parts.push(secOrSkip("법령 해석례", interpResult))
 
     // 키워드 확장
     const exp = detectExpansions(input.query)
@@ -475,9 +485,15 @@ export async function chainProcedureDetail(
       callTool(getAnnexes, apiClient, { lawName: p.lawName, apiKey: input.apiKey }),
       // 시행규칙에도 별표가 있을 수 있으므로 시행규칙명으로도 시도
       (async (): Promise<CallResult> => {
-        const rules = await findLaws(apiClient, p.lawName.replace(/법$/, "법 시행규칙"), input.apiKey, 1)
-        if (rules.length > 0) {
-          return callTool(getAnnexes, apiClient, { lawName: rules[0].lawName, apiKey: input.apiKey })
+        const ruleNameCandidates = [
+          p.lawName.replace(/법$/, '법 시행규칙'),
+          p.lawName.replace(/법$/, '법 시행령'),
+        ].filter(name => name !== p.lawName)
+        for (const candidate of ruleNameCandidates) {
+          const rules = await findLaws(apiClient, candidate, input.apiKey, 1)
+          if (rules.length > 0) {
+            return callTool(getAnnexes, apiClient, { lawName: rules[0].lawName, apiKey: input.apiKey })
+          }
         }
         return { text: "", isError: true }
       })(),
