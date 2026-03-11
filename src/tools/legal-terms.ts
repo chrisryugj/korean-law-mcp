@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { LawApiClient } from "../lib/api-client.js";
 import { truncateResponse } from "../lib/schemas.js";
+import { extractTag } from "../lib/xml-parser.js";
 
 // Legal terms search tool - Search for legal terminology definitions
 export const searchLegalTermsSchema = z.object({
@@ -125,24 +126,16 @@ function parseLegalTermsXML(xml: string): any {
     const itemContent = match[1];
     const item: any = {};
 
-    const extractTag = (tag: string) => {
-      const cdataRegex = new RegExp(`<${tag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>`, 'i');
-      const cdataMatch = itemContent.match(cdataRegex);
-      if (cdataMatch) return cdataMatch[1];
-
-      const regex = new RegExp(`<${tag}>([^<]*)<\\/${tag}>`, 'i');
-      const match = itemContent.match(regex);
-      return match ? match[1] : "";
-    };
+    const extract = (tag: string) => extractTag(itemContent, tag);
 
     // Match actual API field names
-    item.용어명 = extractTag("법령용어명") || extractTag("용어명") || extractTag("용어");
-    item.용어ID = extractTag("법령용어ID");
-    item.용어정의 = extractTag("용어정의") || extractTag("정의");
-    item.관련법령 = extractTag("관련법령") || extractTag("법령명");
-    item.일상용어 = extractTag("일상용어");
-    item.영문용어 = extractTag("영문용어") || extractTag("영문");
-    item.상세링크 = extractTag("법령용어상세링크") || extractTag("법령용어상세검색");
+    item.용어명 = extract("법령용어명") || extract("용어명") || extract("용어");
+    item.용어ID = extract("법령용어ID");
+    item.용어정의 = extract("용어정의") || extract("정의");
+    item.관련법령 = extract("관련법령") || extract("법령명");
+    item.일상용어 = extract("일상용어");
+    item.영문용어 = extract("영문용어") || extract("영문");
+    item.상세링크 = extract("법령용어상세링크") || extract("법령용어상세검색");
 
     obj.LsTrmSearch.lsTrm.push(item);
   }

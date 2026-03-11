@@ -7,7 +7,7 @@ import { DOMParser } from "@xmldom/xmldom"
 import type { LawApiClient } from "../lib/api-client.js"
 
 export const LawStatisticsSchema = z.object({
-  days: z.number().optional().default(30).describe("최근 변경 분석 기간 (일 단위, 기본값: 30)"),
+  days: z.number().min(1).max(90).optional().default(30).describe("최근 변경 분석 기간 (일 단위, 기본값: 30, 최대: 90)"),
   limit: z.number().optional().default(10).describe("결과 개수 제한 (기본값: 10)"),
   apiKey: z.string().optional().describe("API 키")
 })
@@ -44,35 +44,46 @@ async function getRecentChanges(
   const startDate = new Date(endDate)
   startDate.setDate(endDate.getDate() - days)
 
+  // 날짜 목록 생성
+  const dateStrings: string[] = []
+  for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
+    dateStrings.push(date.toISOString().slice(0, 10).replace(/-/g, ""))
+  }
+
+  // 병렬 API 호출 (동시 요청 5개씩 배치)
+  const BATCH_SIZE = 5
   const changes: Array<{ lawName: string, date: string, type: string }> = []
 
-  for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
-    const dateStr = date.toISOString().slice(0, 10).replace(/-/g, "")
+  for (let i = 0; i < dateStrings.length; i += BATCH_SIZE) {
+    const batch = dateStrings.slice(i, i + BATCH_SIZE)
+    const results = await Promise.all(
+      batch.map(async (dateStr) => {
+        try {
+          const xmlText = await apiClient.getLawHistory({
+            regDt: dateStr,
+            display: 100,
+            apiKey
+          })
 
-    try {
-      const xmlText = await apiClient.getLawHistory({
-        regDt: dateStr,
-        display: 100,
-        apiKey
+          const parser = new DOMParser()
+          const doc = parser.parseFromString(xmlText, "text/xml")
+          const histories = doc.getElementsByTagName("lsHstInf")
+          const items: Array<{ lawName: string, date: string, type: string }> = []
+
+          for (let j = 0; j < histories.length; j++) {
+            const history = histories[j]
+            const lawName = history.getElementsByTagName("법령명한글")[0]?.textContent || "알 수 없음"
+            const changeType = history.getElementsByTagName("개정구분명")[0]?.textContent || ""
+            items.push({ lawName, date: dateStr, type: changeType })
+          }
+          return items
+        } catch {
+          return []
+        }
       })
-
-      const parser = new DOMParser()
-      const doc = parser.parseFromString(xmlText, "text/xml")
-      const histories = doc.getElementsByTagName("lsHstInf")
-
-      for (let i = 0; i < histories.length; i++) {
-        const history = histories[i]
-        const lawName = history.getElementsByTagName("법령명한글")[0]?.textContent || "알 수 없음"
-        const changeType = history.getElementsByTagName("개정구분명")[0]?.textContent || ""
-
-        changes.push({
-          lawName,
-          date: dateStr,
-          type: changeType
-        })
-      }
-    } catch {
-      // 해당 날짜에 데이터 없음 (무시)
+    )
+    for (const items of results) {
+      changes.push(...items)
     }
   }
 

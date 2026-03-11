@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { LawApiClient } from "../lib/api-client.js";
 import { truncateResponse } from "../lib/schemas.js";
+import { extractTag } from "../lib/xml-parser.js";
 
 // Customs legal interpretation search tool - Search for customs law interpretations
 export const searchCustomsInterpretationsSchema = z.object({
@@ -221,25 +222,16 @@ function parseXML(xml: string): any {
     const expcContent = match[1];
     const expc: any = {};
 
-    const extractTag = (tag: string) => {
-      // CDATA support
-      const cdataRegex = new RegExp(`<${tag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\/${tag}>`);
-      const cdataMatch = expcContent.match(cdataRegex);
-      if (cdataMatch) return cdataMatch[1];
+    const extract = (tag: string) => extractTag(expcContent, tag);
 
-      const regex = new RegExp(`<${tag}>([^<]*)<\/${tag}>`);
-      const match = expcContent.match(regex);
-      return match ? match[1] : "";
-    };
-
-    expc.법령해석일련번호 = extractTag("법령해석일련번호");
-    expc.안건명 = extractTag("안건명");
-    expc.질의기관코드 = extractTag("질의기관코드");
-    expc.질의기관명 = extractTag("질의기관명");
-    expc.해석기관코드 = extractTag("해석기관코드");
-    expc.해석기관명 = extractTag("해석기관명");
-    expc.해석일자 = extractTag("해석일자");
-    expc.법령해석상세링크 = extractTag("법령해석상세링크");
+    expc.법령해석일련번호 = extract("법령해석일련번호");
+    expc.안건명 = extract("안건명");
+    expc.질의기관코드 = extract("질의기관코드");
+    expc.질의기관명 = extract("질의기관명");
+    expc.해석기관코드 = extract("해석기관코드");
+    expc.해석기관명 = extract("해석기관명");
+    expc.해석일자 = extract("해석일자");
+    expc.법령해석상세링크 = extract("법령해석상세링크");
 
     obj.KcsCgmExpcSearch.expc.push(expc);
   }

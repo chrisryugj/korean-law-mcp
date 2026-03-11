@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { LawApiClient } from "../lib/api-client.js";
-import { truncateResponse } from "../lib/schemas.js";
+import { truncateResponse, formatDateDot } from "../lib/schemas.js";
 
 // Law system tree tool - Get hierarchical structure of laws
 export const getLawSystemTreeSchema = z.object({
@@ -59,8 +59,8 @@ export async function getLawSystemTree(
     output += `  법령명: ${lawName}\n`;
     output += `  법령구분: ${lawType}\n`;
     output += `  제개정: ${revision}\n`;
-    output += `  시행일자: ${formatDate(basicInfo.시행일자)}\n`;
-    output += `  공포일자: ${formatDate(basicInfo.공포일자)} (제${basicInfo.공포번호}호)\n\n`;
+    output += `  시행일자: ${formatDateDot(basicInfo.시행일자)}\n`;
+    output += `  공포일자: ${formatDateDot(basicInfo.공포일자)} (제${basicInfo.공포번호}호)\n\n`;
 
     // Law hierarchy (상하위법)
     output += `📊 법령 체계:\n\n`;
@@ -140,11 +140,7 @@ export async function getLawSystemTree(
   }
 }
 
-// Helper function to format date
-function formatDate(dateStr: string): string {
-  if (!dateStr || dateStr.length < 8) return dateStr || "N/A";
-  return `${dateStr.substring(0, 4)}.${dateStr.substring(4, 6)}.${dateStr.substring(6, 8)}`;
-}
+// formatDate → schemas.ts의 formatDateDot 사용
 
 // Helper function to build tree visualization
 function buildTreeVisualization(tree: any, lawName: string, lawType: string): string {

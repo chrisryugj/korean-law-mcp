@@ -8,8 +8,7 @@ import { buildJO } from "../lib/law-parser.js"
 import { lawCache } from "../lib/cache.js"
 import { flattenContent, extractHangContent, cleanHtml } from "../lib/article-parser.js"
 
-// MCP 응답 크기 제한 (50KB) - 클라이언트 측 100-200KB 제한 대비 안전 마진
-const MAX_RESPONSE_SIZE = 50000
+import { MAX_RESPONSE_SIZE } from "../lib/schemas.js"
 
 export const GetLawTextSchema = z.object({
   mst: z.string().optional().describe("법령일련번호 (search_law에서 획득)"),

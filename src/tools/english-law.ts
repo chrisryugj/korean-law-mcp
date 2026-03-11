@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { LawApiClient } from "../lib/api-client.js";
 import { truncateResponse } from "../lib/schemas.js";
+import { extractTag } from "../lib/xml-parser.js";
 
 // English law search tool - Search for English translations of Korean laws
 export const searchEnglishLawSchema = z.object({
@@ -219,22 +220,14 @@ function parseEnglishLawXML(xml: string): any {
     const itemContent = match[1];
     const item: any = {};
 
-    const extractTag = (tag: string) => {
-      const cdataRegex = new RegExp(`<${tag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>`, 'i');
-      const cdataMatch = itemContent.match(cdataRegex);
-      if (cdataMatch) return cdataMatch[1];
+    const extract = (tag: string) => extractTag(itemContent, tag);
 
-      const regex = new RegExp(`<${tag}>([^<]*)<\\/${tag}>`, 'i');
-      const tagMatch = itemContent.match(regex);
-      return tagMatch ? tagMatch[1] : "";
-    };
-
-    item.법령ID = extractTag("법령ID");
-    item.영문법령명 = extractTag("법령명영문");
-    item.한글법령명 = extractTag("법령명한글");
-    item.시행일자 = extractTag("시행일자");
-    item.법령구분 = extractTag("법령구분명");
-    item.법령상세링크 = extractTag("법령상세링크");
+    item.법령ID = extract("법령ID");
+    item.영문법령명 = extract("법령명영문");
+    item.한글법령명 = extract("법령명한글");
+    item.시행일자 = extract("시행일자");
+    item.법령구분 = extract("법령구분명");
+    item.법령상세링크 = extract("법령상세링크");
 
     if (item.법령ID || item.영문법령명) {
       obj.ElawSearch.elaw.push(item);

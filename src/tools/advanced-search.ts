@@ -39,9 +39,7 @@ export async function advancedSearch(
     const targetResults = await Promise.all(
       searchTargets.map(target => searchByType(apiClient, target, keywords, input, input.apiKey))
     )
-    for (const r of targetResults) {
-      results = results.concat(r)
-    }
+    results = targetResults.flat()
 
     // AND/OR 연산 적용
     if (input.operator === "AND" && keywords.length > 1) {

@@ -47,8 +47,6 @@ export async function getArticleWithPrecedents(
     }
 
     const lawName = lawNameMatch[1].trim()
-    const joNumber = input.jo.replace(/제|조/g, '').trim()
-
     // 3. 관련 판례 검색
     const precedentQuery = `${lawName} ${input.jo}`
 
@@ -75,7 +73,7 @@ export async function getArticleWithPrecedents(
       }
     } catch (error) {
       // 판례 검색 실패는 무시하고 조문 내용만 반환
-      console.error(`판례 검색 실패: ${error}`)
+      // 판례 검색 실패는 무시 (조문 내용만 반환)
     }
 
     return {

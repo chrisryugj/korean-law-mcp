@@ -5,6 +5,7 @@
 import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 import { normalizeLawSearchText, expandOrdinanceQuery } from "../lib/search-normalizer.js"
+import { extractTag } from "../lib/xml-parser.js"
 
 export const SearchOrdinanceSchema = z.object({
   query: z.string().describe("검색할 자치법규명 (예: '서울', '환경')"),
@@ -38,7 +39,7 @@ export async function searchOrdinance(
       const { expanded } = expandOrdinanceQuery(input.query)
 
       for (const expandedQuery of expanded) {
-        console.log(`[search_ordinance] 재시도: "${expandedQuery}"`)
+        // 재시도: expandedQuery
 
         xmlText = await apiClient.searchOrdinance({
           query: expandedQuery,
@@ -50,7 +51,7 @@ export async function searchOrdinance(
         totalCount = parseInt(result.OrdinSearch?.totalCnt || "0")
 
         if (totalCount > 0) {
-          console.log(`[search_ordinance] ✅ "${expandedQuery}"로 ${totalCount}건 발견`)
+          // 발견: expandedQuery
           usedQuery = expandedQuery
           break
         }
@@ -135,23 +136,14 @@ function parseOrdinanceXML(xml: string): any {
     const ordinContent = match[1]
     const ordin: any = {}
 
-    const extractTag = (tag: string) => {
-      // CDATA support
-      const cdataRegex = new RegExp(`<${tag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>`)
-      const cdataMatch = ordinContent.match(cdataRegex)
-      if (cdataMatch) return cdataMatch[1]
+    const extract = (tag: string) => extractTag(ordinContent, tag)
 
-      const regex = new RegExp(`<${tag}>([^<]*)<\\/${tag}>`)
-      const match = ordinContent.match(regex)
-      return match ? match[1] : ""
-    }
-
-    ordin.자치법규일련번호 = extractTag("자치법규일련번호")
-    ordin.자치법규명 = extractTag("자치법규명")
-    ordin.지자체기관명 = extractTag("지자체기관명")
-    ordin.공포일자 = extractTag("공포일자")
-    ordin.시행일자 = extractTag("시행일자")
-    ordin.자치법규상세링크 = extractTag("자치법규상세링크")
+    ordin.자치법규일련번호 = extract("자치법규일련번호")
+    ordin.자치법규명 = extract("자치법규명")
+    ordin.지자체기관명 = extract("지자체기관명")
+    ordin.공포일자 = extract("공포일자")
+    ordin.시행일자 = extract("시행일자")
+    ordin.자치법규상세링크 = extract("자치법규상세링크")
 
     obj.OrdinSearch.ordin.push(ordin)
   }

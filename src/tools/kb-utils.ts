@@ -2,20 +2,9 @@
  * Knowledge Base 공통 유틸리티
  */
 
-/**
- * XML 태그에서 텍스트 추출 (CDATA 지원)
- */
-export function extractTag(xml: string, tag: string): string {
-  // CDATA 처리
-  const cdataRegex = new RegExp(`<${tag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>`, "i")
-  const cdataMatch = xml.match(cdataRegex)
-  if (cdataMatch) return cdataMatch[1].trim()
-
-  // 일반 태그
-  const regex = new RegExp(`<${tag}>([^<]*)<\\/${tag}>`, "i")
-  const match = xml.match(regex)
-  return match ? match[1].trim() : ""
-}
+// extractTag는 xml-parser.ts의 공유 구현을 re-export
+export { extractTag } from "../lib/xml-parser.js"
+import { extractTag } from "../lib/xml-parser.js"
 
 /**
  * KB XML 응답 파싱

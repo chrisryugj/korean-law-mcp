@@ -66,6 +66,14 @@ export function formatDateKorean(dateStr: string | undefined | null): string {
 export const MAX_RESPONSE_SIZE = 50000
 
 /**
+ * 날짜 포맷 (YYYYMMDD → YYYY.MM.DD)
+ */
+export function formatDateDot(dateStr: string): string {
+  if (!dateStr || dateStr.length < 8) return dateStr || "N/A"
+  return `${dateStr.substring(0, 4)}.${dateStr.substring(4, 6)}.${dateStr.substring(6, 8)}`
+}
+
+/**
  * truncateResponse 옵션
  */
 interface TruncateOptions {

@@ -249,8 +249,8 @@ export async function chainActionBasis(
 
 export const chainDisputePrepSchema = z.object({
   query: z.string().describe("분쟁 키워드 (예: '건축허가 취소 행정심판', '징계처분 감경')"),
-  domain: z.enum(["tax", "labor", "privacy", "competition", "general"]).optional().default("general")
-    .describe("전문 분야 (tax=조세심판, labor=노동위, privacy=개인정보위, competition=공정위)"),
+  domain: z.enum(["tax", "labor", "privacy", "competition", "general"]).optional()
+    .describe("전문 분야 (tax=조세심판, labor=노동위, privacy=개인정보위, competition=공정위). 미지정 시 쿼리에서 자동 감지"),
   apiKey: z.string().optional(),
 })
 

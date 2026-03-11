@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { LawApiClient } from "../lib/api-client.js";
-import { truncateResponse } from "../lib/schemas.js";
+import { truncateResponse, formatDateDot } from "../lib/schemas.js";
 
 /**
  * 법령 연혁 조회 도구
@@ -64,8 +64,8 @@ export async function searchHistoricalLaw(
     let output = `📜 ${args.lawName} 연혁 (총 ${histories.length}개 버전):\n\n`;
 
     for (const h of histories) {
-      const efDate = formatDate(h.efYd);
-      const ancDate = formatDate(h.ancYd);
+      const efDate = formatDateDot(h.efYd);
+      const ancDate = formatDateDot(h.ancYd);
       output += `📅 시행: ${efDate}`;
       if (h.rrCls) output += ` | ${h.rrCls}`;
       output += `\n`;
@@ -279,11 +279,7 @@ function parseHistoryHtml(html: string, targetLawName: string): LawHistoryEntry[
   return histories;
 }
 
-// Helper functions
-function formatDate(dateStr: string): string {
-  if (!dateStr || dateStr.length < 8) return dateStr || "N/A";
-  return `${dateStr.substring(0, 4)}.${dateStr.substring(4, 6)}.${dateStr.substring(6, 8)}`;
-}
+// formatDate → schemas.ts의 formatDateDot 사용
 
 function parseJoNumber(joText: string): string {
   const match = joText.match(/제?(\d+)조?(의\d+)?/);

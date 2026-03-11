@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { LawApiClient } from "../lib/api-client.js";
-import { truncateResponse } from "../lib/schemas.js";
+import { truncateResponse, formatDateDot } from "../lib/schemas.js";
 import { extractTag as sharedExtractTag } from "../lib/xml-parser.js";
 
 // AI-powered intelligent law search tool
@@ -105,12 +105,12 @@ export async function searchAiLaw(
           const content = item.조문내용.replace(/<[^>]*>/g, "").substring(0, 200);
           output += `   ${content}${item.조문내용.length > 200 ? "..." : ""}\n`;
         }
-        output += `   📅 시행: ${formatDate(item.시행일자)} | ${item.소관부처명 || item.발령기관명 || ""}\n`;
+        output += `   📅 시행: ${formatDateDot(item.시행일자)} | ${item.소관부처명 || item.발령기관명 || ""}\n`;
       } else {
         // 별표·서식 검색 결과
         output += `📋 ${item.법령명 || item.행정규칙명}\n`;
         output += `   [${item.별표서식구분명 || "별표/서식"}] ${item.별표서식제목 || ""}\n`;
-        output += `   📅 시행: ${formatDate(item.시행일자)}\n`;
+        output += `   📅 시행: ${formatDateDot(item.시행일자)}\n`;
       }
       output += `\n`;
     }
@@ -140,12 +140,7 @@ export const searchLifeLawSchema = searchAiLawSchema;
 export type SearchLifeLawInput = SearchAiLawInput;
 export const searchLifeLaw = searchAiLaw;
 
-// Helper function to format date
-function formatDate(dateStr: string): string {
-  if (!dateStr || dateStr.length < 8) return dateStr || "N/A";
-  // Format: 20220203120200 -> 2022.02.03
-  return `${dateStr.substring(0, 4)}.${dateStr.substring(4, 6)}.${dateStr.substring(6, 8)}`;
-}
+// formatDate → schemas.ts의 formatDateDot 사용
 
 // XML parser for AI search
 function parseAiSearchXML(xml: string, searchType: string): any {

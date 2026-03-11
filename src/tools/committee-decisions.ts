@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { LawApiClient } from "../lib/api-client.js";
 import { truncateResponse } from "../lib/schemas.js";
+import { extractTag } from "../lib/xml-parser.js";
 
 // Common schema for committee decision search (query optional)
 const baseSearchSchemaOptionalQuery = {
@@ -327,24 +328,16 @@ function parseCommitteeXML(xml: string, target: string): any {
     const itemContent = match[1];
     const item: any = {};
 
-    const extractTag = (tag: string) => {
-      const cdataRegex = new RegExp(`<${tag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>`, 'i');
-      const cdataMatch = itemContent.match(cdataRegex);
-      if (cdataMatch) return cdataMatch[1];
+    const extract = (tag: string) => extractTag(itemContent, tag);
 
-      const regex = new RegExp(`<${tag}>([^<]*)<\\/${tag}>`, 'i');
-      const match = itemContent.match(regex);
-      return match ? match[1] : "";
-    };
-
-    item.결정일련번호 = extractTag("결정문일련번호") || extractTag("결정일련번호") || extractTag("판례일련번호") || extractTag("일련번호");
+    item.결정일련번호 = extract("결정문일련번호") || extract("결정일련번호") || extract("판례일련번호") || extract("일련번호");
     // 위원회별 필드명 차이: 공정위=사건명, 개보위=안건명, 노동위=사건명
-    item.사건명 = extractTag("사건명") || extractTag("안건명") || extractTag("제목");
-    item.사건번호 = extractTag("사건번호") || extractTag("의안번호");
-    item.결정일자 = extractTag("결정일자") || extractTag("의결일") || extractTag("선고일자") || extractTag("등록일");
-    item.결정유형 = extractTag("결정유형") || extractTag("결정구분") || extractTag("판결유형") || extractTag("회의종류");
-    item.재결청 = extractTag("재결청") || extractTag("기관명");
-    item.상세링크 = extractTag("결정문상세링크") || extractTag("상세링크") || extractTag("판례상세링크");
+    item.사건명 = extract("사건명") || extract("안건명") || extract("제목");
+    item.사건번호 = extract("사건번호") || extract("의안번호");
+    item.결정일자 = extract("결정일자") || extract("의결일") || extract("선고일자") || extract("등록일");
+    item.결정유형 = extract("결정유형") || extract("결정구분") || extract("판결유형") || extract("회의종류");
+    item.재결청 = extract("재결청") || extract("기관명");
+    item.상세링크 = extract("결정문상세링크") || extract("상세링크") || extract("판례상세링크");
 
     obj[searchKey][itemKey].push(item);
   }
