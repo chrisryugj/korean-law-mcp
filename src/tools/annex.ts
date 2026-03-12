@@ -28,18 +28,6 @@ export async function getAnnexes(
     const normalizedLawName = parsedLawInput.normalizedLawName || input.lawName
     const annexSelector = (input.bylSeq || input.annexNo || parsedLawInput.annexNo || "").trim()
 
-    const jsonText = await apiClient.getAnnexes({
-      lawName: normalizedLawName,
-      knd: input.knd,
-      apiKey: input.apiKey
-    })
-
-    const json = JSON.parse(jsonText)
-
-    // LexDiff 방식: 법령 타입별 응답 구조 분기
-    const adminResult = json?.admRulBylSearch
-    const licResult = json?.licBylSearch
-
     let annexList: any[] = []
     let lawType: string = "law"
 
@@ -47,15 +35,47 @@ export async function getAnnexes(
     const toArray = (v: unknown): any[] =>
       v == null ? [] : Array.isArray(v) ? v : [v]
 
-    if (adminResult?.admbyl) {
-      annexList = toArray(adminResult.admbyl)
-      lawType = "admin"
-    } else if (licResult?.ordinbyl) {
-      annexList = toArray(licResult.ordinbyl)
-      lawType = "ordinance"
-    } else if (licResult?.licbyl) {
-      annexList = toArray(licResult.licbyl)
-      lawType = "law"
+    const parseAnnexResponse = (jsonText: string): { list: any[], type: string } => {
+      const json = JSON.parse(jsonText)
+      const adminResult = json?.admRulBylSearch
+      const licResult = json?.licBylSearch
+      if (adminResult?.admbyl) return { list: toArray(adminResult.admbyl), type: "admin" }
+      if (licResult?.ordinbyl) return { list: toArray(licResult.ordinbyl), type: "ordinance" }
+      if (licResult?.licbyl) return { list: toArray(licResult.licbyl), type: "law" }
+      return { list: [], type: "law" }
+    }
+
+    // 1차: 원래 법령명 + knd 필터
+    const result1 = parseAnnexResponse(await apiClient.getAnnexes({
+      lawName: normalizedLawName, knd: input.knd, apiKey: input.apiKey
+    }))
+    annexList = result1.list
+    lawType = result1.type
+
+    // 2차: 결과 없으면 knd 제거 (법제처가 "별표"를 "서식"으로 분류하는 경우)
+    if (annexList.length === 0 && input.knd) {
+      const result2 = parseAnnexResponse(await apiClient.getAnnexes({
+        lawName: normalizedLawName, apiKey: input.apiKey
+      }))
+      annexList = result2.list
+      lawType = result2.type
+    }
+
+    // 3차: 모법명으로 재검색 ("여권법 시행규칙" → "여권법")
+    if (annexList.length === 0) {
+      const parentName = extractParentLawName(normalizedLawName)
+      if (parentName) {
+        const result3 = parseAnnexResponse(await apiClient.getAnnexes({
+          lawName: parentName, apiKey: input.apiKey
+        }))
+        // 원래 법령명 매칭 필터
+        const filtered = result3.list.filter((a: any) => {
+          const name = String(a.관련법령명 || a.관련자치법규명 || a.관련행정규칙명 || "").replace(/<[^>]+>/g, "")
+          return name === normalizedLawName
+        })
+        annexList = filtered.length > 0 ? filtered : result3.list
+        lawType = result3.type
+      }
     }
 
     if (annexList.length === 0) {
@@ -215,6 +235,15 @@ function formatAnnexList(
   resultText += `\n커넥터에서 bylSeq 입력이 제한되면 lawName에 별표번호를 함께 넣어 호출할 수 있습니다.\n예: get_annexes({ lawName: "${normalizedLawName} 별표4" })`
 
   return { content: [{ type: "text", text: resultText }] }
+}
+
+/**
+ * 모법명 추출 (시행규칙/시행령 제거)
+ * "여권법 시행규칙" → "여권법", "관세법 시행령" → "관세법"
+ */
+function extractParentLawName(lawName: string): string | null {
+  const cleaned = lawName.replace(/\s*(시행규칙|시행령)$/, '')
+  return cleaned !== lawName ? cleaned : null
 }
 
 function parseLawNameAndHint(lawName: string): { normalizedLawName: string, annexNo?: string } {
