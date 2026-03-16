@@ -5,6 +5,8 @@
  * 패턴 매칭 기반으로 의도를 파악하고, 필요한 파라미터를 자동 추출
  */
 
+import { SEARCH_DETAIL_CHAINS } from "./tool-chain-config.js"
+
 export interface RouteResult {
   /** 실행할 도구 이름 */
   tool: string
@@ -14,6 +16,8 @@ export interface RouteResult {
   reason: string
   /** 후속 실행이 필요한 도구 (파이프라인) */
   pipeline?: Array<{ tool: string; params: Record<string, unknown> }>
+  /** 자동 체인 여부 (search → detail 자동 연결) */
+  autoChain?: boolean
 }
 
 interface Pattern {
@@ -528,7 +532,7 @@ const routePatterns: Pattern[] = [
         return { _skip: true }
       }
       // 의도 키워드가 동반되면 이 패턴은 양보 → 더 구체적인 패턴이 처리
-      if (/목차|편장절|체계도|통합\s*검색|최근\s*개정|개정\s*현황|법령\s*통계|조례\s*비교/.test(q)) {
+      if (/목차|편장절|체계도|통합\s*검색|최근\s*개정|개정\s*현황|법령\s*통계|조례\s*비교|영문|영어|English/i.test(q)) {
         return { _skip: true }
       }
       return { query: q }
@@ -611,6 +615,18 @@ export function routeQuery(query: string): RouteResult {
                 params: pipeParams,
               },
             ],
+          }
+        }
+
+        // 검색 도구에 상세조회 체인이 설정되어 있으면 자동 파이프라인 추가
+        const chain = SEARCH_DETAIL_CHAINS[pattern.tool]
+        if (chain) {
+          return {
+            tool: pattern.tool,
+            params,
+            reason: pattern.reason,
+            pipeline: [{ tool: chain.detailTool, params: {} }],
+            autoChain: true,
           }
         }
 

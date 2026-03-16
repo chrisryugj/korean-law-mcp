@@ -19,6 +19,7 @@ import * as readline from "readline"
 import { LawApiClient } from "./lib/api-client.js"
 import { allTools } from "./tool-registry.js"
 import { routeQuery, explainRoute } from "./lib/query-router.js"
+import { SEARCH_DETAIL_CHAINS } from "./lib/tool-chain-config.js"
 import type { McpTool, ToolResponse } from "./lib/types.js"
 
 const VERSION = "2.0.0"
@@ -207,22 +208,26 @@ async function executeNaturalQuery(
   // 1단계: 메인 도구 실행
   const result = await executeTool(apiClient, route.tool, route.params)
 
-  // 파이프라인이 있으면 1단계 결과에서 MST/lawId 추출하여 2단계 실행
+  // 파이프라인이 있으면 1단계 결과에서 ID 추출하여 2단계 실행
   if (route.pipeline && route.pipeline.length > 0 && !result.isError) {
     const firstOutput = result.content[0]?.text || ""
+    const pipeId = extractPipelineId(route.tool, firstOutput)
 
-    // MST 추출 (검색 결과에서)
-    const mstMatch = firstOutput.match(/MST:\s*(\d+)/)
-    const lawIdMatch = firstOutput.match(/법령ID:\s*(\d+)/)
+    if (pipeId) {
+      // 자동 체인: 검색 결과 요약 먼저 출력
+      if (route.autoChain) {
+        const summary = extractSearchSummary(firstOutput)
+        if (summary) {
+          console.log(fmt.dim(summary))
+          console.log()
+        }
+      }
 
-    if (mstMatch || lawIdMatch) {
       for (const step of route.pipeline) {
-        const pipeParams = { ...step.params }
-        if (mstMatch) pipeParams.mst = mstMatch[1]
-        else if (lawIdMatch) pipeParams.lawId = lawIdMatch[1]
+        const pipeParams = { ...step.params, ...pipeId }
 
         if (verbose) {
-          console.log(fmt.dim(`  → 파이프라인: ${step.tool}(${JSON.stringify(pipeParams)})`))
+          console.log(fmt.dim(`  → 체인: ${step.tool}(${JSON.stringify(pipeParams)})`))
         }
 
         const pipeResult = await executeTool(apiClient, step.tool, pipeParams)
@@ -235,9 +240,11 @@ async function executeNaturalQuery(
       return
     }
 
-    // MST 추출 실패 → 1단계 결과라도 표시
+    // ID 추출 실패 → 1단계 결과라도 표시
     console.log(formatOutput(firstOutput))
-    console.log(fmt.yellow("💡 파이프라인: 검색 결과에서 MST를 추출하지 못했습니다. 위 결과에서 MST를 확인해주세요."))
+    if (!route.autoChain) {
+      console.log(fmt.yellow("💡 파이프라인: 검색 결과에서 식별자를 추출하지 못했습니다."))
+    }
     return
   }
 
@@ -247,6 +254,49 @@ async function executeNaturalQuery(
   if (result.isError) {
     process.exitCode = 1
   }
+}
+
+/**
+ * 파이프라인 ID 추출 (검색 도구별 설정 또는 기본 MST 패턴)
+ */
+function extractPipelineId(
+  searchTool: string,
+  output: string
+): Record<string, string> | null {
+  // 1. 체인 설정이 있으면 해당 regex 사용
+  const chain = SEARCH_DETAIL_CHAINS[searchTool]
+  if (chain) {
+    const match = output.match(chain.idRegex)
+    if (match) {
+      return { [chain.detailParam]: match[1] }
+    }
+    return null
+  }
+
+  // 2. 기본: search_law → get_law_text 파이프라인 (MST/lawId)
+  const mstMatch = output.match(/MST:\s*(\d+)/)
+  if (mstMatch) return { mst: mstMatch[1] }
+
+  const lawIdMatch = output.match(/법령ID:\s*(\d+)/)
+  if (lawIdMatch) return { lawId: lawIdMatch[1] }
+
+  return null
+}
+
+/**
+ * 검색 결과에서 요약 헤더를 추출 (첫 3줄 정도)
+ */
+function extractSearchSummary(output: string): string | null {
+  const lines = output.split("\n")
+  // 첫 줄(제목)과 결과 건수 라인 추출
+  const summaryLines: string[] = []
+  for (const line of lines) {
+    if (summaryLines.length >= 3) break
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    summaryLines.push(trimmed)
+  }
+  return summaryLines.length > 0 ? summaryLines.join("\n") : null
 }
 
 /**
@@ -263,12 +313,9 @@ async function executeNaturalQueryJson(
     let pipelineResult: string | undefined
     if (route.pipeline && route.pipeline.length > 0 && !result.isError) {
       const firstOutput = result.content[0]?.text || ""
-      const mstMatch = firstOutput.match(/MST:\s*(\d+)/)
-      const lawIdMatch = firstOutput.match(/법령ID:\s*(\d+)/)
-      if (mstMatch || lawIdMatch) {
-        const pipeParams = { ...route.pipeline[0].params }
-        if (mstMatch) pipeParams.mst = mstMatch[1]
-        else if (lawIdMatch) pipeParams.lawId = lawIdMatch[1]
+      const pipeId = extractPipelineId(route.tool, firstOutput)
+      if (pipeId) {
+        const pipeParams = { ...route.pipeline[0].params, ...pipeId }
         const pResult = await executeTool(apiClient, route.pipeline[0].tool, pipeParams)
         pipelineResult = pResult.content.map(c => c.text).join("\n")
       }
@@ -496,40 +543,7 @@ function createProgram(): Command {
       const query = words.join(" ")
 
       if (opts.json) {
-        const route = routeQuery(query)
-        try {
-          const result = await executeTool(apiClient, route.tool, route.params)
-
-          // pipeline도 실행하여 최종 결과를 JSON에 포함
-          let pipelineResult: string | undefined
-          if (route.pipeline && route.pipeline.length > 0 && !result.isError) {
-            const firstOutput = result.content[0]?.text || ""
-            const mstMatch = firstOutput.match(/MST:\s*(\d+)/)
-            const lawIdMatch = firstOutput.match(/법령ID:\s*(\d+)/)
-            if (mstMatch || lawIdMatch) {
-              const pipeParams = { ...route.pipeline[0].params }
-              if (mstMatch) pipeParams.mst = mstMatch[1]
-              else if (lawIdMatch) pipeParams.lawId = lawIdMatch[1]
-              const pResult = await executeTool(apiClient, route.pipeline[0].tool, pipeParams)
-              pipelineResult = pResult.content.map(c => c.text).join("\n")
-            }
-          }
-
-          console.log(JSON.stringify({
-            query,
-            route: { tool: route.tool, reason: route.reason, params: route.params },
-            result: result.content.map(c => c.text).join("\n"),
-            pipelineResult,
-            isError: result.isError || false,
-          }, null, 2))
-        } catch (error) {
-          console.log(JSON.stringify({
-            query,
-            route: { tool: route.tool, reason: route.reason },
-            error: error instanceof Error ? error.message : String(error),
-          }, null, 2))
-          process.exit(1)
-        }
+        await executeNaturalQueryJson(apiClient, query)
         return
       }
 
