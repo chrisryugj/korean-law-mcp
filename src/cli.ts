@@ -29,15 +29,23 @@ const VERSION = "2.0.0"
 
 const isColorSupported = process.stdout.isTTY && !process.env.NO_COLOR
 
+/**
+ * ANSI 포맷 유틸.
+ * 중첩 시 내부 \x1b[0m이 외부까지 리셋하는 문제 방지:
+ * 단일 래퍼만 사용하거나, 복합 스타일은 전용 함수로 처리.
+ */
 const fmt = {
-  bold: (s: string) => isColorSupported ? `\x1b[1m${s}\x1b[0m` : s,
-  dim: (s: string) => isColorSupported ? `\x1b[2m${s}\x1b[0m` : s,
-  green: (s: string) => isColorSupported ? `\x1b[32m${s}\x1b[0m` : s,
-  yellow: (s: string) => isColorSupported ? `\x1b[33m${s}\x1b[0m` : s,
-  cyan: (s: string) => isColorSupported ? `\x1b[36m${s}\x1b[0m` : s,
-  red: (s: string) => isColorSupported ? `\x1b[31m${s}\x1b[0m` : s,
-  blue: (s: string) => isColorSupported ? `\x1b[34m${s}\x1b[0m` : s,
-  magenta: (s: string) => isColorSupported ? `\x1b[35m${s}\x1b[0m` : s,
+  bold: (s: string) => isColorSupported ? `\x1b[1m${s}\x1b[22m` : s,
+  dim: (s: string) => isColorSupported ? `\x1b[2m${s}\x1b[22m` : s,
+  green: (s: string) => isColorSupported ? `\x1b[32m${s}\x1b[39m` : s,
+  yellow: (s: string) => isColorSupported ? `\x1b[33m${s}\x1b[39m` : s,
+  cyan: (s: string) => isColorSupported ? `\x1b[36m${s}\x1b[39m` : s,
+  red: (s: string) => isColorSupported ? `\x1b[31m${s}\x1b[39m` : s,
+  blue: (s: string) => isColorSupported ? `\x1b[34m${s}\x1b[39m` : s,
+  magenta: (s: string) => isColorSupported ? `\x1b[35m${s}\x1b[39m` : s,
+  // 복합 스타일 (중첩 안전)
+  boldCyan: (s: string) => isColorSupported ? `\x1b[1;36m${s}\x1b[0m` : s,
+  boldGreen: (s: string) => isColorSupported ? `\x1b[1;32m${s}\x1b[0m` : s,
 }
 
 function printBanner() {
@@ -57,8 +65,8 @@ function formatOutput(text: string): string {
 
   return text
     // 섹션 헤더
-    .replace(/^(═+.*═+)$/gm, (m) => fmt.bold(fmt.cyan(m)))
-    .replace(/^(▶\s*.+)$/gm, (m) => fmt.bold(fmt.green(m)))
+    .replace(/^(═+.*═+)$/gm, (m) => fmt.boldCyan(m))
+    .replace(/^(▶\s*.+)$/gm, (m) => fmt.boldGreen(m))
     // 법령명/제목
     .replace(/^(법령명:\s*.+)$/gm, (m) => fmt.bold(m))
     // 안내 메시지
@@ -165,8 +173,19 @@ async function executeTool(
     }
   }
 
-  const parsed = tool.schema.parse(params)
-  return tool.handler(apiClient, parsed)
+  try {
+    const parsed = tool.schema.parse(params)
+    return await tool.handler(apiClient, parsed)
+  } catch (error) {
+    // Zod 검증 실패 등 모든 예외를 ToolResponse로 감싸서 반환
+    const msg = error instanceof z.ZodError
+      ? error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join("; ")
+      : (error instanceof Error ? error.message : String(error))
+    return {
+      content: [{ type: "text", text: `오류 [${toolName}]: ${msg}` }],
+      isError: true,
+    }
+  }
 }
 
 /**
@@ -215,6 +234,11 @@ async function executeNaturalQuery(
       }
       return
     }
+
+    // MST 추출 실패 → 1단계 결과라도 표시
+    console.log(formatOutput(firstOutput))
+    console.log(fmt.yellow("💡 파이프라인: 검색 결과에서 MST를 추출하지 못했습니다. 위 결과에서 MST를 확인해주세요."))
+    return
   }
 
   // 결과 출력
@@ -247,12 +271,11 @@ async function runInteractive(): Promise<void> {
     input: process.stdin,
     output: process.stdout,
     prompt: fmt.cyan("법령> "),
-    // history support
     historySize: 100,
   })
 
-  // 히스토리 저장용
   const history: string[] = []
+  let executing = false // 레이스 컨디션 방지
 
   rl.prompt()
 
@@ -264,11 +287,17 @@ async function runInteractive(): Promise<void> {
       return
     }
 
-    // 특수 명령어
+    // 실행 중이면 무시
+    if (executing) {
+      console.log(fmt.dim("  (이전 쿼리 실행 중...)"))
+      return
+    }
+
+    // 특수 명령어 (동기 처리)
     if (input === "exit" || input === "quit" || input === "q") {
       console.log(fmt.dim("\n종료합니다."))
       rl.close()
-      process.exit(0)
+      return
     }
 
     if (input === "help" || input === "?") {
@@ -298,24 +327,28 @@ async function runInteractive(): Promise<void> {
       return
     }
 
+    // 비동기 실행 (입력 일시 중지)
+    executing = true
+    rl.pause()
+
     // 직접 도구 호출: @tool_name {...params}
     if (input.startsWith("@")) {
       await handleDirectCall(apiClient, input)
-      rl.prompt()
-      return
-    }
+    } else {
+      // 자연어 쿼리 실행
+      history.push(input)
+      console.log()
 
-    // 자연어 쿼리 실행
-    history.push(input)
-    console.log()
-
-    try {
-      await executeNaturalQuery(apiClient, input, false)
-    } catch (error) {
-      console.error(fmt.red(`오류: ${error instanceof Error ? error.message : String(error)}`))
+      try {
+        await executeNaturalQuery(apiClient, input, false)
+      } catch (error) {
+        console.error(fmt.red(`오류: ${error instanceof Error ? error.message : String(error)}`))
+      }
     }
 
     console.log()
+    executing = false
+    rl.resume()
     rl.prompt()
   })
 
@@ -345,12 +378,8 @@ async function handleDirectCall(apiClient: LawApiClient, input: string): Promise
     }
   }
 
-  try {
-    const result = await executeTool(apiClient, toolName, params)
-    console.log(formatOutput(result.content.map(c => c.text).join("\n")))
-  } catch (error) {
-    console.error(fmt.red(`오류: ${error instanceof Error ? error.message : String(error)}`))
-  }
+  const result = await executeTool(apiClient, toolName, params)
+  console.log(formatOutput(result.content.map(c => c.text).join("\n")))
 }
 
 function printInteractiveHelp() {
@@ -418,10 +447,27 @@ function createProgram(): Command {
         const route = routeQuery(query)
         try {
           const result = await executeTool(apiClient, route.tool, route.params)
+
+          // pipeline도 실행하여 최종 결과를 JSON에 포함
+          let pipelineResult: string | undefined
+          if (route.pipeline && route.pipeline.length > 0 && !result.isError) {
+            const firstOutput = result.content[0]?.text || ""
+            const mstMatch = firstOutput.match(/MST:\s*(\d+)/)
+            const lawIdMatch = firstOutput.match(/법령ID:\s*(\d+)/)
+            if (mstMatch || lawIdMatch) {
+              const pipeParams = { ...route.pipeline[0].params }
+              if (mstMatch) pipeParams.mst = mstMatch[1]
+              else if (lawIdMatch) pipeParams.lawId = lawIdMatch[1]
+              const pResult = await executeTool(apiClient, route.pipeline[0].tool, pipeParams)
+              pipelineResult = pResult.content.map(c => c.text).join("\n")
+            }
+          }
+
           console.log(JSON.stringify({
             query,
             route: { tool: route.tool, reason: route.reason, params: route.params },
             result: result.content.map(c => c.text).join("\n"),
+            pipelineResult,
             isError: result.isError || false,
           }, null, 2))
         } catch (error) {
@@ -609,20 +655,26 @@ function createProgram(): Command {
     })
   }
 
-  // ── 기본 동작: 인자가 도구명이 아니면 자연어 쿼리로 처리 ──
-  program.on("command:*", async (operands: string[]) => {
-    // 등록되지 않은 명령이면 자연어 쿼리로 처리
-    const query = operands.join(" ")
-    const apiClient = getApiClient()
-    await executeNaturalQuery(apiClient, query, false)
-  })
-
   return program
 }
 
 // ────────────────────────────────────────
 // Entry Point
 // ────────────────────────────────────────
+
+/** CLI 플래그를 쿼리 텍스트에서 분리 */
+function separateFlags(args: string[]): { queryArgs: string[]; verbose: boolean } {
+  const queryArgs: string[] = []
+  let verbose = false
+  for (const arg of args) {
+    if (arg === "--verbose" || arg === "-v") {
+      verbose = true
+    } else {
+      queryArgs.push(arg)
+    }
+  }
+  return { queryArgs, verbose }
+}
 
 async function main() {
   const args = process.argv.slice(2)
@@ -641,10 +693,17 @@ async function main() {
 
   const firstArg = args[0]
   if (!knownCommands.has(firstArg) && !firstArg.startsWith("-")) {
-    // 전체 인자를 자연어 쿼리로 처리
+    // 플래그와 쿼리 분리
+    const { queryArgs, verbose } = separateFlags(args)
+    const query = queryArgs.join(" ")
+
+    if (!query) {
+      await runInteractive()
+      return
+    }
+
     const apiClient = getApiClient()
-    const query = args.join(" ")
-    await executeNaturalQuery(apiClient, query, args.includes("--verbose") || args.includes("-v"))
+    await executeNaturalQuery(apiClient, query, verbose)
     return
   }
 
