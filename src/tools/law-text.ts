@@ -43,8 +43,8 @@ export async function getLawText(
       }
     }
 
-    // Check cache first
-    const cacheKey = `lawtext:${input.mst || input.lawId}:${joCode || 'full'}:${input.efYd || ''}`
+    // Check cache first (efYd 정규화: 미지정 → 'current'로 통일)
+    const cacheKey = `lawtext:${input.mst || input.lawId}:${joCode || 'full'}:${input.efYd || 'current'}`
     const cached = lawCache.get<string>(cacheKey)
     if (cached) {
       return {
@@ -237,9 +237,9 @@ export async function getLawText(
         }
       }
 
-      // STEP 2: 항/호/목 내용 추출
+      // STEP 2: 항/호/목 내용 추출 (API가 단일 항을 객체로 반환하는 경우 포함)
       let paraContent = ""
-      if (unit.항 && Array.isArray(unit.항)) {
+      if (unit.항) {
         paraContent = extractHangContent(unit.항)
       }
 
@@ -261,17 +261,54 @@ export async function getLawText(
       }
     }
 
-    // 응답 크기 제한 - MCP 클라이언트 한계 대비
+    // 응답 크기 제한 - 조문 경계에서 자르기 (mid-article 절단 방지)
     if (resultText.length > MAX_RESPONSE_SIZE) {
-      const articleCount = articleUnits.filter(u => u.조문여부 === "조문").length
-      resultText = resultText.slice(0, MAX_RESPONSE_SIZE)
-      resultText += `\n\n⚠️ 응답이 너무 길어 잘렸습니다 (${articleCount}개 조문 중 일부만 표시)`
-      resultText += `\n💡 특정 조문 조회: get_law_text(`
+      const totalArticles = articleUnits.filter(u => u.조문여부 === "조문").length
+
+      // 조문 헤더 위치를 역순으로 찾아서 MAX_RESPONSE_SIZE 이내의 마지막 완전한 조문 경계에서 자르기
+      const articleHeaderPattern = /^제\d+조(?:의\d+)?/gm
+      let lastSafePos = 0
+      let includedCount = 0
+      let match
+      while ((match = articleHeaderPattern.exec(resultText)) !== null) {
+        if (match.index > MAX_RESPONSE_SIZE - 200) break // 200자 여유 (안내 메시지용)
+        lastSafePos = match.index
+        includedCount++
+      }
+
+      // 마지막 조문 이후의 내용도 포함 (조문 본문)
+      if (lastSafePos > 0 && includedCount > 0) {
+        // 다음 조문 헤더 전까지 또는 끝까지
+        const nextArticlePattern = /^제\d+조(?:의\d+)?/gm
+        nextArticlePattern.lastIndex = lastSafePos + 1
+        const nextMatch = nextArticlePattern.exec(resultText)
+        const cutPos = nextMatch && nextMatch.index <= MAX_RESPONSE_SIZE - 200
+          ? nextMatch.index
+          : Math.min(resultText.length, MAX_RESPONSE_SIZE - 200)
+        resultText = resultText.slice(0, cutPos)
+      } else {
+        resultText = resultText.slice(0, MAX_RESPONSE_SIZE - 200)
+      }
+
+      // 포함된 조문 번호 추출
+      const includedArticles: string[] = []
+      const finalHeaderPattern = /^(제\d+조(?:의\d+)?)/gm
+      let m
+      while ((m = finalHeaderPattern.exec(resultText)) !== null) {
+        includedArticles.push(m[1])
+      }
+
+      const first = includedArticles[0] || "?"
+      const last = includedArticles[includedArticles.length - 1] || "?"
+
+      resultText += `\n\n⚠️ 응답 크기 제한으로 ${totalArticles}개 조문 중 ${includedArticles.length}개만 포함 (${first}~${last})`
+      resultText += `\n💡 나머지 조문 조회: get_law_text(`
       if (input.mst) {
         resultText += `mst="${input.mst}", jo="제XX조")`
       } else if (input.lawId) {
         resultText += `lawId="${input.lawId}", jo="제XX조")`
       }
+      resultText += `\n💡 여러 조문 일괄 조회: get_batch_articles 도구 사용`
     }
 
     // Cache the result

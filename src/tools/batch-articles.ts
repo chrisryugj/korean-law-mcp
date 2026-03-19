@@ -70,7 +70,7 @@ async function fetchArticlesForLaw(
   efYd?: string,
   apiKey?: string
 ): Promise<FetchResult> {
-  const cacheKey = `lawtext:${lawReq.mst || lawReq.lawId}:full:${efYd || ''}`
+  const cacheKey = `lawtext:${lawReq.mst || lawReq.lawId}:full:${efYd || 'current'}`
   let fullLawData: LawResponse
 
   const cached = lawCache.get<LawResponse>(cacheKey)
@@ -159,7 +159,7 @@ async function fetchArticlesForLaw(
     }
 
     let paraContent = ""
-    if (unit.항 && Array.isArray(unit.항)) {
+    if (unit.항) {
       paraContent = extractHangContent(unit.항)
     }
 

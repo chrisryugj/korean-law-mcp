@@ -6,6 +6,7 @@ import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 import { fetchWithRetry } from "../lib/fetch-with-retry.js"
 import { parseAnnexFile } from "../lib/annex-file-parser.js"
+import { truncateResponse, MAX_RESPONSE_SIZE } from "../lib/schemas.js"
 
 const LAW_BASE_URL = "https://www.law.go.kr"
 
@@ -148,31 +149,36 @@ async function extractAnnexContent(
   const buffer = await response.arrayBuffer()
   const result = await parseAnnexFile(buffer)
 
-  if (result.fileType === "pdf") {
-    // PDF는 LLM이 직접 읽을 수 있으므로 링크 반환
+  if (result.fileType === "pdf" && result.isImageBased) {
+    // 이미지 기반 PDF: 텍스트 추출 불가 → 링크 안내
     const pdfLink = matched.별표서식PDF파일링크 || fileLink
     return {
       content: [{
         type: "text",
-        text: `📄 ${annexTitle}\n\nPDF 파일입니다. 다음 링크에서 직접 확인할 수 있습니다:\n${LAW_BASE_URL}${pdfLink}`
+        text: `📄 ${annexTitle}\n\n이미지 기반 PDF입니다 (${result.pageCount || "?"}페이지). 텍스트 추출이 불가합니다.\n다운로드 링크: ${LAW_BASE_URL}${pdfLink}`
       }]
     }
   }
 
   if (!result.success || !result.markdown) {
+    // 파싱 실패 시에도 PDF 링크 안내
+    const fallbackLink = matched.별표서식PDF파일링크 || fileLink
     return {
       content: [{
         type: "text",
-        text: `"${annexTitle}" 텍스트 추출 실패: ${result.error || "알 수 없는 오류"}\n파일 링크: ${LAW_BASE_URL}${fileLink}`
+        text: `"${annexTitle}" 텍스트 추출 실패: ${result.error || "알 수 없는 오류"}\n파일 링크: ${LAW_BASE_URL}${fallbackLink}`
       }],
       isError: true
     }
   }
 
+  // 파싱 성공 - 크기 제한 적용
+  const header = `📋 ${normalizedLawName} - ${annexTitle}\n(파일 형식: ${result.fileType.toUpperCase()}${result.pageCount ? `, ${result.pageCount}페이지` : ""})\n\n`
+  const fullText = header + result.markdown
   return {
     content: [{
       type: "text",
-      text: `📋 ${normalizedLawName} - ${annexTitle}\n(파일 형식: ${result.fileType.toUpperCase()})\n\n${result.markdown}`
+      text: truncateResponse(fullText, MAX_RESPONSE_SIZE)
     }]
   }
 }

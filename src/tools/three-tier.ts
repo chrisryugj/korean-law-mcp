@@ -79,18 +79,21 @@ export async function getThreeTier(
         resultText += `\n`
 
         if (delegation.content) {
-          // HTML 태그 제거
+          // HTML 태그 제거 (cleanHtml과 동일 순서)
           const cleanContent = delegation.content
             .replace(/<[^>]+>/g, '')
             .replace(/&nbsp;/g, ' ')
             .replace(/&lt;/g, '<')
             .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
             .replace(/&amp;/g, '&')
             .trim()
 
-          // 너무 길면 앞부분만 표시
-          if (cleanContent.length > 200) {
-            resultText += `${cleanContent.substring(0, 200)}...\n\n`
+          // 너무 길면 줄 경계에서 자르기 (위임 내용은 법적으로 중요하므로 500자)
+          if (cleanContent.length > 500) {
+            const lastNewline = cleanContent.lastIndexOf('\n', 500)
+            const cutPos = lastNewline > 300 ? lastNewline : 500
+            resultText += `${cleanContent.substring(0, cutPos)}\n   ⚠️ (위임 내용 ${cleanContent.length.toLocaleString()}자 중 일부만 표시)\n\n`
           } else if (cleanContent) {
             resultText += `${cleanContent}\n\n`
           }

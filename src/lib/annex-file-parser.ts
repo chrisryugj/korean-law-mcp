@@ -3,13 +3,14 @@
  *
  * - HWPX (신형): hwpx-parser.ts (manifest 멀티섹션, colSpan/rowSpan, 중첩 테이블)
  * - HWP (구형): hwp5-parser.ts (OLE2 직접 파싱, UTF-16LE 텍스트, 레코드 기반 테이블)
- * - PDF: 파싱 불가 → null (LLM이 직접 읽도록 링크 반환)
+ * - PDF: pdf-parser.ts (pdfjs-dist 서버사이드 텍스트 추출)
  *
  * 참고: https://github.com/roboco-io/hwp2md
  */
 
 import { parseHwpxDocument } from "./hwpx-parser.js"
 import { parseHwp5Document } from "./hwp5-parser.js"
+import { parsePdfDocument } from "./pdf-parser.js"
 
 // ─── 매직바이트 감지 ─────────────────────────────────
 
@@ -34,6 +35,10 @@ export interface AnnexParseResult {
   success: boolean
   markdown?: string
   fileType: "hwpx" | "hwp" | "pdf" | "unknown"
+  /** 이미지 기반 PDF 여부 (텍스트 추출 불가) */
+  isImageBased?: boolean
+  /** PDF 페이지 수 */
+  pageCount?: number
   error?: string
 }
 
@@ -47,7 +52,7 @@ export async function parseAnnexFile(buffer: ArrayBuffer): Promise<AnnexParseRes
     return parseHwp(buffer)
   }
   if (isPdfFile(buffer)) {
-    return { success: false, fileType: "pdf", error: "PDF 파일은 직접 파싱할 수 없습니다." }
+    return parsePdf(buffer)
   }
   return { success: false, fileType: "unknown", error: "지원하지 않는 파일 형식입니다." }
 }
@@ -71,5 +76,38 @@ async function parseHwp(buffer: ArrayBuffer): Promise<AnnexParseResult> {
     return { success: true, fileType: "hwp", markdown }
   } catch (err) {
     return { success: false, fileType: "hwp", error: err instanceof Error ? err.message : "HWP 파싱 실패" }
+  }
+}
+
+// ─── PDF 파서 (pdf-parser.ts 위임) ──────────────────
+
+async function parsePdf(buffer: ArrayBuffer): Promise<AnnexParseResult> {
+  try {
+    const result = await parsePdfDocument(buffer)
+    if (result.isImageBased) {
+      return {
+        success: false,
+        fileType: "pdf",
+        isImageBased: true,
+        pageCount: result.pageCount,
+        error: result.error,
+      }
+    }
+    if (!result.success || !result.markdown) {
+      return {
+        success: false,
+        fileType: "pdf",
+        pageCount: result.pageCount,
+        error: result.error || "PDF 텍스트 추출 실패",
+      }
+    }
+    return {
+      success: true,
+      fileType: "pdf",
+      markdown: result.markdown,
+      pageCount: result.pageCount,
+    }
+  } catch (err) {
+    return { success: false, fileType: "pdf", error: err instanceof Error ? err.message : "PDF 파싱 실패" }
   }
 }

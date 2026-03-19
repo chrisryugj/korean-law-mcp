@@ -21,12 +21,9 @@ export class SimpleCache {
   set<T>(key: string, data: T, ttl: number = 24 * 60 * 60 * 1000): void {
     // TTL default: 24 hours
 
-    // If cache is full, remove oldest entry
+    // If cache is full, evict expired entries first, then oldest
     if (this.cache.size >= this.maxSize) {
-      const oldestKey = this.cache.keys().next().value
-      if (oldestKey) {
-        this.cache.delete(oldestKey)
-      }
+      this.evictOne()
     }
 
     this.cache.set(key, {
@@ -34,6 +31,23 @@ export class SimpleCache {
       timestamp: Date.now(),
       ttl
     })
+  }
+
+  /** 만료 엔트리 우선 제거, 없으면 LRU(가장 오래된) 제거 */
+  private evictOne(): void {
+    const now = Date.now()
+    // 1차: 만료된 엔트리 찾아서 제거
+    for (const [key, entry] of this.cache.entries()) {
+      if (now - entry.timestamp > entry.ttl) {
+        this.cache.delete(key)
+        return
+      }
+    }
+    // 2차: 만료 없으면 Map 순서상 첫 번째(가장 오래된) 제거
+    const oldestKey = this.cache.keys().next().value
+    if (oldestKey) {
+      this.cache.delete(oldestKey)
+    }
   }
 
   get<T>(key: string): T | null {
