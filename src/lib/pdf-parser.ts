@@ -3,17 +3,26 @@
  *
  * 법제처 별표 PDF에서 텍스트를 추출하여 마크다운으로 변환.
  * 이미지 기반 PDF(스캔 문서)는 텍스트 추출이 불가하므로 감지 후 안내.
+ *
+ * pdfjs-dist는 DOMMatrix 등 브라우저 API를 요구하므로,
+ * Vercel 서버리스 등 제한된 환경에서의 모듈 로드 실패를 방지하기 위해
+ * lazy import로 실제 파싱 시점에만 로드한다.
  */
 
-import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs"
 import { createRequire } from "module"
 import { pathToFileURL } from "url"
 
-// Node.js 환경: worker를 file:// URL로 설정
-const require = createRequire(import.meta.url)
-GlobalWorkerOptions.workerSrc = pathToFileURL(
-  require.resolve("pdfjs-dist/legacy/build/pdf.worker.mjs")
-).href
+let pdfjsLoaded = false
+
+async function loadPdfjs() {
+  if (pdfjsLoaded) return
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs")
+  const req = createRequire(import.meta.url)
+  pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(
+    req.resolve("pdfjs-dist/legacy/build/pdf.worker.mjs")
+  ).href
+  pdfjsLoaded = true
+}
 
 interface PdfParseResult {
   success: boolean
@@ -29,6 +38,9 @@ interface PdfParseResult {
  */
 export async function parsePdfDocument(buffer: ArrayBuffer): Promise<PdfParseResult> {
   try {
+    await loadPdfjs()
+    const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs")
+
     const data = new Uint8Array(buffer)
     const doc = await getDocument({
       data,
