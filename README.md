@@ -1,36 +1,47 @@
-# Korean Law MCP Server & CLI
+# Korean Law MCP
 
-법제처 Open API 기반 한국 법령 MCP 서버 + CLI. 64개 도구로 법령, 판례, 행정규칙, 자치법규, 법령해석례 등을 검색·조회·분석할 수 있다.
+**64 tools to search, retrieve, and analyze Korean law** — statutes, precedents, ordinances, and more.
 
-[![MCP Compatible](https://img.shields.io/badge/MCP-1.27-blue)](https://modelcontextprotocol.io)
-[![CLI](https://img.shields.io/badge/CLI-korean--law-green)](#cli-사용법)
+[![npm version](https://img.shields.io/npm/v/korean-law-mcp.svg)](https://www.npmjs.com/package/korean-law-mcp)
+[![MCP 1.27](https://img.shields.io/badge/MCP-1.27-blue)](https://modelcontextprotocol.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/)
 
-## 주요 특징
+> MCP server + CLI for Korea's official legal database (법제처 Open API). Works with Claude Desktop, Cursor, Windsurf, Zed, and any MCP-compatible client.
 
-- **MCP + CLI 동시 지원**: MCP 서버(Claude Desktop 등)와 CLI(터미널/스크립트) 모두 사용 가능
-- **법률 도메인 특화**: 약칭 자동 인식(`화관법` → `화학물질관리법`), 조문번호 변환(`제38조` ↔ `003800`), 3단 위임 구조 시각화
-- **별표/별지서식 본문 추출**: HWPX·HWP 파일을 자동 다운로드 → 텍스트/표를 Markdown으로 변환. PDF는 링크 반환
-- **64개 도구**: 법령·판례·행정규칙·자치법규·헌재결정·행정심판·조세심판·관세해석·법령용어 등 포괄
-- **캐시**: 검색 1시간, 조문 24시간 TTL
+[한국어](./README-KR.md)
 
-## 설치
+---
 
-### 사전 준비
+## Why this exists
 
-- Node.js 18+
-- [법제처 API 키](https://open.law.go.kr/LSO/openApi/guideResult.do) (무료)
+South Korea has **1,600+ active laws**, **10,000+ administrative rules**, and a precedent system spanning Supreme Court, Constitutional Court, tax tribunals, and customs rulings. All of this lives behind a clunky government API with zero developer experience.
 
-### npm 글로벌 설치
+This project wraps that entire legal system into **64 structured tools** that any AI assistant or script can call. Built by a Korean civil servant who got tired of manually searching [법제처](https://www.law.go.kr) for the hundredth time.
+
+---
+
+## Features
+
+- **64 Legal Tools** — Statutes, precedents, admin rules, ordinances, constitutional decisions, tax rulings, customs interpretations, legal terminology
+- **MCP + CLI** — Use from Claude Desktop or from your terminal. Same 64 tools.
+- **Korean Law Intelligence** — Auto-resolves abbreviations (`화관법` → `화학물질관리법`), converts article numbers (`제38조` ↔ `003800`), visualizes 3-tier delegation
+- **Annex Extraction** — Downloads HWPX/HWP annexes and converts tables to Markdown automatically
+- **7 Chain Tools** — Composite research workflows in a single call (e.g. `chain_full_research`: AI search → statutes → precedents → interpretations)
+- **Caching** — 1-hour search cache, 24-hour article cache
+- **Remote Endpoint** — Use without installation via `https://korean-law-mcp.fly.dev/mcp`
+
+---
+
+## Quick Start
+
+### Option 1: MCP Server (Claude Desktop / Cursor / Windsurf)
 
 ```bash
 npm install -g korean-law-mcp
 ```
 
-### MCP 클라이언트 설정
-
-아래 JSON을 각 클라이언트 설정 파일에 추가한다.
+Add to your MCP client config:
 
 ```json
 {
@@ -45,19 +56,17 @@ npm install -g korean-law-mcp
 }
 ```
 
-| 클라이언트 | 설정 파일 |
-|-----------|----------|
+Get your free API key at [법제처 Open API](https://open.law.go.kr/LSO/openApi/guideResult.do).
+
+| Client | Config File |
+|--------|------------|
 | Claude Desktop | `%APPDATA%\Claude\claude_desktop_config.json` (Win) / `~/Library/Application Support/Claude/claude_desktop_config.json` (Mac) |
 | Cursor | `.cursor/mcp.json` |
 | Windsurf | `.windsurf/mcp.json` |
-| Continue | `~/.continue/config.json` (배열 형식: `"mcpServers": [...]`) |
-| Zed | `~/.config/zed/settings.json` (`"context_servers"` 키 사용) |
+| Continue | `~/.continue/config.json` |
+| Zed | `~/.config/zed/settings.json` |
 
-설정 후 클라이언트를 재시작하면 바로 사용 가능.
-
-### 원격 MCP (설치 없이 바로 사용)
-
-공개 엔드포인트를 MCP 클라이언트에 등록하면 설치 없이 사용 가능하다.
+### Option 2: Remote (No Install)
 
 ```json
 {
@@ -69,211 +78,168 @@ npm install -g korean-law-mcp
 }
 ```
 
-> API 키를 헤더로 전달하려면 `x-law-oc` 헤더를 사용한다.
-
-## CLI 사용법
-
-MCP 클라이언트 없이 터미널에서 직접 64개 도구를 실행할 수 있다.
-
-### CLI 실행
+### Option 3: CLI
 
 ```bash
-# 글로벌 설치 후
 npm install -g korean-law-mcp
 export LAW_OC=your-api-key
 
-# 법령 검색
 korean-law search_law --query "관세법"
-
-# 조문 조회
 korean-law get_law_text --mst 160001 --jo "제38조"
-
-# 판례 검색
 korean-law search_precedents --query "부당해고"
-
-# 도구 목록
-korean-law list
-
-# 카테고리별 필터
-korean-law list --category 판례
-
-# 도구 상세 도움말
-korean-law help search_law
-
-# JSON으로 파라미터 전달
-korean-law get_law_text --json-input '{"mst":"160001","jo":"제38조"}'
+korean-law list                          # all 64 tools
+korean-law list --category 판례          # filter by category
+korean-law help search_law               # tool help
 ```
 
-### npm run으로 실행 (로컬 개발)
-
-```bash
-npm run cli -- search_law --query "민법"
-npm run cli -- list
-```
-
-### 파이프 조합
-
-```bash
-# 검색 결과에서 MST만 추출
-korean-law search_law --query "관세법" | grep MST
-
-# 여러 법령 순차 조회
-for mst in 160001 160002; do
-  korean-law get_law_text --mst "$mst" --jo "제1조"
-done
-```
-
-### Docker / 자체 배포
+### Option 4: Docker
 
 ```bash
 docker build -t korean-law-mcp .
 docker run -e LAW_OC=your-api-key -p 3000:3000 korean-law-mcp
 ```
 
-MCP 엔드포인트: `https://your-host:3000/mcp`
+---
 
-## 도구 목록 (64개)
+## Tool Categories (64 total)
 
-### 검색 (11개)
+### Search (11)
 
-| 도구 | 설명 |
-|------|------|
-| `search_law` | 법령 검색 (약칭 자동 인식) |
-| `search_admin_rule` | 행정규칙 검색 (훈령/예규/고시) |
-| `search_ordinance` | 자치법규 검색 |
-| `search_precedents` | 판례 검색 |
-| `search_interpretations` | 법령해석례 검색 |
-| `search_all` | 통합 검색 |
-| `suggest_law_names` | 법령명 자동완성 |
-| `advanced_search` | 고급 검색 (기간/키워드 필터) |
-| `get_law_history` | 날짜별 법령 변경이력 |
-| `get_annexes` | 별표/별지서식 조회 + HWPX/HWP 본문 추출 |
-| `parse_jo_code` | 조문번호 ↔ JO 코드 변환 |
+| Tool | Description |
+|------|-------------|
+| `search_law` | Search statutes (auto-resolves abbreviations) |
+| `search_admin_rule` | Search administrative rules |
+| `search_ordinance` | Search local ordinances |
+| `search_precedents` | Search court precedents |
+| `search_interpretations` | Search legal interpretations |
+| `search_all` | Unified search across all categories |
+| `suggest_law_names` | Law name autocomplete |
+| `advanced_search` | Advanced search with date/keyword filters |
+| `get_law_history` | Law amendment history by date |
+| `get_annexes` | Retrieve annexes + extract HWPX/HWP to Markdown |
+| `parse_jo_code` | Article number ↔ JO code conversion |
 
-### 조회 (9개)
+### Retrieve (9)
 
-| 도구 | 설명 |
-|------|------|
-| `get_law_text` | 법령 조문 전문 |
-| `get_admin_rule` | 행정규칙 전문 |
-| `get_ordinance` | 자치법규 전문 |
-| `get_precedent_text` | 판례 전문 |
-| `get_interpretation_text` | 법령해석례 전문 |
-| `get_batch_articles` | 여러 조문 일괄 조회 (`laws` 배열로 복수 법령 지원) |
-| `get_article_with_precedents` | 조문 + 관련 판례 |
-| `compare_old_new` | 신구법 대조 |
-| `get_three_tier` | 법률→시행령→시행규칙 3단 비교 |
+| Tool | Description |
+|------|-------------|
+| `get_law_text` | Full statute text |
+| `get_admin_rule` | Full administrative rule |
+| `get_ordinance` | Full local ordinance |
+| `get_precedent_text` | Full precedent text |
+| `get_interpretation_text` | Full interpretation text |
+| `get_batch_articles` | Batch article retrieval (multiple laws) |
+| `get_article_with_precedents` | Article + related precedents |
+| `compare_old_new` | Old vs. new law comparison |
+| `get_three_tier` | Law → Decree → Rule 3-tier comparison |
 
-### 분석 (9개)
+### Analyze (9)
 
-| 도구 | 설명 |
-|------|------|
-| `compare_articles` | 법령 간 조문 비교 |
-| `get_law_tree` | 위임 구조 트리 |
-| `get_article_history` | 조문 개정 연혁 |
-| `summarize_precedent` | 판례 요약 |
-| `extract_precedent_keywords` | 판례 키워드 추출 |
-| `find_similar_precedents` | 유사 판례 검색 |
-| `get_law_statistics` | 법령 통계 |
-| `parse_article_links` | 조문 내 참조 파싱 |
-| `get_external_links` | 외부 링크 생성 |
+| Tool | Description |
+|------|-------------|
+| `compare_articles` | Cross-law article comparison |
+| `get_law_tree` | Delegation structure tree |
+| `get_article_history` | Article amendment history |
+| `summarize_precedent` | Precedent summary |
+| `extract_precedent_keywords` | Precedent keyword extraction |
+| `find_similar_precedents` | Similar precedent search |
+| `get_law_statistics` | Law statistics |
+| `parse_article_links` | Parse in-text legal references |
+| `get_external_links` | Generate external links |
 
-### 전문 분야 (4개)
+### Specialized (10)
 
-| 도구 | 설명 |
-|------|------|
-| `search_tax_tribunal_decisions` | 조세심판원 재결례 검색 |
-| `get_tax_tribunal_decision_text` | 재결례 전문 |
-| `search_customs_interpretations` | 관세청 법령해석 검색 |
-| `get_customs_interpretation_text` | 관세 해석 전문 |
+| Tool | Description |
+|------|-------------|
+| `search_tax_tribunal_decisions` | Tax tribunal decisions |
+| `search_customs_interpretations` | Customs interpretations |
+| `search_constitutional_decisions` | Constitutional Court decisions |
+| `search_admin_appeals` | Administrative appeal decisions |
+| `search_ftc_decisions` | Fair Trade Commission decisions |
+| `search_nlrc_decisions` | Labor Relations Commission decisions |
+| `search_pipc_decisions` | Privacy Commission decisions |
+| + `get_*_text` for each | Full text retrieval |
 
-### 헌재·행심·위원회 결정 (6개)
+### Knowledge Base (7)
 
-| 도구 | 설명 |
-|------|------|
-| `search_constitutional_decisions` | 헌법재판소 결정례 검색 |
-| `get_constitutional_decision_text` | 헌재 결정 전문 |
-| `search_admin_appeals` | 행정심판례 검색 |
-| `get_admin_appeal_text` | 행정심판 전문 |
-| `search_ftc_decisions` / `search_nlrc_decisions` / `search_pipc_decisions` | 공정위/노동위/개보위 결정 검색 |
-| `get_ftc_decision_text` / `get_nlrc_decision_text` / `get_pipc_decision_text` | 결정 전문 |
+| Tool | Description |
+|------|-------------|
+| `get_legal_term_kb` | Legal terminology search |
+| `get_legal_term_detail` | Term definition |
+| `get_daily_term` | Everyday language search |
+| `get_daily_to_legal` | Everyday → legal term mapping |
+| `get_legal_to_daily` | Legal → everyday term mapping |
+| `get_term_articles` | Articles using a term |
+| `get_related_laws` | Related laws |
 
-### 지식베이스 (7개)
+### Chain Tools (7)
 
-| 도구 | 설명 |
-|------|------|
-| `get_legal_term_kb` | 법령용어 지식베이스 검색 |
-| `get_legal_term_detail` | 용어 상세 정의 |
-| `get_daily_term` | 일상용어 검색 |
-| `get_daily_to_legal` | 일상용어 → 법령용어 |
-| `get_legal_to_daily` | 법령용어 → 일상용어 |
-| `get_term_articles` | 용어 사용 조문 |
-| `get_related_laws` | 관련법령 조회 |
+Composite research workflows — multiple tools in a single call.
 
-### 기타 (2개)
+| Tool | Workflow |
+|------|----------|
+| `chain_law_system` | Search → 3-tier comparison → batch articles |
+| `chain_action_basis` | Law system → interpretations → precedents → appeals |
+| `chain_dispute_prep` | Precedents + appeals + specialized decisions |
+| `chain_amendment_track` | Old/new comparison + article history |
+| `chain_ordinance_compare` | Parent law → nationwide ordinance search |
+| `chain_full_research` | AI search → statutes → precedents → interpretations |
+| `chain_procedure_detail` | Law system → annexes → enforcement rule annexes |
 
-| 도구 | 설명 |
-|------|------|
-| `search_ai_law` | 자연어 지능형 검색 (`lawTypes` 필터 지원) |
-| `search_english_law` / `get_english_law_text` | 영문법령 검색/조회 |
-| `search_historical_law` / `get_historical_law` | 연혁법령 검색/조회 |
-| `search_legal_terms` | 법령용어 사전 검색 |
+### Other (4)
 
-### 체인 도구 (7개)
-
-여러 도구를 자동 조합하여 복합 리서치를 한 번의 호출로 수행한다.
-
-| 도구 | 설명 |
-|------|------|
-| `chain_law_system` | 법체계 파악 (법령검색→3단비교→조문 일괄 조회) |
-| `chain_action_basis` | 처분/허가 근거 확인 (법체계→해석례→판례→행심 병렬) |
-| `chain_dispute_prep` | 불복/쟁송 대비 (판례+행심+전문결정례 병렬) |
-| `chain_amendment_track` | 개정 추적 (신구대조+조문이력) |
-| `chain_ordinance_compare` | 조례 비교 연구 (상위법→전국 조례 검색) |
-| `chain_full_research` | 종합 리서치 (AI검색→법령→판례→해석) |
-| `chain_procedure_detail` | 절차/비용/서식 (법체계→별표→시행규칙별표) |
-
-## 사용 예시
-
-```
-사용자: "관세법 제38조 알려줘"
-→ search_law("관세법") → MST 획득 → get_law_text(mst, jo="003800")
-
-사용자: "화관법 최근 개정 비교"
-→ "화관법" → "화학물질관리법" 자동 변환 → compare_old_new(mst)
-
-사용자: "근로기준법 제74조 해석례"
-→ search_interpretations("근로기준법 제74조") → get_interpretation_text(id)
-
-사용자: "산업안전보건법 별표1 내용 알려줘"
-→ get_annexes(lawName="산업안전보건법 별표1") → HWPX 파일 다운로드 → 표/텍스트 Markdown 변환
-```
-
-## 환경변수
-
-| 변수 | 필수 | 기본값 | 설명 |
-|------|------|--------|------|
-| `LAW_OC` | O | - | 법제처 API 키 ([발급](https://open.law.go.kr/LSO/openApi/guideResult.do)) |
-| `PORT` | X | 3000 | HTTP 서버 포트 |
-| `CORS_ORIGIN` | X | `*` | CORS 허용 오리진 (프로덕션 배포 시 반드시 설정 권장) |
-| `RATE_LIMIT_RPM` | X | 60 | IP당 분당 요청 제한 (0=비활성화) |
-
-## 문서
-
-- [docs/API.md](docs/API.md) - 64개 도구 레퍼런스
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - 시스템 설계
-- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) - 개발 가이드
-
-## 라이선스
-
-MIT - [LICENSE](LICENSE) 참조
-
-## 감사
-
-- [법제처](https://www.law.go.kr) Open API
-- [LexDiff](https://github.com/chrisryugj/lexdiff) 검색어 정규화 코드
-- [Anthropic](https://anthropic.com) MCP 프로토콜
+| Tool | Description |
+|------|-------------|
+| `search_ai_law` | Natural language AI search |
+| `search_english_law` / `get_english_law_text` | English law search/retrieval |
+| `search_historical_law` / `get_historical_law` | Historical law search/retrieval |
+| `search_legal_terms` | Legal dictionary search |
 
 ---
 
-<sub>Made by 류주임 @ 광진구청 AI동호회 AI.Do</sub>
+## Usage Examples
+
+```
+User: "관세법 제38조 알려줘"
+→ search_law("관세법") → get_law_text(mst, jo="003800")
+
+User: "화관법 최근 개정 비교"
+→ "화관법" → "화학물질관리법" auto-resolved → compare_old_new(mst)
+
+User: "근로기준법 제74조 해석례"
+→ search_interpretations("근로기준법 제74조") → get_interpretation_text(id)
+
+User: "산업안전보건법 별표1 내용"
+→ get_annexes("산업안전보건법 별표1") → HWPX download → Markdown table
+```
+
+---
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `LAW_OC` | Yes | — | 법제처 API key ([get one free](https://open.law.go.kr/LSO/openApi/guideResult.do)) |
+| `PORT` | No | 3000 | HTTP server port |
+| `CORS_ORIGIN` | No | `*` | CORS allowed origin |
+| `RATE_LIMIT_RPM` | No | 60 | Requests per minute per IP |
+
+## Documentation
+
+- [docs/API.md](docs/API.md) — 64-tool reference
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — System design
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — Development guide
+
+## Credits
+
+- [법제처](https://www.law.go.kr) Open API — Korea's official legal database
+- [Anthropic](https://anthropic.com) — Model Context Protocol
+- [kordoc](https://github.com/chrisryugj/kordoc) — HWP/HWPX parser (same author)
+
+## License
+
+[MIT](./LICENSE)
+
+---
+
+<sub>Made by a Korean civil servant @ 광진구청 AI동호회 AI.Do</sub>
