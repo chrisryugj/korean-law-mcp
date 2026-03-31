@@ -6,6 +6,7 @@
  */
 
 import { SEARCH_DETAIL_CHAINS } from "./tool-chain-config.js"
+import { parseDateRange, type DateRange } from "./date-parser.js"
 
 export interface RouteResult {
   /** 실행할 도구 이름 */
@@ -18,6 +19,8 @@ export interface RouteResult {
   pipeline?: Array<{ tool: string; params: Record<string, unknown> }>
   /** 자동 체인 여부 (search → detail 자동 연결) */
   autoChain?: boolean
+  /** 자연어에서 추출된 날짜 범위 (검색 도구에 자동 적용) */
+  dateRange?: DateRange
 }
 
 interface Pattern {
@@ -564,6 +567,23 @@ export function routeQuery(query: string): RouteResult {
     }
   }
 
+  // 자연어 날짜 조건 추출 (검색어에서 시간 표현 분리)
+  const dateParsed = parseDateRange(q)
+  const dateRange = dateParsed.range
+
+  // 날짜 표현이 제거된 순수 검색어로 패턴 매칭
+  const routeInput = dateParsed.cleanQuery || q
+  const result = _matchRoute(routeInput)
+
+  // 날짜 범위가 있으면 결과에 첨부
+  if (dateRange) {
+    result.dateRange = dateRange
+  }
+  return result
+}
+
+/** 패턴 매칭 내부 함수 (routeQuery에서만 호출) */
+function _matchRoute(q: string): RouteResult {
   for (const pattern of sortedPatterns) {
     for (const regex of pattern.patterns) {
       const match = q.match(regex)
@@ -657,6 +677,10 @@ export function explainRoute(query: string): string {
   explanation += `도구: ${result.tool}\n`
   explanation += `근거: ${result.reason}\n`
   explanation += `파라미터: ${JSON.stringify(result.params, null, 2)}\n`
+
+  if (result.dateRange) {
+    explanation += `날짜범위: ${result.dateRange.from} ~ ${result.dateRange.to}\n`
+  }
 
   if (result.pipeline) {
     explanation += `파이프라인:\n`

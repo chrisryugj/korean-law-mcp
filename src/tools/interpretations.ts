@@ -3,13 +3,14 @@ import type { LawApiClient } from "../lib/api-client.js"
 import { parseInterpretationXML } from "../lib/xml-parser.js"
 import { truncateResponse } from "../lib/schemas.js"
 
-// Legal interpretation search tool - Search for statutory interpretations
 export const searchInterpretationsSchema = z.object({
   query: z.string().describe("Search keyword (e.g., '자동차', '근로기준법')"),
   display: z.number().min(1).max(100).default(20).describe("Results per page (default: 20, max: 100)"),
   page: z.number().min(1).default(1).describe("Page number (default: 1)"),
   sort: z.enum(["lasc", "ldes", "dasc", "ddes", "nasc", "ndes"]).optional()
     .describe("Sort option: lasc/ldes (case name), dasc/ddes (date), nasc/ndes (interpretation number)"),
+  fromDate: z.string().optional().describe("회신일 시작 (YYYYMMDD)"),
+  toDate: z.string().optional().describe("회신일 종료 (YYYYMMDD)"),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달"),
 });
 
@@ -36,9 +37,20 @@ export async function searchInterpretations(
 
     // 공통 파서 사용
     const result = parseInterpretationXML(xmlText);
-    const totalCount = result.totalCnt;
     const currentPage = result.page;
-    const expcs = result.items;
+    let expcs = result.items;
+
+    // 날짜 범위 필터링 (클라이언트 사이드)
+    if (args.fromDate || args.toDate) {
+      expcs = expcs.filter(e => {
+        const d = (e.회신일자 || "").replace(/[.\-\s]/g, "")
+        if (!d) return true
+        if (args.fromDate && d < args.fromDate) return false
+        if (args.toDate && d > args.toDate) return false
+        return true
+      })
+    }
+    const totalCount = (args.fromDate || args.toDate) ? expcs.length : result.totalCnt;
 
     if (totalCount === 0) {
       let errorMsg = "검색 결과가 없습니다."
@@ -62,7 +74,11 @@ export async function searchInterpretations(
       };
     }
 
-    let output = `해석례 검색 결과 (총 ${totalCount}건, ${currentPage}페이지):\n\n`;
+    let output = `해석례 검색 결과 (총 ${totalCount}건, ${currentPage}페이지)`;
+    if (args.fromDate || args.toDate) {
+      output += ` [기간: ${args.fromDate || "시작"} ~ ${args.toDate || "종료"}]`
+    }
+    output += `:\n\n`;
 
     for (const expc of expcs) {
       output += `[${expc.법령해석례일련번호}] ${expc.안건명}\n`;
@@ -94,7 +110,6 @@ export async function searchInterpretations(
   }
 }
 
-// Legal interpretation text retrieval tool - Get full text of a specific interpretation
 export const getInterpretationTextSchema = z.object({
   id: z.string().describe("Legal interpretation serial number (법령해석례일련번호) from search results"),
   caseName: z.string().optional().describe("Case name (optional, for verification)"),

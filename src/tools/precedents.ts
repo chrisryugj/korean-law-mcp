@@ -3,7 +3,6 @@ import type { LawApiClient } from "../lib/api-client.js"
 import { parsePrecedentXML } from "../lib/xml-parser.js"
 import { truncateResponse } from "../lib/schemas.js"
 
-// Precedent search tool - Search for case law by keyword, court, or case number
 export const searchPrecedentsSchema = z.object({
   query: z.string().optional().describe("검색 키워드 (예: '자동차', '담보권')"),
   court: z.string().optional().describe("법원명 필터 (예: '대법원', '서울고등법원')"),
@@ -12,6 +11,8 @@ export const searchPrecedentsSchema = z.object({
   page: z.number().min(1).default(1).describe("페이지 번호 (기본:1)"),
   sort: z.enum(["lasc", "ldes", "dasc", "ddes", "nasc", "ndes"]).optional()
     .describe("정렬: lasc/ldes(법령명), dasc/ddes(날짜), nasc/ndes(사건번호)"),
+  fromDate: z.string().optional().describe("선고일 시작 (YYYYMMDD)"),
+  toDate: z.string().optional().describe("선고일 종료 (YYYYMMDD)"),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달"),
 });
 
@@ -40,35 +41,37 @@ export async function searchPrecedents(
 
   // 공통 파서 사용
   const result = parsePrecedentXML(xmlText);
-  const totalCount = result.totalCnt;
   const currentPage = result.page;
-  const precs = result.items;
+  let precs = result.items;
+
+  // 날짜 범위 필터링 (클라이언트 사이드)
+  if (args.fromDate || args.toDate) {
+    precs = precs.filter(p => {
+      const d = (p.선고일자 || "").replace(/[.\-\s]/g, "")
+      if (!d) return true
+      if (args.fromDate && d < args.fromDate) return false
+      if (args.toDate && d > args.toDate) return false
+      return true
+    })
+  }
+  const totalCount = (args.fromDate || args.toDate) ? precs.length : result.totalCnt;
 
   if (totalCount === 0) {
-    let errorMsg = "검색 결과가 없습니다."
-    errorMsg += `\n\n💡 개선 방법:`
-    errorMsg += `\n   1. 단순 키워드 사용:`
-    if (args.query) {
-      const words = args.query.split(/\s+/)
-      if (words.length > 1) {
-        errorMsg += `\n      search_precedents(query="${words[0]}")`
-      }
-    }
-    errorMsg += `\n\n   2. 법령해석례 검색:`
-    errorMsg += `\n      search_interpretations(query="${args.query || '관련 키워드'}")`
-    errorMsg += `\n\n   3. 법령 검색으로 전환:`
-    errorMsg += `\n      search_law(query="${args.query || '관련 법령명'}")`
-
-    return {
-      content: [{
-        type: "text",
-        text: errorMsg
-      }],
-      isError: true
-    };
+    const kw = args.query || "관련 키워드"
+    const hint = [
+      "검색 결과가 없습니다.\n\n💡 개선 방법:",
+      `  1. 단순 키워드: search_precedents(query="${kw.split(/\s+/)[0]}")`,
+      `  2. 해석례 검색: search_interpretations(query="${kw}")`,
+      `  3. 법령 검색: search_law(query="${kw}")`,
+    ].join("\n")
+    return { content: [{ type: "text", text: hint }], isError: true };
   }
 
-  let output = `판례 검색 결과 (총 ${totalCount}건, ${currentPage}페이지):\n\n`;
+  let output = `판례 검색 결과 (총 ${totalCount}건, ${currentPage}페이지)`;
+  if (args.fromDate || args.toDate) {
+    output += ` [기간: ${args.fromDate || "시작"} ~ ${args.toDate || "종료"}]`
+  }
+  output += `:\n\n`;
 
   for (const prec of precs) {
     output += `[${prec.판례일련번호}] ${prec.판례명}\n`;
@@ -91,17 +94,11 @@ export async function searchPrecedents(
     }]
   };
   } catch (error) {
-    return {
-      content: [{
-        type: "text",
-        text: `Error: ${error instanceof Error ? error.message : String(error)}`
-      }],
-      isError: true
-    };
+    const msg = error instanceof Error ? error.message : String(error)
+    return { content: [{ type: "text", text: `Error: ${msg}` }], isError: true }
   }
 }
 
-// Precedent text retrieval tool - Get full text of a specific case
 export const getPrecedentTextSchema = z.object({
   id: z.string().describe("판례일련번호 (search_precedents 결과에서 획득)"),
   caseName: z.string().optional().describe("사건명 (선택, 검증용)"),
@@ -191,13 +188,8 @@ export async function getPrecedentText(
     }]
   };
   } catch (error) {
-    return {
-      content: [{
-        type: "text",
-        text: `Error: ${error instanceof Error ? error.message : String(error)}`
-      }],
-      isError: true
-    };
+    const msg = error instanceof Error ? error.message : String(error)
+    return { content: [{ type: "text", text: `Error: ${msg}` }], isError: true }
   }
 }
 

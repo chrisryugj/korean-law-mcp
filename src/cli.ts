@@ -204,6 +204,12 @@ async function executeNaturalQuery(
     printRouteInfo(route.tool, route.reason)
   }
 
+  // 날짜 범위가 있으면 검색 파라미터에 주입
+  if (route.dateRange) {
+    route.params.fromDate = route.dateRange.from
+    route.params.toDate = route.dateRange.to
+  }
+
   // 1단계: 메인 도구 실행
   const result = await executeTool(apiClient, route.tool, route.params)
 
@@ -307,6 +313,12 @@ async function executeNaturalQueryJson(
 ): Promise<void> {
   const route = routeQuery(query)
   try {
+    // 날짜 범위가 있으면 검색 파라미터에 주입
+    if (route.dateRange) {
+      route.params.fromDate = route.dateRange.from
+      route.params.toDate = route.dateRange.to
+    }
+
     const result = await executeTool(apiClient, route.tool, route.params)
 
     let pipelineResult: string | undefined

@@ -10,6 +10,7 @@ import type { LawApiClient } from "../lib/api-client.js"
 import type { ToolResponse } from "../lib/types.js"
 
 // Tool handler imports
+import { analyzeDocument } from "./document-analysis.js"
 import { getThreeTier } from "./three-tier.js"
 import { getBatchArticles } from "./batch-articles.js"
 import { searchPrecedents } from "./precedents.js"
@@ -572,4 +573,107 @@ export async function chainProcedureDetail(
   } catch (error) {
     return wrapError(error)
   }
+}
+
+// ========================================
+// 8. chain_document_review -- 문서 종합 검토
+// ========================================
+
+export const chainDocumentReviewSchema = z.object({
+  text: z.string().describe("분석할 계약서/약관 전문 텍스트"),
+  maxClauses: z.number().min(1).max(30).default(15).describe("분석할 최대 조항 수 (기본:15)"),
+  apiKey: z.string().optional(),
+})
+
+export async function chainDocumentReview(
+  apiClient: LawApiClient,
+  input: z.infer<typeof chainDocumentReviewSchema>
+): Promise<ToolResponse> {
+  try {
+    const parts = [`═══ 문서 종합 검토 ═══`]
+
+    // Step 1: analyze_document 로 리스크 분석
+    const analysisResult = await callTool(analyzeDocument, apiClient, {
+      text: input.text,
+      maxClauses: input.maxClauses,
+    })
+
+    if (analysisResult.isError) {
+      return { content: [{ type: "text", text: analysisResult.text }], isError: true }
+    }
+
+    parts.push(sec("문서 리스크 분석", analysisResult.text))
+
+    // Step 2: 분석 결과에서 searchHints 추출 → 병렬로 법령+판례 검색
+    const searchHints = extractSearchHints(analysisResult.text)
+
+    if (searchHints.length === 0) {
+      parts.push("\n▶ 추가 법령/판례 검색\n특별한 리스크가 없어 추가 검색을 생략합니다.\n")
+      return wrapResult(parts.join("\n"))
+    }
+
+    // 중복 제거 후 최대 5개 힌트로 제한
+    const uniqueHints = [...new Set(searchHints)].slice(0, 5)
+
+    const searchPromises: Promise<CallResult>[] = []
+    for (const hint of uniqueHints) {
+      searchPromises.push(
+        callTool(searchPrecedents, apiClient, { query: hint, display: 3, apiKey: input.apiKey })
+      )
+    }
+    // AI 법령 검색도 상위 3개 힌트로 병렬 실행
+    const lawHints = uniqueHints.slice(0, 3)
+    for (const hint of lawHints) {
+      searchPromises.push(
+        callTool(searchAiLaw, apiClient, { query: hint, display: 3, apiKey: input.apiKey })
+      )
+    }
+
+    const searchResults = await Promise.all(searchPromises)
+
+    // 판례 결과 합산
+    const precTexts: string[] = []
+    for (let i = 0; i < uniqueHints.length; i++) {
+      const r = searchResults[i]
+      if (!r.isError && r.text.trim()) {
+        precTexts.push(`[${uniqueHints[i]}]\n${r.text}`)
+      }
+    }
+    if (precTexts.length > 0) {
+      parts.push(sec("관련 판례", precTexts.join("\n\n")))
+    }
+
+    // 법령 결과 합산
+    const lawTexts: string[] = []
+    for (let i = 0; i < lawHints.length; i++) {
+      const r = searchResults[uniqueHints.length + i]
+      if (!r.isError && r.text.trim()) {
+        lawTexts.push(`[${lawHints[i]}]\n${r.text}`)
+      }
+    }
+    if (lawTexts.length > 0) {
+      parts.push(sec("근거 법령", lawTexts.join("\n\n")))
+    }
+
+    return wrapResult(parts.join("\n"))
+  } catch (error) {
+    return wrapError(error)
+  }
+}
+
+/** analyze_document 결과 텍스트에서 "검색: ..." 라인의 힌트를 추출 */
+function extractSearchHints(analysisText: string): string[] {
+  const hints: string[] = []
+  const lines = analysisText.split("\n")
+  for (const line of lines) {
+    const m = line.match(/^\s*검색:\s*(.+)$/)
+    if (m) {
+      const hintParts = m[1].split(/\s*\/\s*/)
+      for (const p of hintParts) {
+        const trimmed = p.trim()
+        if (trimmed) hints.push(trimmed)
+      }
+    }
+  }
+  return hints
 }

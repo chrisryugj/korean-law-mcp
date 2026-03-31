@@ -112,6 +112,34 @@ export async function getNlrcDecisionText(
 }
 
 // ========================================
+// 국민권익위원회 결정문 (ACR Decisions)
+// ========================================
+
+export const searchAcrDecisionsSchema = z.object({
+  ...baseSearchSchemaOptionalQuery,
+  query: z.string().optional().describe("검색 키워드 (예: '행정심판', '고충민원', '부패행위')"),
+});
+
+export type SearchAcrDecisionsInput = z.infer<typeof searchAcrDecisionsSchema>;
+
+export async function searchAcrDecisions(
+  apiClient: LawApiClient,
+  args: SearchAcrDecisionsInput
+): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
+  return searchCommitteeDecisions(apiClient, args, "acr", "국민권익위원회 결정문", "get_acr_decision_text");
+}
+
+export const getAcrDecisionTextSchema = z.object(baseTextSchema);
+export type GetAcrDecisionTextInput = z.infer<typeof getAcrDecisionTextSchema>;
+
+export async function getAcrDecisionText(
+  apiClient: LawApiClient,
+  args: GetAcrDecisionTextInput
+): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
+  return getCommitteeDecisionText(apiClient, args, "acr", "국민권익위원회 결정문");
+}
+
+// ========================================
 // Common Implementation
 // ========================================
 

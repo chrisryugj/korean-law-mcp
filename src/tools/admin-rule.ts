@@ -247,3 +247,110 @@ export async function getAdminRule(
     }
   }
 }
+
+// compare_admin_rule_old_new 스키마
+export const CompareAdminRuleOldNewSchema = z.object({
+  query: z.string().optional().describe("행정규칙명 키워드 (검색용)"),
+  id: z.string().optional().describe("행정규칙ID (본문 조회용, search_admin_rule에서 획득)"),
+  apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달")
+}).refine(data => data.query || data.id, {
+  message: "query(검색) 또는 id(본문조회) 중 하나는 필수입니다"
+})
+
+export type CompareAdminRuleOldNewInput = z.infer<typeof CompareAdminRuleOldNewSchema>
+
+export async function compareAdminRuleOldNew(
+  apiClient: LawApiClient,
+  input: CompareAdminRuleOldNewInput
+): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
+  try {
+    if (input.id) {
+      // 본문 조회: lawService.do, target=admrulOldAndNew
+      const xmlText = await apiClient.fetchApi({
+        endpoint: "lawService.do",
+        target: "admrulOldAndNew",
+        type: "XML",
+        extraParams: { ID: String(input.id) },
+        apiKey: input.apiKey
+      })
+
+      const parser = new DOMParser()
+      const doc = parser.parseFromString(xmlText, "text/xml")
+
+      const ruleName = doc.getElementsByTagName("행정규칙명")[0]?.textContent || "알 수 없음"
+
+      let resultText = `행정규칙 신구법 대조: ${ruleName}\n`
+      resultText += `━━━━━━━━━━━━━━━━━━━━━━\n\n`
+
+      const oldArticles = doc.getElementsByTagName("구조문")
+      const newArticles = doc.getElementsByTagName("신조문")
+      const maxCount = Math.max(oldArticles.length, newArticles.length)
+
+      if (maxCount === 0) {
+        resultText += "신구법 대조 데이터가 없습니다."
+        return { content: [{ type: "text", text: resultText }] }
+      }
+
+      const displayCount = Math.min(maxCount, 30)
+      for (let i = 0; i < displayCount; i++) {
+        const oldContent = oldArticles[i]?.textContent?.trim() || ""
+        const newContent = newArticles[i]?.textContent?.trim() || ""
+
+        resultText += `━━━━━━━━━━━━━━━━━━━━━━\n`
+        resultText += `[개정 전] ${oldContent || "(신설)"}\n\n`
+        resultText += `[개정 후] ${newContent || "(삭제)"}\n\n`
+      }
+
+      if (maxCount > displayCount) {
+        resultText += `\n... 외 ${maxCount - displayCount}개 항목 (생략)\n`
+      }
+
+      return { content: [{ type: "text", text: truncateResponse(resultText) }] }
+    }
+
+    // 검색: lawSearch.do, target=admrulOldAndNew
+    const xmlText = await apiClient.fetchApi({
+      endpoint: "lawSearch.do",
+      target: "admrulOldAndNew",
+      type: "XML",
+      extraParams: { query: String(input.query) },
+      apiKey: input.apiKey
+    })
+
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(xmlText, "text/xml")
+
+    const rules = doc.getElementsByTagName("admrul")
+    if (rules.length === 0) {
+      return {
+        content: [{ type: "text", text: "행정규칙 신구법 검색 결과가 없습니다." }],
+        isError: true
+      }
+    }
+
+    let resultText = `행정규칙 신구법 검색 결과 (총 ${rules.length}건):\n\n`
+
+    const display = Math.min(rules.length, 20)
+    for (let i = 0; i < display; i++) {
+      const rule = rules[i]
+      const name = rule.getElementsByTagName("행정규칙명")[0]?.textContent || "알 수 없음"
+      const ruleId = rule.getElementsByTagName("행정규칙ID")[0]?.textContent || ""
+      const promDate = rule.getElementsByTagName("발령일자")[0]?.textContent || ""
+      const orgName = rule.getElementsByTagName("소관부처명")[0]?.textContent || ""
+
+      resultText += `${i + 1}. ${name}\n`
+      resultText += `   - 행정규칙ID: ${ruleId}\n`
+      resultText += `   - 발령일: ${promDate}\n`
+      resultText += `   - 소관부처: ${orgName}\n\n`
+    }
+
+    resultText += `\n💡 본문 조회: compare_admin_rule_old_new(id="행정규칙ID")`
+
+    return { content: [{ type: "text", text: truncateResponse(resultText) }] }
+  } catch (error) {
+    return {
+      content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+      isError: true
+    }
+  }
+}

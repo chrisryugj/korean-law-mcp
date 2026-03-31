@@ -13,10 +13,11 @@ import { formatToolError } from "./lib/errors.js"
 // Tool imports
 import { searchLaw, SearchLawSchema } from "./tools/search.js"
 import { getLawText, GetLawTextSchema } from "./tools/law-text.js"
-import { parseJoCode, ParseJoCodeSchema } from "./tools/utils.js"
+import { parseJoCode, ParseJoCodeSchema, getLawAbbreviations, GetLawAbbreviationsSchema } from "./tools/utils.js"
 import { compareOldNew, CompareOldNewSchema } from "./tools/comparison.js"
 import { getThreeTier, GetThreeTierSchema } from "./tools/three-tier.js"
-import { searchAdminRule, SearchAdminRuleSchema, getAdminRule, GetAdminRuleSchema } from "./tools/admin-rule.js"
+import { searchAdminRule, SearchAdminRuleSchema, getAdminRule, GetAdminRuleSchema, compareAdminRuleOldNew, CompareAdminRuleOldNewSchema } from "./tools/admin-rule.js"
+import { getArticleDetail, GetArticleDetailSchema } from "./tools/article-detail.js"
 import { getAnnexes, GetAnnexesSchema } from "./tools/annex.js"
 import { getOrdinance, GetOrdinanceSchema } from "./tools/ordinance.js"
 import { searchOrdinance, SearchOrdinanceSchema } from "./tools/ordinance-search.js"
@@ -41,13 +42,18 @@ import { searchTaxTribunalDecisions, searchTaxTribunalDecisionsSchema, getTaxTri
 import { searchCustomsInterpretations, searchCustomsInterpretationsSchema, getCustomsInterpretationText, getCustomsInterpretationTextSchema } from "./tools/customs-interpretations.js"
 import { searchConstitutionalDecisions, searchConstitutionalDecisionsSchema, getConstitutionalDecisionText, getConstitutionalDecisionTextSchema } from "./tools/constitutional-decisions.js"
 import { searchAdminAppeals, searchAdminAppealsSchema, getAdminAppealText, getAdminAppealTextSchema } from "./tools/admin-appeals.js"
+import { searchTreaties, searchTreatiesSchema, getTreatyText, getTreatyTextSchema } from "./tools/treaties.js"
 import { searchEnglishLaw, searchEnglishLawSchema, getEnglishLawText, getEnglishLawTextSchema } from "./tools/english-law.js"
 import { searchLegalTerms, searchLegalTermsSchema } from "./tools/legal-terms.js"
 import { searchAiLaw, searchAiLawSchema } from "./tools/life-law.js"
 import { getLegalTermKB, getLegalTermKBSchema, getLegalTermDetail, getLegalTermDetailSchema, getDailyTerm, getDailyTermSchema, getDailyToLegal, getDailyToLegalSchema, getLegalToDaily, getLegalToDailySchema, getTermArticles, getTermArticlesSchema, getRelatedLaws, getRelatedLawsSchema } from "./tools/knowledge-base.js"
-import { searchFtcDecisions, searchFtcDecisionsSchema, getFtcDecisionText, getFtcDecisionTextSchema, searchPipcDecisions, searchPipcDecisionsSchema, getPipcDecisionText, getPipcDecisionTextSchema, searchNlrcDecisions, searchNlrcDecisionsSchema, getNlrcDecisionText, getNlrcDecisionTextSchema } from "./tools/committee-decisions.js"
+import { searchFtcDecisions, searchFtcDecisionsSchema, getFtcDecisionText, getFtcDecisionTextSchema, searchPipcDecisions, searchPipcDecisionsSchema, getPipcDecisionText, getPipcDecisionTextSchema, searchNlrcDecisions, searchNlrcDecisionsSchema, getNlrcDecisionText, getNlrcDecisionTextSchema, searchAcrDecisions, searchAcrDecisionsSchema, getAcrDecisionText, getAcrDecisionTextSchema } from "./tools/committee-decisions.js"
+import { searchSchoolRules, searchSchoolRulesSchema, getSchoolRuleText, getSchoolRuleTextSchema, searchPublicCorpRules, searchPublicCorpRulesSchema, getPublicCorpRuleText, getPublicCorpRuleTextSchema, searchPublicInstitutionRules, searchPublicInstitutionRulesSchema, getPublicInstitutionRuleText, getPublicInstitutionRuleTextSchema } from "./tools/institutional-rules.js"
+import { searchAppealReviewDecisions, searchAppealReviewDecisionsSchema, getAppealReviewDecisionText, getAppealReviewDecisionTextSchema, searchAcrSpecialAppeals, searchAcrSpecialAppealsSchema, getAcrSpecialAppealText, getAcrSpecialAppealTextSchema } from "./tools/special-admin-appeals.js"
 import { getHistoricalLaw, getHistoricalLawSchema, searchHistoricalLaw, searchHistoricalLawSchema } from "./tools/historical-law.js"
 import { getLawSystemTree, getLawSystemTreeSchema } from "./tools/law-system-tree.js"
+import { getLinkedOrdinances, LinkedOrdinancesSchema, getLinkedOrdinanceArticles, LinkedOrdinanceArticlesSchema, getDelegatedLaws, DelegatedLawsSchema, getLinkedLawsFromOrdinance, LinkedLawsFromOrdinanceSchema } from "./tools/law-linkage.js"
+import { analyzeDocument, AnalyzeDocumentSchema } from "./tools/document-analysis.js"
 // Chain tool imports
 import {
   chainLawSystem, chainLawSystemSchema,
@@ -57,6 +63,7 @@ import {
   chainOrdinanceCompare, chainOrdinanceCompareSchema,
   chainFullResearch, chainFullResearchSchema,
   chainProcedureDetail, chainProcedureDetailSchema,
+  chainDocumentReview, chainDocumentReviewSchema,
 } from "./tools/chains.js"
 
 /**
@@ -75,6 +82,12 @@ export const allTools: McpTool[] = [
     description: "[법령조회] 조문 전문 조회. mst/lawId 필수, jo로 특정 조문만 가능.",
     schema: GetLawTextSchema,
     handler: getLawText
+  },
+  {
+    name: "get_article_detail",
+    description: "[법령조회] 조항호목 단위 정밀 조회. 제38조 제2항 제3호 같은 세부 단위 지정 가능. mst/lawId + jo 필수, hang/ho/mok 선택.",
+    schema: GetArticleDetailSchema,
+    handler: getArticleDetail
   },
   {
     name: "search_all",
@@ -108,6 +121,12 @@ export const allTools: McpTool[] = [
     schema: GetAdminRuleSchema,
     handler: getAdminRule
   },
+  {
+    name: "compare_admin_rule_old_new",
+    description: "[행정규칙] 행정규칙 신구법 비교. query로 검색, id로 본문 대조표 조회.",
+    schema: CompareAdminRuleOldNewSchema,
+    handler: compareAdminRuleOldNew
+  },
 
   // === 자치법규 ===
   {
@@ -121,6 +140,32 @@ export const allTools: McpTool[] = [
     description: "[자치법규] 조례/규칙 전문 조회.",
     schema: GetOrdinanceSchema,
     handler: getOrdinance
+  },
+
+  // === 법령-자치법규 연계 ===
+  {
+    name: "get_linked_ordinances",
+    description: "[연계] 법령 기준 자치법규 연계 목록. 특정 법령과 관련된 전국 조례/규칙 조회.",
+    schema: LinkedOrdinancesSchema,
+    handler: getLinkedOrdinances
+  },
+  {
+    name: "get_linked_ordinance_articles",
+    description: "[연계] 법령-자치법규 조문 연계. 법령 조문과 자치법규 조문 간 대응 관계 조회.",
+    schema: LinkedOrdinanceArticlesSchema,
+    handler: getLinkedOrdinanceArticles
+  },
+  {
+    name: "get_delegated_laws",
+    description: "[연계] 위임법령 목록. 소관부처별 위임법령(시행령/시행규칙 미제정) 조회.",
+    schema: DelegatedLawsSchema,
+    handler: getDelegatedLaws
+  },
+  {
+    name: "get_linked_laws_from_ordinance",
+    description: "[연계] 자치법규 기준 상위법령 조회. 조례/규칙의 근거 법령 확인.",
+    schema: LinkedLawsFromOrdinanceSchema,
+    handler: getLinkedLawsFromOrdinance
   },
 
   // === 비교/분석 ===
@@ -342,6 +387,96 @@ export const allTools: McpTool[] = [
     schema: getNlrcDecisionTextSchema,
     handler: getNlrcDecisionText
   },
+  {
+    name: "search_acr_decisions",
+    description: "[권익위] 국민권익위원회 결정문 검색.",
+    schema: searchAcrDecisionsSchema,
+    handler: searchAcrDecisions
+  },
+  {
+    name: "get_acr_decision_text",
+    description: "[권익위] 국민권익위 결정문 전문.",
+    schema: getAcrDecisionTextSchema,
+    handler: getAcrDecisionText
+  },
+
+  // === 학칙/공단/공공기관 규정 ===
+  {
+    name: "search_school_rules",
+    description: "[학칙] 학칙(대학교·고등학교 등) 검색.",
+    schema: searchSchoolRulesSchema,
+    handler: searchSchoolRules
+  },
+  {
+    name: "get_school_rule_text",
+    description: "[학칙] 학칙 본문 조회.",
+    schema: getSchoolRuleTextSchema,
+    handler: getSchoolRuleText
+  },
+  {
+    name: "search_public_corp_rules",
+    description: "[공사공단] 지방공사공단 규정 검색.",
+    schema: searchPublicCorpRulesSchema,
+    handler: searchPublicCorpRules
+  },
+  {
+    name: "get_public_corp_rule_text",
+    description: "[공사공단] 지방공사공단 규정 본문 조회.",
+    schema: getPublicCorpRuleTextSchema,
+    handler: getPublicCorpRuleText
+  },
+  {
+    name: "search_public_institution_rules",
+    description: "[공공기관] 공공기관 규정 검색.",
+    schema: searchPublicInstitutionRulesSchema,
+    handler: searchPublicInstitutionRules
+  },
+  {
+    name: "get_public_institution_rule_text",
+    description: "[공공기관] 공공기관 규정 본문 조회.",
+    schema: getPublicInstitutionRuleTextSchema,
+    handler: getPublicInstitutionRuleText
+  },
+
+  // === 특별행정심판 ===
+  {
+    name: "search_appeal_review_decisions",
+    description: "[소청심사] 소청심사위원회 재결례 검색. 공무원 징계(파면·해임·감봉 등) 불복.",
+    schema: searchAppealReviewDecisionsSchema,
+    handler: searchAppealReviewDecisions
+  },
+  {
+    name: "get_appeal_review_decision_text",
+    description: "[소청심사] 소청심사위원회 재결례 전문.",
+    schema: getAppealReviewDecisionTextSchema,
+    handler: getAppealReviewDecisionText
+  },
+  {
+    name: "search_acr_special_appeals",
+    description: "[권익위심판] 국민권익위 특별행정심판 재결례 검색.",
+    schema: searchAcrSpecialAppealsSchema,
+    handler: searchAcrSpecialAppeals
+  },
+  {
+    name: "get_acr_special_appeal_text",
+    description: "[권익위심판] 국민권익위 특별행정심판 재결례 전문.",
+    schema: getAcrSpecialAppealTextSchema,
+    handler: getAcrSpecialAppealText
+  },
+
+  // === 조약 ===
+  {
+    name: "search_treaties",
+    description: "[조약] 조약(양자/다자) 검색. 국가코드·체결일·발효일 필터 가능.",
+    schema: searchTreatiesSchema,
+    handler: searchTreaties
+  },
+  {
+    name: "get_treaty_text",
+    description: "[조약] 조약 본문 조회. 한글/영문 선택 가능.",
+    schema: getTreatyTextSchema,
+    handler: getTreatyText
+  },
 
   // === 영문법령/용어 ===
   {
@@ -423,6 +558,12 @@ export const allTools: McpTool[] = [
     handler: (_apiClient, input) => parseJoCode(input)
   },
   {
+    name: "get_law_abbreviations",
+    description: "[유틸] 법령 약칭 전체 목록 조회. stdDt/endDt로 기간 필터 가능.",
+    schema: GetLawAbbreviationsSchema,
+    handler: getLawAbbreviations
+  },
+  {
     name: "get_batch_articles",
     description: "[배치] 여러 조문 일괄 조회. mst+articles 또는 laws 배열.",
     schema: GetBatchArticlesSchema,
@@ -477,6 +618,20 @@ export const allTools: McpTool[] = [
     description: "[⛓체인] 절차/비용. 법령→3단비교→별표/서식 자동 연쇄. 신청/절차 질문 시.",
     schema: chainProcedureDetailSchema,
     handler: chainProcedureDetail
+  },
+  {
+    name: "chain_document_review",
+    description: "[⛓체인] 문서 종합검토. 리스크분석→법령검색→판례검색 자동 연쇄. 계약서/약관 검토 시 1회에 리스크+근거법령+관련판례 제공.",
+    schema: chainDocumentReviewSchema,
+    handler: chainDocumentReview
+  },
+
+  // === 문서 분석 ===
+  {
+    name: "analyze_document",
+    description: "[문서분석] 계약서/약관/협정서 텍스트의 조항별 법적 리스크 분석. 문서 유형 자동 분류, 위험 조항 식별, 관련 법령 검색 힌트 제공.",
+    schema: AnalyzeDocumentSchema,
+    handler: analyzeDocument
   },
 ]
 
