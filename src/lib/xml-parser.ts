@@ -226,11 +226,11 @@ export interface TreatyItem {
 }
 
 export function parseTreatyXML(xml: string) {
-  return parseSearchXML<TreatyItem>(xml, "TrtySearch", "trty", (content) => ({
+  return parseSearchXML<TreatyItem>(xml, "TrtySearch", "Trty", (content) => ({
     조약일련번호: extractTag(content, "조약일련번호"),
     조약명: extractTag(content, "조약명"),
     조약번호: extractTag(content, "조약번호"),
-    체결일자: extractTag(content, "체결일자"),
+    체결일자: extractTag(content, "서명일자"),
     발효일자: extractTag(content, "발효일자"),
     조약구분: extractTag(content, "조약구분명"),
     조약상세링크: extractTag(content, "조약상세링크")

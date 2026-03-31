@@ -85,8 +85,7 @@ async function handleLinkage(apiClient: LawApiClient, input: LinkageInput, cfg: 
     const xml = await apiClient.fetchApi({
       endpoint: "lawSearch.do",
       target: cfg.target,
-      type: "XML",
-      extraParams: { query: String(input.query), display: String(input.display), page: String(input.page) },
+      extraParams: { query: String(input.query), display: String(input.display || 20), page: String(input.page || 1) },
       apiKey: input.apiKey,
     })
 
@@ -115,24 +114,24 @@ async function handleLinkage(apiClient: LawApiClient, input: LinkageInput, cfg: 
 
 export const getLinkedOrdinances = (apiClient: LawApiClient, input: LinkageInput) =>
   handleLinkage(apiClient, input, {
-    target: "lnkLs", primaryRoot: "LnkLsSearch", fallbackRoot: "lnkLs",
+    target: "lnkLs", primaryRoot: "LawSearch", fallbackRoot: "LnkLsSearch",
     title: "법령-자치법규 연계", emptyMsg: "연계 자치법규가 없습니다."
   })
 
 export const getLinkedOrdinanceArticles = (apiClient: LawApiClient, input: LinkageInput) =>
   handleLinkage(apiClient, input, {
-    target: "lnkLsOrdJo", primaryRoot: "LnkLsOrdJoSearch", fallbackRoot: "lnkLsOrdJo",
+    target: "lnkLsOrdJo", primaryRoot: "LawSearch", fallbackRoot: "LnkLsOrdJoSearch",
     title: "법령-자치법규 조문 연계", emptyMsg: "조문 연계 결과가 없습니다."
   })
 
 export const getDelegatedLaws = (apiClient: LawApiClient, input: LinkageInput) =>
   handleLinkage(apiClient, input, {
-    target: "lnkDep", primaryRoot: "LnkDepSearch", fallbackRoot: "lnkDep",
+    target: "lnkDep", primaryRoot: "LawSearch", fallbackRoot: "LnkDepSearch",
     title: "위임법령 목록", emptyMsg: "위임법령이 없습니다."
   })
 
 export const getLinkedLawsFromOrdinance = (apiClient: LawApiClient, input: LinkageInput) =>
   handleLinkage(apiClient, input, {
-    target: "lnkOrd", primaryRoot: "LnkOrdSearch", fallbackRoot: "lnkOrd",
+    target: "lnkOrd", primaryRoot: "LawSearch", fallbackRoot: "LnkOrdSearch",
     title: "자치법규 → 상위법령", emptyMsg: "상위법령이 없습니다."
   })

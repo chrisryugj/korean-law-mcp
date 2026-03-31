@@ -33,20 +33,20 @@ interface RuleItem {
 type TargetType = "school" | "public" | "pi";
 
 const targetConfig: Record<TargetType, { rootTag: string; itemTag: string; label: string; serviceKey: string }> = {
-  school: { rootTag: "School", itemTag: "school", label: "학칙", serviceKey: "SchoolService" },
-  public: { rootTag: "Public", itemTag: "public", label: "지방공사공단 규정", serviceKey: "PublicService" },
-  pi: { rootTag: "Pi", itemTag: "pi", label: "공공기관 규정", serviceKey: "PiService" },
+  school: { rootTag: "AdmRulSearch", itemTag: "admrul", label: "학칙", serviceKey: "AdmRulService" },
+  public: { rootTag: "AdmRulSearch", itemTag: "admrul", label: "지방공사공단 규정", serviceKey: "AdmRulService" },
+  pi: { rootTag: "AdmRulSearch", itemTag: "admrul", label: "공공기관 규정", serviceKey: "AdmRulService" },
 };
 
 function parseRuleXML(xml: string, target: TargetType) {
   const cfg = targetConfig[target];
   return parseSearchXML<RuleItem>(xml, cfg.rootTag, cfg.itemTag, (content) => ({
-    일련번호: extractTag(content, "학칙일련번호") || extractTag(content, "규정일련번호") || extractTag(content, "일련번호"),
-    규정명: extractTag(content, "학칙명") || extractTag(content, "규정명") || extractTag(content, "제목"),
-    기관명: extractTag(content, "학교명") || extractTag(content, "기관명"),
-    공포일자: extractTag(content, "공포일자") || extractTag(content, "제정일자"),
+    일련번호: extractTag(content, "행정규칙일련번호"),
+    규정명: extractTag(content, "행정규칙명"),
+    기관명: extractTag(content, "소관부처명") || extractTag(content, "학교명") || extractTag(content, "기관명"),
+    공포일자: extractTag(content, "공포일자") || extractTag(content, "발령일자"),
     시행일자: extractTag(content, "시행일자"),
-    상세링크: extractTag(content, "학칙상세링크") || extractTag(content, "규정상세링크") || extractTag(content, "상세링크"),
+    상세링크: extractTag(content, "행정규칙상세링크"),
   }));
 }
 

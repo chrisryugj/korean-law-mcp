@@ -374,11 +374,12 @@ export class LawApiClient {
     extraParams?: Record<string, string>
     apiKey?: string
   }): Promise<string> {
-    const apiParams = new URLSearchParams({
+    const init: Record<string, string> = {
       OC: this.getApiKey(params.apiKey),
       target: params.target,
-      type: params.type || "XML",
-    })
+    }
+    if (params.type) init.type = params.type
+    const apiParams = new URLSearchParams(init)
 
     if (params.extraParams) {
       for (const [key, value] of Object.entries(params.extraParams)) {

@@ -111,11 +111,16 @@ export async function getTreatyText(
       throw new Error("Failed to parse JSON response from API")
     }
 
-    if (!data.TrtyService) {
+    // API는 BothTrtyService 또는 TrtyService로 응답
+    const trty = data.BothTrtyService || data.TrtyService
+    if (!trty) {
       throw new Error("Treaty not found or invalid response format")
     }
 
-    const trty = data.TrtyService
+    // 조약내용이 중첩 객체일 수 있음
+    const bodyObj = trty.조약내용 || {}
+    const bodyText = typeof bodyObj === "string" ? bodyObj : bodyObj.조약내용 || ""
+
     const basic = {
       조약명: trty.조약명,
       조약번호: trty.조약번호,
@@ -134,8 +139,8 @@ export async function getTreatyText(
     output += `  구분: ${basic.조약구분 || "N/A"}\n`
     output += `  체결상대국: ${basic.체결상대국 || "N/A"}\n\n`
 
-    if (trty.조약본문) {
-      output += `조약 본문:\n${trty.조약본문}\n`
+    if (bodyText) {
+      output += `조약 본문:\n${bodyText}\n`
     }
 
     return {
