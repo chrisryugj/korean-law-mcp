@@ -160,6 +160,46 @@ korean-law help search_law               # 도구 도움말
 
 ---
 
+## 환경변수
+
+| 변수 | 필수 | 기본값 | 설명 |
+|------|------|--------|------|
+| `LAW_OC` | 예 | — | 법제처 API 키 ([무료 발급](https://open.law.go.kr/LSO/openApi/guideResult.do)) |
+| `LAW_RESPONSE_TYPE` | 아니오 | `XML` | API 응답 형식 (`XML` 또는 `JSON`). 법제처 XML 엔드포인트 장애 시 `JSON`으로 전환 |
+| `PORT` | 아니오 | `3000` | HTTP 서버 포트 |
+| `CORS_ORIGIN` | 아니오 | `*` | CORS 허용 오리진 |
+| `RATE_LIMIT_RPM` | 아니오 | `60` | IP당 분당 요청 수 |
+
+## 트러블슈팅
+
+### XML 엔드포인트 장애 (HTML 에러 페이지 반환)
+
+법제처 API의 XML 엔드포인트(`type=XML`)가 간헐적으로 HTML 에러 페이지를 반환하는 경우가 있습니다. 이 경우 JSON 엔드포인트로 우회할 수 있습니다:
+
+```bash
+# MCP 서버
+export LAW_RESPONSE_TYPE=JSON
+korean-law-mcp
+```
+
+```json
+{
+  "mcpServers": {
+    "korean-law": {
+      "command": "korean-law-mcp",
+      "env": {
+        "LAW_OC": "your-api-key",
+        "LAW_RESPONSE_TYPE": "JSON"
+      }
+    }
+  }
+}
+```
+
+> **참고**: JSON 모드에서는 일부 도구의 XML 파서가 응답을 처리하지 못할 수 있습니다. 법제처 XML 엔드포인트가 정상화되면 이 설정을 제거하세요.
+
+---
+
 ## 문서
 
 - [docs/API.md](docs/API.md) — 87개 도구 레퍼런스

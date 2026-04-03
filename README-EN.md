@@ -309,6 +309,7 @@ User: "산업안전보건법 별표1 내용"
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `LAW_OC` | Yes | — | 법제처 API key ([get one free](https://open.law.go.kr/LSO/openApi/guideResult.do)) |
+| `LAW_RESPONSE_TYPE` | No | `XML` | API response format (`XML` or `JSON`). Switch to `JSON` when 법제처 XML endpoints are down |
 | `PORT` | No | 3000 | HTTP server port |
 | `CORS_ORIGIN` | No | `*` | CORS allowed origin |
 | `RATE_LIMIT_RPM` | No | 60 | Requests per minute per IP |

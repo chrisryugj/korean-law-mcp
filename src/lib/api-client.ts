@@ -8,11 +8,22 @@ import { sessionStore, getSessionApiKey } from "./session-state.js"
 
 const LAW_API_BASE = "https://www.law.go.kr/DRF"
 
+/** 기본 응답 타입 (환경변수로 전환 가능) */
+const DEFAULT_RESPONSE_TYPE = "XML"
+
 export class LawApiClient {
   private defaultApiKey: string
 
   constructor(config: { apiKey: string }) {
     this.defaultApiKey = config.apiKey
+  }
+
+  /**
+   * API 응답 타입 결정
+   * 법제처 XML 엔드포인트 장애 시 LAW_RESPONSE_TYPE=JSON 으로 전환 가능
+   */
+  private getResponseType(): string {
+    return process.env.LAW_RESPONSE_TYPE || DEFAULT_RESPONSE_TYPE
   }
 
   /**
@@ -45,7 +56,11 @@ export class LawApiClient {
   /** 응답 본문이 HTML 에러 페이지인지 확인 */
   private checkHtmlError(text: string, context: string): void {
     if (text.includes("<!DOCTYPE html") || text.includes("<html")) {
-      throw new Error(`${context} - API가 HTML 에러 페이지를 반환했습니다. 파라미터를 확인해주세요.`)
+      const responseType = this.getResponseType()
+      const hint = responseType === "XML"
+        ? "\n\n💡 법제처 XML 엔드포인트 장애일 수 있습니다. 환경변수 LAW_RESPONSE_TYPE=JSON 을 설정하면 JSON 엔드포인트로 우회할 수 있습니다."
+        : ""
+      throw new Error(`${context} - API가 HTML 에러 페이지를 반환했습니다. 파라미터를 확인해주세요.${hint}`)
     }
   }
 
@@ -59,7 +74,7 @@ export class LawApiClient {
 
     const params = new URLSearchParams({
       OC: this.getApiKey(apiKey),
-      type: "XML",
+      type: this.getResponseType(),
       target: "law",
       query: finalQuery,
     })
@@ -137,7 +152,7 @@ export class LawApiClient {
     const apiParams = new URLSearchParams({
       target: "oldAndNew",
       OC: this.getApiKey(params.apiKey),
-      type: "XML",
+      type: this.getResponseType(),
     })
 
     if (params.mst) apiParams.append("MST", String(params.mst))
@@ -188,7 +203,7 @@ export class LawApiClient {
   }): Promise<string> {
     const apiParams = new URLSearchParams({
       OC: this.getApiKey(params.apiKey),
-      type: "XML",
+      type: this.getResponseType(),
       target: "admrul",
       query: params.query,
     })
@@ -209,7 +224,7 @@ export class LawApiClient {
     const apiParams = new URLSearchParams({
       target: "admrul",
       OC: this.getApiKey(apiKey),
-      type: "XML",
+      type: this.getResponseType(),
       ID: id,
     })
 
@@ -297,7 +312,7 @@ export class LawApiClient {
     const apiParams = new URLSearchParams({
       target: "ordin",
       OC: this.getApiKey(params.apiKey),
-      type: "XML",
+      type: this.getResponseType(),
       query: params.query,
       display: (params.display || 20).toString(),
     })
@@ -346,7 +361,7 @@ export class LawApiClient {
     const apiParams = new URLSearchParams({
       target: "lsJoHstInf",
       OC: this.getApiKey(params.apiKey),
-      type: "XML",
+      type: this.getResponseType(),
     })
 
     if (params.lawId) apiParams.append("ID", String(params.lawId))
@@ -378,7 +393,10 @@ export class LawApiClient {
       OC: this.getApiKey(params.apiKey),
       target: params.target,
     }
-    if (params.type) init.type = params.type
+    if (params.type) {
+      // XML 요청 시 환경변수 오버라이드 적용
+      init.type = params.type === "XML" ? this.getResponseType() : params.type
+    }
     const apiParams = new URLSearchParams(init)
 
     if (params.extraParams) {
@@ -410,7 +428,7 @@ export class LawApiClient {
     const apiParams = new URLSearchParams({
       target: "lsHstInf",
       OC: this.getApiKey(params.apiKey),
-      type: "XML",
+      type: this.getResponseType(),
       regDt: params.regDt,
     })
 
