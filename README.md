@@ -101,6 +101,7 @@ export LAW_OC=your-api-key
 korean-law search_law --query "관세법"
 korean-law get_law_text --mst 160001 --jo "제38조"
 korean-law search_precedents --query "부당해고"
+korean-law "AI 기본법"                    # 인공지능 기본법 조회
 korean-law list                          # 87개 전체 도구 목록
 korean-law list --category 판례          # 카테고리별 필터
 korean-law help search_law               # 도구 도움말
@@ -122,6 +123,9 @@ korean-law help search_law               # 도구 도움말
 
 "산업안전보건법 별표1 내용 알려줘"
 → get_annexes(lawName="산업안전보건법 별표1") → HWPX 파일 다운로드 → 표/텍스트 Markdown 변환
+
+"AI 기본법 주요 내용 알려줘"
+→ search_law("인공지능 기본법") → MST 획득 → get_law_text(mst) → 전문 조회
 ```
 
 ---
@@ -151,6 +155,7 @@ korean-law help search_law               # 도구 도움말
 ## 주요 특징
 
 - **87개 법률 도구** — 법령, 판례, 행정규칙, 자치법규, 헌재결정, 조세심판, 관세해석, 조약, 학칙/공단/공공기관 규정, 법령용어
+- **법제처 전체 법령 지원** — [law.go.kr](https://www.law.go.kr)에 등재된 모든 법령을 검색·조회 가능 (AI 기본법, 개인정보보호법 등 개별 법률에 대한 별도 지원 없이 전체 커버)
 - **MCP + CLI** — Claude Desktop에서도, 터미널에서도 같은 87개 도구 사용
 - **법률 도메인 특화** — 약칭 자동 인식(`화관법` → `화학물질관리법`), 조문번호 변환(`제38조` ↔ `003800`), 3단 위임 구조 시각화
 - **별표/별지서식 본문 추출** — HWPX·HWP 파일 자동 다운로드 → 표/텍스트를 Markdown 변환
