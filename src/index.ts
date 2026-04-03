@@ -37,7 +37,14 @@ async function main() {
   if (mode === "http" || mode === "sse") {
     await startHTTPServer(createServer, port)
   } else {
-    // STDIO 모드 (기본)
+    // STDIO 모드: stdout 오염 방지 — console 출력을 stderr로 리다이렉트하여 JSON-RPC 프로토콜 보호
+    const stderrWrite = (...args: unknown[]) =>
+      process.stderr.write(args.map(String).join(" ") + "\n")
+    console.log = stderrWrite
+    console.warn = stderrWrite
+    console.info = stderrWrite
+    console.debug = stderrWrite
+
     const server = createServer()
     const transport = new StdioServerTransport()
     await server.connect(transport)
