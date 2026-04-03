@@ -83,6 +83,8 @@ Get your free API key at [법제처 Open API](https://open.law.go.kr/LSO/openApi
 
 ### Option 2: Remote (No Install)
 
+> **Claude Desktop version requirement**: Remote MCP (Streamable HTTP) requires **Claude Desktop 0.9.0+**. Older versions do not recognize the `url` field and may reset the config file. [Download the latest version](https://claude.ai/download).
+
 ```json
 {
   "mcpServers": {
@@ -92,6 +94,44 @@ Get your free API key at [법제처 Open API](https://open.law.go.kr/LSO/openApi
   }
 }
 ```
+
+The remote server has a default API key configured, so **no additional API key is needed**. However, a shared rate limit (60 req/min) applies. For heavier usage, get a free personal key from [법제처 Open API](https://open.law.go.kr/LSO/openApi/guideResult.do) and use the local install method.
+
+<details>
+<summary>Troubleshooting remote connection issues</summary>
+
+#### Config file keeps resetting
+
+1. **Check Claude Desktop version**: Versions below `0.9.0` do not support remote MCP. Update to the latest version.
+2. **Validate JSON syntax**: Missing commas or duplicate keys cause Claude Desktop to reset the file. Use [jsonlint.com](https://jsonlint.com) to validate.
+3. **Merge with existing config**: If you already have other MCP servers configured, **add** `korean-law` inside the existing `mcpServers` object (don't replace the entire file).
+
+#### Connection works but tool calls fail
+
+- Check server status: Open `https://korean-law-mcp.fly.dev/health` in a browser — it should return `{"status":"ok"}`.
+- The Fly.io server auto-suspends when idle. The first request may take a few seconds while it wakes up.
+
+#### Fallback: Local execution via npx
+
+If remote connection keeps failing, run locally without installation:
+
+```json
+{
+  "mcpServers": {
+    "korean-law": {
+      "command": "npx",
+      "args": ["-y", "korean-law-mcp"],
+      "env": {
+        "LAW_OC": "your-api-key"
+      }
+    }
+  }
+}
+```
+
+This works on all Claude Desktop versions. Get a free API key from [법제처 Open API](https://open.law.go.kr/LSO/openApi/guideResult.do).
+
+</details>
 
 ### Option 3: CLI
 

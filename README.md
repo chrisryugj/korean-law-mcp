@@ -82,6 +82,8 @@ API 키는 [법제처 Open API](https://open.law.go.kr/LSO/openApi/guideResult.d
 
 ### 원격 MCP (설치 없이 바로)
 
+> **Claude Desktop 버전 요구사항**: 원격 MCP(Streamable HTTP)는 **Claude Desktop 0.9.0 이상**에서 지원됩니다. 이전 버전에서는 `url` 필드를 인식하지 못해 설정이 초기화될 수 있습니다. [Claude Desktop 최신 버전](https://claude.ai/download)을 설치해 주세요.
+
 ```json
 {
   "mcpServers": {
@@ -91,6 +93,55 @@ API 키는 [법제처 Open API](https://open.law.go.kr/LSO/openApi/guideResult.d
   }
 }
 ```
+
+원격 서버에는 기본 API 키가 설정되어 있어 **별도 API 키 없이 바로 사용 가능**합니다. 다만 공용 키이므로 사용량 제한(분당 60회)이 있습니다. 안정적인 사용을 위해서는 [법제처 Open API](https://open.law.go.kr/LSO/openApi/guideResult.do)에서 개인 키를 발급받아 로컬 설치 방식을 사용하는 것을 권장합니다.
+
+<details>
+<summary>원격 연결 문제 해결 (트러블슈팅)</summary>
+
+#### 설정 파일이 초기화되는 경우
+
+1. **Claude Desktop 버전 확인**: `0.9.0` 미만 버전은 원격 MCP를 지원하지 않습니다. 최신 버전으로 업데이트해 주세요.
+2. **JSON 문법 확인**: 설정 파일에 쉼표(`,`)가 빠지거나 중복된 키가 있으면 Claude Desktop이 파일을 리셋합니다. JSON 유효성 검사기([jsonlint.com](https://jsonlint.com))로 검증해 보세요.
+3. **기존 설정과 병합**: 이미 다른 MCP 서버가 설정되어 있다면, `mcpServers` 객체 안에 `korean-law`를 **추가**해야 합니다 (전체 교체 X).
+
+```json
+{
+  "mcpServers": {
+    "existing-server": { "command": "..." },
+    "korean-law": {
+      "url": "https://korean-law-mcp.fly.dev/mcp"
+    }
+  }
+}
+```
+
+#### 연결은 되지만 도구 호출이 실패하는 경우
+
+- 서버 상태 확인: 브라우저에서 `https://korean-law-mcp.fly.dev/health`를 열어 `{"status":"ok"}`가 반환되는지 확인하세요.
+- Fly.io 서버가 자동 절전 상태(`suspend`)일 수 있습니다. 첫 요청 시 수 초간 대기가 발생할 수 있으며, 이후 정상 응답합니다.
+
+#### 그래도 안 되면: npx로 로컬 실행
+
+원격 연결이 계속 실패하면, 설치 없이 npx로 로컬 실행할 수 있습니다:
+
+```json
+{
+  "mcpServers": {
+    "korean-law": {
+      "command": "npx",
+      "args": ["-y", "korean-law-mcp"],
+      "env": {
+        "LAW_OC": "your-api-key"
+      }
+    }
+  }
+}
+```
+
+이 방식은 모든 Claude Desktop 버전에서 작동합니다. API 키는 [법제처 Open API](https://open.law.go.kr/LSO/openApi/guideResult.do)에서 무료 발급받을 수 있습니다.
+
+</details>
 
 ### CLI
 
