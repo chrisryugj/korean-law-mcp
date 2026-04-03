@@ -13,7 +13,7 @@ import { startHTTPServer } from "./server/http-server.js"
 import { VERSION } from "./version.js"
 
 // API 클라이언트 초기화
-const LAW_OC = process.env.LAW_OC || ""
+const LAW_OC = process.env.LAW_OC || process.env.KOREAN_LAW_API_KEY || ""
 const apiClient = new LawApiClient({ apiKey: LAW_OC })
 
 // MCP 서버 팩토리 (HTTP 모드: 세션마다 새 인스턴스 필요)

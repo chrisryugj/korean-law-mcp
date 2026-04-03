@@ -70,7 +70,7 @@ MCP 클라이언트 설정에 추가:
 }
 ```
 
-API 키는 [법제처 Open API](https://open.law.go.kr/LSO/openApi/guideResult.do)에서 무료 발급.
+API 키는 [법제처 Open API](https://open.law.go.kr/LSO/openApi/guideResult.do)에서 무료 발급. `LAW_OC` 또는 `KOREAN_LAW_API_KEY` 환경변수 모두 지원.
 
 | 클라이언트 | 설정 파일 |
 |-----------|----------|
@@ -96,7 +96,7 @@ API 키는 [법제처 Open API](https://open.law.go.kr/LSO/openApi/guideResult.d
 
 ```bash
 npm install -g korean-law-mcp
-export LAW_OC=your-api-key
+export LAW_OC=your-api-key          # 또는 KOREAN_LAW_API_KEY=your-api-key
 
 korean-law search_law --query "관세법"
 korean-law get_law_text --mst 160001 --jo "제38조"
