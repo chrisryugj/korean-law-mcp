@@ -137,6 +137,10 @@ https://korean-law-mcp.fly.dev/mcp?profile=lite&oc=your-api-key
 npm install -g korean-law-mcp
 export LAW_OC=your-api-key
 
+echo 'export PATH=$PATH:~/.npm-global/bin' >> ~/.bashrc
+source ~/.bashrc
+which korean-law
+
 korean-law search_law --query "관세법"
 korean-law get_law_text --mst 160001 --jo "제38조"
 korean-law search_precedents --query "부당해고"
