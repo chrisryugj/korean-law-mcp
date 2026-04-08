@@ -7,8 +7,8 @@
 - 대형 조례(20개 초과) 목차 반환 시 `jo` 사용법 안내 메시지 추가
 
 ### Fixed
-- get_ordinance: JO 코드 생성 시 `buildJO`(법률용 AAAABB) → `buildOrdinanceJO`(자치법규용 AABBCC) 수정
-- get_ordinance: 조문 필터링에서 "제20조" 검색 시 "제20조의2" 등 의X 조문이 잘못 매칭되는 문제 수정
+- get_ordinance: 조문 필터링을 조제목 텍스트 매칭에서 조문번호(JO 코드) 기반으로 변경 — API 응답의 조제목에 조번호가 없는 구조 대응
+- get_ordinance: "제20조" 검색 시 "제20조의2" 등 의X 조문이 잘못 매칭되는 문제 수정
 
 ## [2.2.0] - 2026-04-01
 
