@@ -5,11 +5,13 @@
 import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 import { cleanHtml } from "../lib/article-parser.js"
+import { buildOrdinanceJO } from "../lib/law-parser.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError } from "../lib/errors.js"
 
 export const GetOrdinanceSchema = z.object({
   ordinSeq: z.string().describe("자치법규 일련번호"),
+  jo: z.string().optional().describe("조문 번호 (예: '제20조'). 지정 시 해당 조문 본문만 반환"),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달")
 })
 
@@ -20,7 +22,17 @@ export async function getOrdinance(
   input: GetOrdinanceInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const jsonText = await apiClient.getOrdinance(input.ordinSeq, input.apiKey)
+    // jo가 한글이면 JO 코드로 변환하여 API에 전달 (서버 필터링 시도)
+    let joCode: string | undefined
+    if (input.jo) {
+      try {
+        joCode = /제\d+조/.test(input.jo) ? buildOrdinanceJO(input.jo) : input.jo
+      } catch {
+        // JO 코드 변환 실패 시 클라이언트 필터링만 사용
+      }
+    }
+
+    const jsonText = await apiClient.getOrdinance(input.ordinSeq, joCode, input.apiKey)
     const json = JSON.parse(jsonText)
 
     const lawService = json?.LawService
@@ -53,15 +65,41 @@ export async function getOrdinance(
     const articles = Array.isArray(rawArticles) ? rawArticles : rawArticles ? [rawArticles] : []
 
     if (articles.length > 0) {
-      // 대형 조례(20개 초과): TOC 반환 (law-text.ts 패턴)
-      if (articles.length > 20) {
+      // jo 파라미터가 있으면 해당 조문만 필터링
+      if (input.jo) {
+        // "제20조" → "제20조(목적)" 매칭, "제20조의2" 는 제외
+        const joNorm = input.jo.replace(/\s+/g, "")
+        const matched = articles.filter(a => {
+          const title = (a.조제목 || "").replace(/\s+/g, "")
+          if (!title.startsWith(joNorm)) return false
+          // "제20조" 뒤에 "의" 가 오면 다른 조문 (제20조의2 등)
+          const rest = title.slice(joNorm.length)
+          return rest === "" || rest.startsWith("(")
+        })
+
+        if (matched.length === 0) {
+          resultText += `'${input.jo}' 조문을 찾을 수 없습니다.\n\n`
+          resultText += `목차 (총 ${articles.length}개 조문)\n\n`
+          const tocItems: string[] = []
+          for (const article of articles) {
+            if (article.조제목) tocItems.push(article.조제목)
+          }
+          resultText += tocItems.join("\n")
+        } else {
+          for (const article of matched) {
+            if (article.조제목) resultText += `${article.조제목}\n`
+            if (article.조내용) resultText += `${cleanHtml(String(article.조내용))}\n\n`
+          }
+        }
+      } else if (articles.length > 20) {
+        // 대형 조례(20개 초과): TOC 반환 (law-text.ts 패턴)
         const tocItems: string[] = []
         for (const article of articles) {
           if (article.조제목) tocItems.push(article.조제목)
         }
         resultText += `목차 (총 ${articles.length}개 조문)\n\n`
         resultText += tocItems.join("\n")
-        resultText += `\n\n전체 내용이 길어 목차만 표시합니다.`
+        resultText += `\n\n특정 조문 조회: get_ordinance(ordinSeq="${input.ordinSeq}", jo="제XX조")`
       } else {
         for (const article of articles) {
           if (article.조제목) {

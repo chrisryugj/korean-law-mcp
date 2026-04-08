@@ -302,13 +302,14 @@ export class LawApiClient {
   /**
    * 자치법규 조회
    */
-  async getOrdinance(ordinSeq: string, apiKey?: string): Promise<string> {
+  async getOrdinance(ordinSeq: string, jo?: string, apiKey?: string): Promise<string> {
     const apiParams = new URLSearchParams({
       target: "ordin",
       OC: this.getApiKey(apiKey),
       type: "JSON",
       MST: ordinSeq,
     })
+    if (jo) apiParams.append("JO", jo)
 
     const url = `${LAW_API_BASE}/lawService.do?${apiParams.toString()}`
     const response = await fetchWithRetry(url)

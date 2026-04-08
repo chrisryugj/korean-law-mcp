@@ -140,7 +140,7 @@ export const allTools: McpTool[] = [
   },
   {
     name: "get_ordinance",
-    description: "[자치법규] 조례/규칙 전문 조회.",
+    description: "[자치법규] 조례/규칙 전문 조회. jo 파라미터로 특정 조문 본문 조회 가능.",
     schema: GetOrdinanceSchema,
     handler: getOrdinance
   },

@@ -1,6 +1,6 @@
 {
   "name": "korean-law-mcp",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "법제처 39개 API → 14개 MCP 도구. 법령·판례·조례·조약을 AI로 검색·조회·분석",
   "type": "module",
   "main": "build/index.js",

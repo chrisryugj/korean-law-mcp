@@ -1,6 +1,6 @@
 # Korean Law MCP - API Reference
 
-> **v3.0.0** | 14개 노출 도구 (내부 91개, 77개는 execute_tool로 접근)
+> **v3.0.1** | 14개 노출 도구 (내부 91개, 77개는 execute_tool로 접근)
 
 도구 구조는 [README.md](../README.md#도구-구조-14개) 참조.
 상세 파라미터는 각 도구의 Zod 스키마(`src/tools/*.ts`) 참조.
@@ -87,7 +87,7 @@
 |------|------|
 | `get_law_text` | 법령 조문 전문 |
 | `get_admin_rule` | 행정규칙 전문 |
-| `get_ordinance` | 자치법규 전문 |
+| `get_ordinance` | 자치법규 전문 (`jo`로 특정 조문 조회 가능) |
 | `get_precedent_text` | 판례 전문 |
 | `get_interpretation_text` | 해석례 전문 |
 | `get_batch_articles` | 여러 조문 일괄 조회 (`laws` 배열로 복수 법령 지원) |
