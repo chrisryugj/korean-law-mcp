@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Korean Law MCP Server v3.1.3 - 법제처 41개 API → 14개 통합 도구 (내부 91개) + 자연어 CLI
+Korean Law MCP Server v3.1.4 - 법제처 41개 API → 14개 통합 도구 (내부 91개) + 자연어 CLI
 
 ## Structure
 

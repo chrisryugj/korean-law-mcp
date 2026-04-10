@@ -14,9 +14,17 @@
 
 ---
 
-## v3.1.2 — kordoc 2.2.1 업데이트
+## v3.1.3 — 검색 힌트 + 세션 안정성
 
-- **kordoc 2.2.0 → 2.2.1** — GFM 테이블 특수문자 이스케이프 및 pipe 충돌 방지
+- **검색 결과 없음 힌트 통합** — 18개 도구에 AND 조건 안내 추가. 키워드가 2개 이상일 때 "키워드를 줄여 재시도" 제안 표시. AI가 자동으로 재시도 전략을 세울 수 있도록 개선
+- **세션 정리 주기 단축** — idle 세션 타임아웃 30분→10분, 체크 주기 5분→2분. 세션 100개 한도 도달 방지
+
+<details>
+<summary>v3.1.0~v3.1.2 변경 이력</summary>
+
+**v3.1.2** — kordoc 2.2.1 업데이트. GFM 테이블 특수문자 이스케이프 및 pipe 충돌 방지.
+
+**v3.1.1** — kordoc 2.1→2.2 업데이트.
 
 ## v3.1.0 — Production Hardening
 
@@ -31,6 +39,8 @@
 - **CLI 개선** — REPL 모드 Ctrl+C 2회 강제종료 구현
 - **SSE 서버 제거** — 사용되지 않는 데드코드 삭제 (HTTP 서버가 SSE 스트리밍 지원)
 - **데드 코드/의존성 정리** — `zod-to-json-schema`, ordinance 힌트, `start:sse` script
+
+</details>
 
 <details>
 <summary>v3.0.x 변경 이력</summary>
