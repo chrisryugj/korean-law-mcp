@@ -19,9 +19,33 @@ interface SessionInfo {
   lastAccess: number
 }
 
-// 세션 맵
-const MAX_SESSIONS = 100
+// 세션 맵 (MAX_SESSIONS 환경변수로 조정 가능, 기본 500)
+const MAX_SESSIONS = parseInt(process.env.MAX_SESSIONS || "500", 10)
 const sessions = new Map<string, SessionInfo>()
+
+/** LRU eviction: 가장 오래된 세션 1개 제거 (한도 도달 시 호출) */
+function evictOldestSession(): boolean {
+  let oldestId: string | undefined
+  let oldestTime = Infinity
+  for (const [sid, info] of sessions) {
+    if (info.lastAccess < oldestTime) {
+      oldestTime = info.lastAccess
+      oldestId = sid
+    }
+  }
+  if (oldestId) {
+    const session = sessions.get(oldestId)!
+    try {
+      session.transport.close()
+      session.server.close().catch(() => {})
+    } catch { /* ignore */ }
+    sessions.delete(oldestId)
+    deleteSession(oldestId)
+    console.error(`[Session LRU] Evicted oldest session: ${oldestId} (idle ${Math.round((Date.now() - oldestTime) / 1000)}s)`)
+    return true
+  }
+  return false
+}
 
 export async function startHTTPServer(createServer: (profile?: ToolProfile) => Server, port: number) {
   const app = express()
@@ -179,14 +203,17 @@ export async function startHTTPServer(createServer: (profile?: ToolProfile) => S
         })
         return
       } else if (!sessionId && isInitializeRequest(req.body)) {
-        // 세션 수 제한 — transport 생성 전에 체크하여 리소스 누수 방지
+        // 세션 수 제한 — 한도 도달 시 LRU eviction 시도
         if (sessions.size >= MAX_SESSIONS) {
-          res.status(503).json({
-            jsonrpc: "2.0",
-            error: { code: -32000, message: `Max sessions (${MAX_SESSIONS}) reached. Try again later.` },
-            id: null,
-          })
-          return
+          const evicted = evictOldestSession()
+          if (!evicted || sessions.size >= MAX_SESSIONS) {
+            res.status(503).json({
+              jsonrpc: "2.0",
+              error: { code: -32000, message: `Max sessions (${MAX_SESSIONS}) reached. Try again later.` },
+              id: null,
+            })
+            return
+          }
         }
         // 새 세션 초기화 — URL 쿼리파라미터에서 프로필 결정
         const profile = parseProfile(req.query.profile as string | undefined)
