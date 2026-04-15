@@ -32,7 +32,11 @@
 > **No changes to how you use it.** Ask naturally, get deeper analysis automatically.
 
 <details>
-<summary>v3.3.0 changes</summary>
+<summary>v3.3.0~v3.3.1 changes</summary>
+
+**v3.3.1** — Law alias dictionary expansion (11 → 52 entries, +41)
+
+Triggered by a lexdiff hallucination case where "산안기준규칙" (산업안전보건기준에 관한 규칙) got keyword-matched to "국가표준기본법" by Korea Law Open API's aiSearch. Expanded `LAW_ALIAS_ENTRIES` in `lib/search-normalizer.ts` with high-frequency abbreviations across labor/safety (산안법, 중처법, 근기법), privacy/telecom (개보법, 정보통신망법), anti-corruption (청탁금지법, 이해충돌방지법), public contracting (국가계약법, 지방계약법), real estate (주임법, 상임법, 부거법), antitrust (공정거래법, 하도급법, 약관법, 표시광고법, 가맹사업법), finance (자본시장법, 특금법, 전금법), urban planning (국토계획법, 도정법), environment/health (감염병예방법, 대기환경법), transport (여객운수법, 화물운수법), procedure (민소법, 형소법, 민집법), social insurance (국건법, 산재보험법, 고보법), and telecom (전기통신사업법). Since `api-client.ts` and `law-parser.ts` already consume `resolveLawAlias()`, the existing search pipeline gets the benefit automatically. 45/45 tests passing (41 new + 4 regression).
 
 **v3.3.0** — HTTP stateless mode + kordoc 2.3.0
 
