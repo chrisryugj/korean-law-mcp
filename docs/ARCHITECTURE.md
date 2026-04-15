@@ -36,14 +36,13 @@
 │  │  • errors.ts           (LawApiError + 구조화된 에러)   │   │
 │  │  • schemas.ts          (날짜/크기 검증)                │   │
 │  │  • fetch-with-retry.ts (30s timeout, 3 retries)       │   │
-│  │  • session-state.ts    (멀티세션 API 키 격리)          │   │
+│  │  • session-state.ts    (요청별 API 키 격리, ALS)       │   │
 │  │  • cache.ts            (LRU + TTL)                    │   │
 │  └───────────────────────────────────────────────────────┘   │
 │                             ▲                                 │
 │  ┌───────────────────────────────────────────────────────┐   │
 │  │        Server Layer                                    │   │
-│  │  • http-server.ts  (Streamable HTTP, MCP 표준)        │   │
-│  │  • sse-server.ts   (SSE 레거시)                        │   │
+│  │  • http-server.ts  (Streamable HTTP stateless, MCP 표준)│  │
 │  └───────────────────────────────────────────────────────┘   │
 └───────────────────────────┬───────────────────────────────────┘
                             │ HTTPS
@@ -63,7 +62,7 @@
 2. **Single Responsibility**: 파일당 200줄 미만, 단일 기능
 3. **Centralized Tool Registry**: 64개 도구를 `tool-registry.ts`의 `allTools[]`에 등록
 4. **Type Safety**: TypeScript strict mode + Zod validation
-5. **Session Isolation**: 멀티세션 API 키 격리 (race condition 방지)
+5. **Stateless HTTP**: MCP StreamableHTTP stateless 모드 — 요청마다 fresh Server+Transport, AsyncLocalStorage로 요청별 API 키 격리 (재시작·스케일아웃 내성)
 6. **Network Resilience**: 30s timeout, 3 retries with exponential backoff
 7. **Dual Interface**: MCP 서버 + CLI 동시 지원
 
@@ -202,7 +201,7 @@ docker run -e LAW_OC=your-key -p 3000:3000 korean-law-mcp
 ## Security
 
 - **API 키**: 환경변수만 사용, 로그에 노출 금지
-- **세션 격리**: `session-state.ts`로 세션별 API 키 분리
+- **요청 격리**: `session-state.ts`의 AsyncLocalStorage로 요청별 API 키 분리 (stateless 모드, race condition 방지)
 - **입력 검증**: Zod 스키마로 모든 도구 입력 검증
 - **Rate Limiting**: `RATE_LIMIT_RPM` 환경변수 (기본 60 req/min)
 - **CORS**: `CORS_ORIGIN` 환경변수로 제한

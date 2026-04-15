@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Korean Law MCP Server v3.2.2 - 법제처 41개 API → 15개 통합 도구 (내부 91개) + 7개 시나리오 확장 + 자연어 CLI
+Korean Law MCP Server v3.3.0 - 법제처 41개 API → 15개 통합 도구 (내부 91개) + 7개 시나리오 확장 + 자연어 CLI + HTTP stateless 모드
 
 ## Structure
 
@@ -14,7 +14,7 @@ src/
 │   ├── api-client.ts     # API 클라이언트 (throwIfError/checkHtmlError 통일)
 │   ├── query-router.ts   # 자연어 → 도구 라우팅 엔진
 │   ├── fetch-with-retry.ts  # 타임아웃/재시도
-│   ├── session-state.ts  # 세션별 API 키 관리
+│   ├── session-state.ts  # 요청별 API 키 격리 (AsyncLocalStorage, stateless)
 │   ├── xml-parser.ts     # 공통 XML 파싱
 │   ├── errors.ts         # 에러 표준화
 │   ├── schemas.ts        # 날짜/응답크기 검증 (truncateResponse)
@@ -32,7 +32,7 @@ src/
 │   ├── document-analysis.ts  # 문서유형 분류/금액추출/리스크 탐지
 │   └── types.ts          # 공통 타입
 └── server/               # HTTP 서버 (Express)
-    └── http-server.ts    # Streamable HTTP (MCP 표준, 100kb body limit, MAX_SESSIONS=100)
+    └── http-server.ts    # Streamable HTTP stateless (MCP 공식 패턴, 매 요청 fresh Server+Transport, 100kb body limit)
 ```
 
 ## Commands
@@ -116,9 +116,9 @@ get_law_text(mst, jo="006300") → 제63조(휴직) 조회
 | `tool-registry.ts` | 91개 도구 정의, V3_EXPOSED 15개 노출 |
 | `tools/unified-decisions.ts` | 17개 도메인 통합 (search_decisions + get_decision_text) |
 | `lib/fetch-with-retry.ts` | 30초 타임아웃, 3회 재시도 |
-| `lib/session-state.ts` | 멀티세션 API 키 격리 |
+| `lib/session-state.ts` | AsyncLocalStorage 요청 컨텍스트 (API 키) |
+| `lib/annex-file-parser.ts` | 별표 파싱 (kordoc 2.3 통합 파서) |
 | `lib/xml-parser.ts` | 6개 도메인별 XML 파서 |
-| `lib/annex-file-parser.ts` | 별표 파싱 (kordoc 2.x 통합 파서) |
 | `lib/tool-profiles.ts` | 도구 카테고리 매핑 (discover_tools용) |
 | `tools/meta-tools.ts` | discover_tools + execute_tool (전문 도구 접근) |
 | `tools/chains.ts` | 8개 체인 도구 + scenario 분기 (자동감지/수동지정) |

@@ -4,7 +4,7 @@
 
 import { normalizeLawSearchText, resolveLawAlias } from "./search-normalizer.js"
 import { fetchWithRetry } from "./fetch-with-retry.js"
-import { sessionStore, getSessionApiKey } from "./session-state.js"
+import { requestContext } from "./session-state.js"
 
 const LAW_API_BASE = "https://www.law.go.kr/DRF"
 
@@ -18,14 +18,13 @@ export class LawApiClient {
   /**
    * API 키 결정 순서:
    * 1. 요청별 override 키
-   * 2. 현재 세션의 API 키 (HTTP 모드)
+   * 2. 현재 요청 컨텍스트의 API 키 (HTTP stateless 모드)
    * 3. 환경변수 LAW_OC
    * 4. 생성자에서 받은 기본 키
    */
   private getApiKey(overrideKey?: string): string {
-    const currentSessionId = sessionStore.getStore()
-    const sessionApiKey = currentSessionId ? getSessionApiKey(currentSessionId) : undefined
-    const key = overrideKey || sessionApiKey || process.env.LAW_OC || process.env.KOREAN_LAW_API_KEY || this.defaultApiKey
+    const ctxApiKey = requestContext.getStore()?.apiKey
+    const key = overrideKey || ctxApiKey || process.env.LAW_OC || process.env.KOREAN_LAW_API_KEY || this.defaultApiKey
     if (!key) {
       throw new Error("API 키가 필요합니다. 법제처(https://open.law.go.kr/LSO/openApi/guideResult.do)에서 발급받으세요.")
     }

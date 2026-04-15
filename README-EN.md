@@ -32,7 +32,17 @@
 > **No changes to how you use it.** Ask naturally, get deeper analysis automatically.
 
 <details>
-<summary>v3.2.1 changes</summary>
+<summary>v3.3.0 changes</summary>
+
+**v3.3.0** — HTTP stateless mode + kordoc 2.3.0
+
+Root-cause fix for the remote server (`korean-law-mcp.fly.dev`) periodically losing sessions due to OOM-driven restarts. Switched to MCP's official stateless pattern (`sessionIdGenerator: undefined`): fresh `Server + Transport` per request, released on response close. Removed in-memory session Map, `InMemoryEventStore`, and idle cleanup — eliminating leak sources entirely. Survives restarts, scale-out, and rolling deploys with zero client disruption. `GET /mcp` and `DELETE /mcp` return `405` (matching the SDK example). API keys are isolated per-request via `AsyncLocalStorage`.
+
+- **HTTP stateless transition** — [src/server/http-server.ts](src/server/http-server.ts) (ref: `@modelcontextprotocol/sdk/examples/server/simpleStatelessStreamableHttp.js`)
+- **kordoc 2.2.5 → 2.3.0**
+- **Session management code removed** — `sessions` Map, `MAX_SESSIONS`, 10-min idle `setInterval`, `InMemoryEventStore`, POST/GET/DELETE branching (~50 LOC net reduction)
+
+**v3.2.2** — `get_annexes` direct exposure. Auto-fetch annexes on refund/fee keywords.
 
 **v3.2.1** — kordoc 2.2.5 update.
 

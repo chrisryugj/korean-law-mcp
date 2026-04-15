@@ -81,11 +81,19 @@
 > 모든 결과 끝에 **"이어서 할 수 있는 조회"**가 제안됩니다. 복사해서 바로 이어가세요.
 
 <details>
-<summary>v3.2.1~v3.2.3 변경 이력</summary>
+<summary>v3.2.1~v3.3.0 변경 이력</summary>
 
-**v3.2.3** — HTTP 세션 안정성 개선. `MAX_SESSIONS` 기본값 100→500 상향 + LRU eviction 도입. 한도 도달 시 503 에러 대신 가장 오래된 세션을 자동 제거하고 새 세션을 수락. 세션 폭주로 인한 원격 서버 접속 불가 현상 해소.
+**v3.3.0** — HTTP stateless 모드 전환 + kordoc 2.3.0
 
-**v3.2.2** — 별표/서식 조회 도구(`get_annexes`)를 기본 노출 도구에 추가. **노출 도구 수 14 → 15개** (별표 조회가 `discover_tools`를 거치지 않고 바로 호출 가능). 환불·감경 키워드 질의 시 별표 자동 조회 로직 추가.
+원격 서버(`korean-law-mcp.fly.dev`)가 주기적으로 OOM kill로 재시작되면서 기존 세션 ID가 무효화되던 문제를 근본 해결. MCP 공식 stateless 패턴(`sessionIdGenerator: undefined`)으로 전환하여 매 요청마다 fresh `Server + Transport`를 생성, 요청 종료 시 즉시 해제. in-memory 세션 Map·InMemoryEventStore·idle cleanup 전부 제거로 누수 원인 소거. 재시작·스케일아웃·배포 모두 무손실. `GET /mcp`·`DELETE /mcp`는 공식 예제와 동일하게 `405`. API 키는 `AsyncLocalStorage`로 요청 단위 격리 (race condition 방지).
+
+- **HTTP stateless 전환** — [src/server/http-server.ts](src/server/http-server.ts) (참고: `@modelcontextprotocol/sdk/examples/server/simpleStatelessStreamableHttp.js`)
+- **kordoc 2.2.5 → 2.3.0** — 별표/서식 파싱 엔진 업데이트
+- **세션 관리 코드 완전 제거** — `sessions` Map, `MAX_SESSIONS`, idle cleanup `setInterval`, `InMemoryEventStore`, POST/GET/DELETE 분기 로직 삭제 (v3.2.3의 LRU eviction 접근을 대체)
+
+**v3.2.3** — HTTP 세션 안정성 중간 개선. `MAX_SESSIONS` 100→500 + LRU eviction. _v3.3.0의 stateless 전환으로 대체됨._
+
+**v3.2.2** — 별표/서식 조회 도구(`get_annexes`)를 기본 노출 도구에 추가. **노출 도구 수 14 → 15개**. 환불·감경 키워드 질의 시 별표 자동 조회 로직 추가.
 
 **v3.2.1** — kordoc 2.2.5 업데이트.
 
