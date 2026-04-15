@@ -67,6 +67,8 @@ import {
   chainFullResearch, chainFullResearchSchema,
   chainProcedureDetail, chainProcedureDetailSchema,
   chainDocumentReview, chainDocumentReviewSchema,
+  chainArticleHistory, chainArticleHistorySchema,
+  chainHistoricalArticle, chainHistoricalArticleSchema,
 } from "./tools/chains.js"
 
 /**
@@ -600,7 +602,7 @@ export const allTools: McpTool[] = [
   },
   {
     name: "chain_amendment_track",
-    description: "[⛓체인] 법령 개정·변경·연혁 질문 시 사용. 신구대조+조문이력 자동 연쇄. scenario='timeline'이면 개정 구간별 판례·해석례 시계열 매핑 추가. 예: '민법 최근 개정', '관세법 개정이력 시계열'.",
+    description: "[⛓체인] 법령 개정·변경·연혁 질문 시 사용. 신구대조+조문이력 자동 연쇄. maxAmendments(기본 1, 최대 20)로 최근 N회 개정 신구대조 일괄 반환. fromDate(YYYYMMDD)로 특정 날짜 이후 모든 개정 조회 가능. scenario='timeline'이면 개정 구간별 판례·해석례 시계열 매핑 추가. 예: '민법 최근 3회 개정', '관세법 2010년 이후 개정이력', '근로기준법 개정이력 시계열'.",
     schema: chainAmendmentTrackSchema,
     handler: chainAmendmentTrack
   },
@@ -627,6 +629,18 @@ export const allTools: McpTool[] = [
     description: "[⛓체인] 계약서·약관·협정서 검토 시 사용. 리스크분석→법령검색→판례검색 자동 연쇄. 문서 텍스트를 입력하면 리스크+근거법령+관련판례 제공.",
     schema: chainDocumentReviewSchema,
     handler: chainDocumentReview
+  },
+  {
+    name: "chain_article_history",
+    description: "[⛓체인] 특정 조문의 시계열 개정 연혁 조회. 법령명+조문번호+기간을 입력하면 조문이력→신구대조표(개정이유 포함) 자동 연쇄. 예: '근로기준법 제60조 2010년 이후 개정 내역'.",
+    schema: chainArticleHistorySchema,
+    handler: chainArticleHistory
+  },
+  {
+    name: "chain_historical_article",
+    description: "[⛓체인] 특정 날짜 기준 과거 시점 조문 조회. 법령명+조문번호+기준일자 입력 시 연혁버전 자동 선택→해당 시점 조문 반환. 예: '근로기준법 제60조 2015년 1월 기준'.",
+    schema: chainHistoricalArticleSchema,
+    handler: chainHistoricalArticle
   },
 
   // === 문서 분석 ===
@@ -705,7 +719,8 @@ const V3_EXPOSED = new Set([
   "chain_full_research", "chain_law_system", "chain_action_basis",
   "chain_dispute_prep", "chain_amendment_track", "chain_ordinance_compare",
   "chain_procedure_detail", "chain_document_review",
-  "search_law", "get_law_text",
+  "chain_article_history", "chain_historical_article",
+  "search_law", "get_law_text", "get_three_tier",
   "get_annexes",
   "search_decisions", "get_decision_text",
   "discover_tools", "execute_tool",

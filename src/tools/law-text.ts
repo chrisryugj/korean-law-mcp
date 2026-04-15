@@ -1,5 +1,9 @@
 /**
  * get_law_text Tool - 법령 조문 조회
+ *
+ * 개선 사항:
+ *  - lawName 파라미터 추가: mst/lawId 없이 법령명만으로 조문 조회 가능
+ *  - jo 자유형식 지원: '제38조', '38조', '38', '38조의2' 모두 허용
  */
 
 import { z } from "zod"
@@ -12,14 +16,29 @@ import { formatToolError } from "../lib/errors.js"
 import { MAX_RESPONSE_SIZE, truncateResponse } from "../lib/schemas.js"
 
 export const GetLawTextSchema = z.object({
+  lawName: z.string().optional().describe("법령명 (예: '근로기준법'). mst/lawId를 모를 때 사용. 있으면 자동으로 mst를 검색함."),
   mst: z.string().optional().describe("법령일련번호 (search_law에서 획득)"),
   lawId: z.string().optional().describe("법령ID (search_law에서 획득)"),
-  jo: z.string().optional().describe("조문 번호 (예: '제38조' 또는 '003800')"),
+  jo: z.string().optional().describe("조문 번호 — '제38조', '38조', '38', '38조의2' 등 자유형식 모두 허용"),
   efYd: z.string().optional().describe("시행일자 (YYYYMMDD 형식)"),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달")
-}).refine(data => data.mst || data.lawId, {
-  message: "mst 또는 lawId 중 하나는 필수입니다"
+}).refine(data => data.mst || data.lawId || data.lawName, {
+  message: "lawName, mst, lawId 중 하나는 필수입니다"
 })
+
+/**
+ * jo 파라미터를 '제N조' 또는 '제N조의M' 정규 형식으로 정규화
+ * '38' → '제38조', '38조' → '제38조', '38조의2' → '제38조의2'
+ */
+function normalizeJo(jo: string): string {
+  // 이미 정규 형식
+  if (/^제\d+조/.test(jo)) return jo
+  // '38조의2' 또는 '38조'
+  if (/^\d+조/.test(jo)) return `제${jo}`
+  // 숫자만 '38'
+  if (/^\d+$/.test(jo)) return `제${jo}조`
+  return jo
+}
 
 export type GetLawTextInput = z.infer<typeof GetLawTextSchema>
 
@@ -28,9 +47,28 @@ export async function getLawText(
   input: GetLawTextInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    // 조문 번호가 한글이면 JO 코드로 변환
-    let joCode = input.jo
-    if (joCode && /제\d+조/.test(joCode)) {
+    // lawName만 있으면 search_law로 mst 자동 획득
+    let resolvedMst = input.mst
+    let resolvedLawId = input.lawId
+    if (!resolvedMst && !resolvedLawId && input.lawName) {
+      const xmlText = await apiClient.searchLaw(input.lawName, input.apiKey)
+      const mstMatch = xmlText.match(/<법령일련번호>(\d+)<\/법령일련번호>/)
+      if (mstMatch) {
+        resolvedMst = mstMatch[1]
+      } else {
+        return {
+          content: [{
+            type: "text",
+            text: `법령 '${input.lawName}'을(를) 찾을 수 없습니다. 법령명을 확인하거나 search_law로 먼저 검색해주세요.`
+          }],
+          isError: true
+        }
+      }
+    }
+
+    // jo 자유형식 → 정규 형식으로 정규화 후 JO 코드 변환
+    let joCode = input.jo ? normalizeJo(input.jo) : undefined
+    if (joCode && /^제\d+조/.test(joCode)) {
       try {
         joCode = buildJO(joCode)
       } catch (e) {
@@ -45,7 +83,7 @@ export async function getLawText(
     }
 
     // Check cache first (efYd 정규화: 미지정 → 'current'로 통일)
-    const cacheKey = `lawtext:${input.mst || input.lawId}:${joCode || 'full'}:${input.efYd || 'current'}`
+    const cacheKey = `lawtext:${resolvedMst || resolvedLawId}:${joCode || 'full'}:${input.efYd || 'current'}`
     const cached = lawCache.get<string>(cacheKey)
     if (cached) {
       return {
@@ -57,8 +95,8 @@ export async function getLawText(
     }
 
     const jsonText = await apiClient.getLawText({
-      mst: input.mst,
-      lawId: input.lawId,
+      mst: resolvedMst,
+      lawId: resolvedLawId,
       jo: joCode,
       efYd: input.efYd,
       apiKey: input.apiKey
@@ -134,19 +172,19 @@ export async function getLawText(
           errorMsg += `\n\n이 법령은 제${range.min}조~제${range.max}조까지 총 ${range.count}개 조문만 존재합니다.`
           errorMsg += `\n\n해결 방법:`
           errorMsg += `\n   1. 전체 조회:`
-          if (input.mst) {
-            errorMsg += `\n      get_law_text(mst="${input.mst}")`
-          } else if (input.lawId) {
-            errorMsg += `\n      get_law_text(lawId="${input.lawId}")`
+          if (resolvedMst) {
+            errorMsg += `\n      get_law_text(mst="${resolvedMst}")`
+          } else if (resolvedLawId) {
+            errorMsg += `\n      get_law_text(lawId="${resolvedLawId}")`
           }
           errorMsg += `\n\n   2. 유사 조문 조회 예시:`
           const suggestJo = Math.max(1, range.max - 3)
-          if (input.mst) {
-            errorMsg += `\n      get_law_text(mst="${input.mst}", jo="제${range.max}조")`
-            errorMsg += `\n      get_law_text(mst="${input.mst}", jo="제${suggestJo}조")`
-          } else if (input.lawId) {
-            errorMsg += `\n      get_law_text(lawId="${input.lawId}", jo="제${range.max}조")`
-            errorMsg += `\n      get_law_text(lawId="${input.lawId}", jo="제${suggestJo}조")`
+          if (resolvedMst) {
+            errorMsg += `\n      get_law_text(mst="${resolvedMst}", jo="제${range.max}조")`
+            errorMsg += `\n      get_law_text(mst="${resolvedMst}", jo="제${suggestJo}조")`
+          } else if (resolvedLawId) {
+            errorMsg += `\n      get_law_text(lawId="${resolvedLawId}", jo="제${range.max}조")`
+            errorMsg += `\n      get_law_text(lawId="${resolvedLawId}", jo="제${suggestJo}조")`
           }
           errorMsg += `\n\n   3. 키워드 검색:`
           errorMsg += `\n      search_all(query="${lawName.replace(/\s+(시행령|시행규칙)/, '')}")`
@@ -185,10 +223,10 @@ export async function getLawText(
       tocText += `목차 (총 ${tocItems.length}개 조문)\n\n`
       tocText += tocItems.join("\n")
       tocText += `\n\n특정 조문 조회: get_law_text(`
-      if (input.mst) {
-        tocText += `mst="${input.mst}", jo="제XX조")`
-      } else if (input.lawId) {
-        tocText += `lawId="${input.lawId}", jo="제XX조")`
+      if (resolvedMst) {
+        tocText += `mst="${resolvedMst}", jo="제XX조")`
+      } else if (resolvedLawId) {
+        tocText += `lawId="${resolvedLawId}", jo="제XX조")`
       }
       tocText += `\n여러 조문 일괄 조회: get_batch_articles 도구 사용`
 
@@ -251,10 +289,10 @@ export async function getLawText(
 
       resultText += `\n\n[응답 크기 제한] ${totalArticles}개 조문 중 ${includedArticles.length}개만 포함 (${first}~${last})`
       resultText += `\n나머지 조문 조회: get_law_text(`
-      if (input.mst) {
-        resultText += `mst="${input.mst}", jo="제XX조")`
-      } else if (input.lawId) {
-        resultText += `lawId="${input.lawId}", jo="제XX조")`
+      if (resolvedMst) {
+        resultText += `mst="${resolvedMst}", jo="제XX조")`
+      } else if (resolvedLawId) {
+        resultText += `lawId="${resolvedLawId}", jo="제XX조")`
       }
       resultText += `\n여러 조문 일괄 조회: get_batch_articles 도구 사용`
     }

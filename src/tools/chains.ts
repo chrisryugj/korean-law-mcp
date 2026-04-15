@@ -29,6 +29,7 @@ import { searchAiLaw } from "./life-law.js"
 import { getLawText } from "./law-text.js"
 import { searchTaxTribunalDecisions } from "./tax-tribunal-decisions.js"
 import { searchNlrcDecisions, searchPipcDecisions } from "./committee-decisions.js"
+import { searchHistoricalLaw, getHistoricalLaw } from "./historical-law.js"
 
 // ========================================
 // Types
@@ -439,10 +440,49 @@ export async function chainDisputePrep(
 // 4. chain_amendment_track -- 개정 추적
 // ========================================
 
+/**
+ * 법령의 개정 이력에서 고유 MST 목록을 추출 (최신순 정렬)
+ */
+async function collectAmendmentMsts(
+  apiClient: LawApiClient,
+  lawId: string,
+  fromDate?: string,
+  apiKey?: string
+): Promise<Array<{ mst: string; promDate: string; changeType: string }>> {
+  const xmlText = await apiClient.getArticleHistory({ lawId, fromRegDt: fromDate, apiKey })
+  const seen = new Set<string>()
+  const result: Array<{ mst: string; promDate: string; changeType: string }> = []
+
+  // <law> 블록마다 법령정보 추출
+  const lawBlockRe = /<law[^>]*>([\s\S]*?)<\/law>/g
+  let m: RegExpExecArray | null
+  while ((m = lawBlockRe.exec(xmlText)) !== null) {
+    const block = m[1]
+    const infoMatch = /<법령정보>([\s\S]*?)<\/법령정보>/.exec(block)
+    if (!infoMatch) continue
+    const info = infoMatch[1]
+    const mst = extractTag(info, "법령일련번호")
+    const promDate = extractTag(info, "공포일자")
+    const changeType = extractTag(info, "제개정구분명")
+    if (mst && !seen.has(mst)) {
+      seen.add(mst)
+      result.push({ mst, promDate, changeType })
+    }
+  }
+
+  // 최신순 정렬
+  result.sort((a, b) => b.promDate.localeCompare(a.promDate))
+  return result
+}
+
 export const chainAmendmentTrackSchema = z.object({
   query: z.string().describe("법령명 (예: '관세법', '지방세특례제한법')"),
   mst: z.string().optional().describe("법령일련번호 (알고 있으면)"),
   lawId: z.string().optional().describe("법령ID (알고 있으면)"),
+  maxAmendments: z.number().int().min(1).max(20).optional().default(1)
+    .describe("조회할 신구대조표 개수 (기본값: 1=최근 1회. 2 이상이면 최근 N회 개정을 순서대로 모두 반환)"),
+  fromDate: z.string().regex(/^\d{8}$/).optional()
+    .describe("조회 시작일 (YYYYMMDD, 예: '20100101'). 이 날짜 이후 모든 개정 신구대조를 반환. maxAmendments와 함께 사용 가능"),
   scenario: z.enum(["timeline"]).optional()
     .describe("확장 시나리오. timeline=시계열 종합 타임라인 (개정 구간별 판례·해석례 매핑). 미지정 시 쿼리에서 자동 감지."),
   apiKey: z.string().optional(),
@@ -468,11 +508,32 @@ export async function chainAmendmentTrack(
 
     const parts = [`═══ 개정 추적: ${lawName} ═══`]
     const id: Record<string, string> = mst ? { mst } : { lawId: lawId! }
+    const maxAmendments = input.maxAmendments ?? 1
+    const useMulti = maxAmendments > 1 || !!input.fromDate
 
     // Step 1: 신구대조표
-    const oldNew = await callTool(compareOldNew, apiClient, { ...id, apiKey: input.apiKey })
-    if (!oldNew.isError) {
-      parts.push(sec("신구대조표 (최근 개정)", oldNew.text))
+    if (useMulti && lawId) {
+      // 다회 개정 조회: 조문이력에서 MST 목록 추출 → 각 개정별 신구대조 순회
+      const amendments = await collectAmendmentMsts(apiClient, lawId, input.fromDate, input.apiKey)
+      const limit = maxAmendments > 1 ? maxAmendments : amendments.length
+      const toFetch = amendments.slice(0, limit)
+
+      if (toFetch.length === 0) {
+        parts.push(sec("신구대조표", "해당 기간 내 개정 이력이 없습니다."))
+      } else {
+        for (const amend of toFetch) {
+          const oldNew = await callTool(compareOldNew, apiClient, { mst: amend.mst, apiKey: input.apiKey })
+          if (!oldNew.isError) {
+            parts.push(sec(`신구대조표 (${amend.promDate} ${amend.changeType})`, oldNew.text))
+          }
+        }
+      }
+    } else {
+      // 기존 단일 개정 조회 (기본값)
+      const oldNew = await callTool(compareOldNew, apiClient, { ...id, apiKey: input.apiKey })
+      if (!oldNew.isError) {
+        parts.push(sec("신구대조표 (최근 개정)", oldNew.text))
+      }
     }
 
     // Step 2: 조문별 개정 이력 (lawId 필요)
@@ -808,4 +869,193 @@ function extractSearchHints(analysisText: string): string[] {
     }
   }
   return hints
+}
+
+// ========================================
+// 9. chain_article_history -- 조문별 연혁 체인
+// ========================================
+
+export const chainArticleHistorySchema = z.object({
+  lawName: z.string().describe("법령명 (예: '근로기준법', '국가공무원법')"),
+  jo: z.string().optional().describe("조문 번호 (예: '제60조', '60', '60조의2'). 생략 시 전체 조문 이력 조회"),
+  fromDate: z.string().regex(/^\d{8}$/).optional()
+    .describe("조회 시작일 (YYYYMMDD, 예: '20100101'). 이 날짜 이후 개정 이력 조회"),
+  toDate: z.string().regex(/^\d{8}$/).optional()
+    .describe("조회 종료일 (YYYYMMDD, 예: '20241231')"),
+  includeComparison: z.boolean().optional().default(true)
+    .describe("각 개정에 대해 신구대조표(개정이유 포함) 조회 여부 (기본값: true)"),
+  maxAmendments: z.number().int().min(1).max(10).optional().default(5)
+    .describe("신구대조 최대 조회 횟수 (기본값: 5)"),
+  apiKey: z.string().optional(),
+})
+
+/**
+ * chain_article_history: 특정 조문의 개정 연혁을 시계열로 정리
+ *
+ * 동작 흐름:
+ *  1. lawName → findLaws()로 lawId/mst 해결
+ *  2. getArticleHistory(lawId, jo, fromDate, toDate)로 조문 개정 이력 조회
+ *  3. includeComparison=true이면 각 MST에 대해 compareOldNew() 호출 → 개정이유 + 신구대조
+ *  4. 시계열 순으로 정리하여 반환
+ */
+export async function chainArticleHistory(
+  apiClient: LawApiClient,
+  input: z.infer<typeof chainArticleHistorySchema>
+): Promise<ToolResponse> {
+  try {
+    // Step 1: 법령 검색으로 lawId/mst 해결
+    const laws = await findLaws(apiClient, input.lawName, input.apiKey, 1)
+    if (laws.length === 0) return noResult(input.lawName)
+    const law = laws[0]
+
+    // jo 정규화 ('60' → '제60조', '60조의2' → '제60조의2')
+    let normalizedJo = input.jo
+    if (normalizedJo) {
+      if (/^\d+조의\d+$/.test(normalizedJo)) normalizedJo = `제${normalizedJo}`
+      else if (/^\d+조$/.test(normalizedJo)) normalizedJo = `제${normalizedJo}`
+      else if (/^\d+$/.test(normalizedJo)) normalizedJo = `제${normalizedJo}조`
+    }
+
+    const joLabel = normalizedJo || "전체 조문"
+    const parts = [`═══ 조문 연혁 타임라인: ${law.lawName} ${joLabel} ═══`]
+
+    // Step 2: 조문 개정 이력 조회
+    const histInput: Record<string, unknown> = {
+      lawId: law.lawId,
+      apiKey: input.apiKey,
+    }
+    if (normalizedJo) histInput.jo = normalizedJo
+    if (input.fromDate) histInput.fromRegDt = input.fromDate
+    if (input.toDate) histInput.toRegDt = input.toDate
+
+    const artHistory = await callTool(getArticleHistory, apiClient, histInput)
+    if (artHistory.isError) {
+      parts.push(sec("조문 개정 이력", artHistory.text || "조회 실패"))
+      return wrapResult(parts.join("\n"))
+    }
+    parts.push(sec("조문 개정 이력", artHistory.text))
+
+    // Step 3: 신구대조표 + 개정이유 (includeComparison=true)
+    if (input.includeComparison !== false) {
+      const amendments = await collectAmendmentMsts(apiClient, law.lawId, input.fromDate, input.apiKey)
+      const toFetch = amendments.slice(0, input.maxAmendments ?? 5)
+
+      if (toFetch.length > 0) {
+        const compParts: string[] = []
+        for (const amend of toFetch) {
+          const oldNew = await callTool(compareOldNew, apiClient, { mst: amend.mst, apiKey: input.apiKey })
+          if (!oldNew.isError && oldNew.text.trim()) {
+            compParts.push(`▸ ${amend.promDate} ${amend.changeType} (MST: ${amend.mst})\n${oldNew.text}`)
+          }
+        }
+        if (compParts.length > 0) {
+          parts.push(sec("신구대조표 및 개정이유", compParts.join("\n\n---\n\n")))
+        }
+      }
+    }
+
+    return wrapResult(parts.join("\n"))
+  } catch (error) {
+    return wrapError(error)
+  }
+}
+
+// ========================================
+// 10. chain_historical_article -- 특정 시점 조문 조회
+// ========================================
+
+export const chainHistoricalArticleSchema = z.object({
+  lawName: z.string().describe("법령명 (예: '근로기준법', '국가공무원법')"),
+  jo: z.string().optional().describe("조문 번호 (예: '제60조', '60조', '60'). 생략 시 해당 버전 전체 조문 반환"),
+  targetDate: z.string().regex(/^\d{8}$/)
+    .describe("기준일자 (YYYYMMDD). 이 날짜에 시행 중이던 법령 버전 조회"),
+  apiKey: z.string().optional(),
+})
+
+/**
+ * chain_historical_article: 특정 날짜 기준으로 조문 조회
+ *
+ * 동작 흐름:
+ *  1. searchHistoricalLaw(lawName)로 전체 연혁 버전 목록(MST + 시행일자) 조회
+ *  2. targetDate 이전 중 가장 최근 시행 버전 선택
+ *  3. getHistoricalLaw(mst, jo)로 해당 버전 조문 내용 반환
+ */
+export async function chainHistoricalArticle(
+  apiClient: LawApiClient,
+  input: z.infer<typeof chainHistoricalArticleSchema>
+): Promise<ToolResponse> {
+  try {
+    // Step 1: 연혁 버전 목록 조회
+    const histList = await callTool(searchHistoricalLaw, apiClient, {
+      lawName: input.lawName,
+      display: 100,
+      apiKey: input.apiKey,
+    })
+
+    if (histList.isError) {
+      return wrapResult(
+        `═══ 연혁 조회 실패: ${input.lawName} ═══\n` +
+        `${histList.text || "연혁 정보를 조회할 수 없습니다."}`
+      )
+    }
+
+    // Step 2: MST + 시행일자 파싱 → targetDate 이전 최신 버전 선택
+    // searchHistoricalLaw 출력 예: "시행: 2024.01.01 | 일부개정\n   공포: ...\n   MST: 123456"
+    const target = input.targetDate  // YYYYMMDD 형식
+
+    // "시행: YYYY.MM.DD ... MST: NNNNNN" 패턴으로 파싱
+    const versionPattern = /시행:\s*(\d{4})\.(\d{2})\.(\d{2})[\s\S]*?MST:\s*(\d+)/g
+    const versions: Array<{ efYd: string; mst: string }> = []
+    let m: RegExpExecArray | null
+    while ((m = versionPattern.exec(histList.text)) !== null) {
+      const efYd = `${m[1]}${m[2]}${m[3]}`
+      versions.push({ efYd, mst: m[4] })
+    }
+
+    if (versions.length === 0) {
+      return wrapResult(
+        `═══ ${input.lawName} ${target} 기준 조문 조회 ═══\n` +
+        `연혁 버전 정보를 파싱할 수 없습니다.\n\n` +
+        `연혁 목록:\n${histList.text}`
+      )
+    }
+
+    // targetDate 이하 중 가장 최근 버전 (내림차순 정렬 → 첫 번째 해당)
+    const eligible = versions.filter(v => v.efYd <= target)
+    const selected = eligible.length > 0
+      ? eligible[0]  // 이미 내림차순 정렬됨 (searchHistoricalLaw가 efdes 정렬)
+      : versions[versions.length - 1]  // 모든 버전이 target보다 이후이면 가장 오래된 버전
+
+    const wasExact = eligible.length > 0
+
+    // Step 3: 조문 내용 조회
+    const joInput: Record<string, unknown> = { mst: selected.mst, apiKey: input.apiKey }
+    if (input.jo) {
+      // jo 정규화
+      let jo = input.jo
+      if (/^\d+조의\d+$/.test(jo)) jo = `제${jo}`
+      else if (/^\d+조$/.test(jo)) jo = `제${jo}`
+      else if (/^\d+$/.test(jo)) jo = `제${jo}조`
+      joInput.jo = jo
+    }
+
+    const artText = await callTool(getHistoricalLaw, apiClient, joInput)
+
+    const joLabel = input.jo || "전체 조문"
+    const header = `═══ ${input.lawName} ${joLabel} (${target} 기준) ═══`
+    const versionNote = wasExact
+      ? `적용 버전: 시행일 ${selected.efYd} (MST: ${selected.mst})`
+      : `※ ${target} 이전 시행 버전 없음. 가장 오래된 버전 사용 (시행일 ${selected.efYd}, MST: ${selected.mst})`
+
+    const parts = [header, versionNote]
+    if (!artText.isError) {
+      parts.push(sec("조문 내용", artText.text))
+    } else {
+      parts.push(`\n조문 조회 실패: ${artText.text}\n`)
+    }
+
+    return wrapResult(parts.join("\n"))
+  } catch (error) {
+    return wrapError(error)
+  }
 }
