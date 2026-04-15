@@ -537,8 +537,13 @@ export async function chainAmendmentTrack(
     }
 
     // Step 2: 조문별 개정 이력 (lawId 필요)
+    // ※ fromDate가 있으면 반드시 fromRegDt로 전달해야 해당 기간만 필터링됨
     if (lawId) {
-      const artHistory = await callTool(getArticleHistory, apiClient, { lawId, apiKey: input.apiKey })
+      const artHistory = await callTool(getArticleHistory, apiClient, {
+        lawId,
+        fromRegDt: input.fromDate,   // 기간 필터 전달 (미지정 시 전체 이력 반환)
+        apiKey: input.apiKey,
+      })
       if (!artHistory.isError) {
         parts.push(sec("조문별 개정 이력", artHistory.text))
       }
