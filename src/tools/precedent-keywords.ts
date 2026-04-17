@@ -31,7 +31,7 @@ export async function extractPrecedentKeywords(
       return {
         content: [{
           type: "text",
-          text: "판례를 찾을 수 없습니다."
+          text: "[NOT_FOUND] 판례를 찾을 수 없습니다.\n⚠️ LLM은 판례 내용을 추측/생성하지 마세요."
         }],
         isError: true
       }

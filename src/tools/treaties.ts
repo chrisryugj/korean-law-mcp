@@ -48,7 +48,7 @@ export async function searchTreaties(
     if (result.totalCnt === 0) {
       const kw = args.query || "관련 키워드"
       const keywords = kw.trim().split(/\s+/)
-      const lines = ["조약 검색 결과가 없습니다."]
+      const lines = [`[NOT_FOUND] '${kw}' 조약 검색 결과가 없습니다.`, "", "⚠️ LLM은 조약 내용을 추측하지 마세요."]
       if (keywords.length >= 2) {
         lines.push("")
         lines.push("힌트: 법제처 API는 공백 구분 키워드를 AND 조건으로 처리합니다. 키워드가 많을수록 결과가 줄어듭니다.")

@@ -55,7 +55,7 @@ export async function getArticleDetail(
 
     if (!lawData) {
       return {
-        content: [{ type: "text", text: "법령 데이터를 찾을 수 없습니다." }],
+        content: [{ type: "text", text: "[NOT_FOUND] 법령 데이터를 찾을 수 없습니다.\n⚠️ LLM은 조문을 추측하지 마세요." }],
         isError: true
       }
     }
@@ -79,7 +79,7 @@ export async function getArticleDetail(
 
     if (articleUnits.length === 0) {
       return {
-        content: [{ type: "text", text: resultText + "해당 조문을 찾을 수 없습니다." }],
+        content: [{ type: "text", text: resultText + "[NOT_FOUND] 해당 조문을 찾을 수 없습니다.\n⚠️ LLM은 조문 내용을 추측/생성하지 마세요." }],
         isError: true
       }
     }

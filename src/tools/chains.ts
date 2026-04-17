@@ -102,19 +102,22 @@ function sec(title: string, content: string): string {
   return `\n▶ ${title}\n${content}\n`
 }
 
-/** 부분 실패 시 사용자에게 왜 빠졌는지 알림 */
+/** 부분 실패 시 사용자에게 왜 빠졌는지 알림 — LLM 환각 방지용 명시적 NOT_FOUND 마커 */
 function secOrSkip(title: string, result: CallResult): string {
   if (!result.isError) return sec(title, result.text)
-  // 에러인 경우 간략하게 왜 빠졌는지 표시
+  // 에러인 경우 왜 빠졌는지 표시 (200자까지 노출, LLM이 원인 파악 가능하게)
   if (result.text && result.text.trim()) {
-    return `\n▶ ${title} (조회 실패: ${result.text.slice(0, 80)})\n`
+    const snippet = result.text.length > 200 ? result.text.slice(0, 200) + "..." : result.text
+    return `\n▶ ${title} [NOT_FOUND / FAILED]\n   ⚠️ 이 섹션은 조회 실패 — LLM은 내용을 추측/생성하지 마세요.\n   사유: ${snippet}\n`
   }
-  return `\n▶ ${title} (조회 실패)\n`
+  return `\n▶ ${title} [NOT_FOUND / FAILED]\n   ⚠️ 이 섹션은 조회 실패 — LLM은 내용을 추측/생성하지 마세요.\n`
 }
 
 function noResult(query: string): ToolResponse {
   const keywords = query.trim().split(/\s+/)
-  const lines = [`'${query}' 관련 법령을 찾을 수 없습니다.`]
+  const lines = [`[NOT_FOUND] '${query}' 관련 법령을 찾을 수 없습니다.`]
+  lines.push("")
+  lines.push("⚠️ 이 체인은 기반 법령을 찾지 못해 실행을 중단했습니다. LLM은 법령·조문·판례를 추측/생성하지 마세요. 사용자에게 '검색 실패'를 명시 보고하세요.")
   if (keywords.length >= 2) {
     lines.push("")
     lines.push("힌트: 법제처 API는 공백 구분 키워드를 AND 조건으로 처리합니다. 키워드가 많을수록 결과가 줄어듭니다.")
@@ -168,7 +171,7 @@ export async function chainLawSystem(
 
     // 3단 비교
     const threeTier = await callTool(getThreeTier, apiClient, { mst: p.mst, apiKey: input.apiKey })
-    if (!threeTier.isError) parts.push(sec("3단 비교 (법률·시행령·시행규칙)", threeTier.text))
+    parts.push(secOrSkip("3단 비교 (법률·시행령·시행규칙)", threeTier))
 
     // 조문 조회
     if (input.articles?.length) {
@@ -177,14 +180,14 @@ export async function chainLawSystem(
         articles: input.articles,
         apiKey: input.apiKey,
       })
-      if (!batch.isError) parts.push(sec("핵심 조문", batch.text))
+      parts.push(secOrSkip("핵심 조문", batch))
     }
 
     // 키워드 확장: 별표
     const exp = detectExpansions(input.query)
     if (exp.includes("annex_fee") || exp.includes("annex_table") || exp.includes("annex_form")) {
       const annexes = await callTool(getAnnexes, apiClient, { lawName: p.lawName, apiKey: input.apiKey })
-      if (!annexes.isError) parts.push(sec("별표/서식", annexes.text))
+      parts.push(secOrSkip("별표/서식", annexes))
     }
 
     // Scenario 확장
@@ -245,7 +248,7 @@ export async function chainActionBasis(
     const exp = detectExpansions(input.query)
     if (exp.includes("annex_fee") || exp.includes("annex_table")) {
       const annexes = await callTool(getAnnexes, apiClient, { lawName: p.lawName, apiKey: input.apiKey })
-      if (!annexes.isError) parts.push(sec("별표 (과태료/기준표)", annexes.text))
+      parts.push(secOrSkip("별표 (과태료/기준표)", annexes))
     }
 
     // Scenario 확장
@@ -299,22 +302,22 @@ export async function chainDisputePrep(
 
     const results = await Promise.all(parallel)
 
-    if (!results[0].isError) parts.push(sec("대법원 판례", results[0].text))
-    if (!results[1].isError) parts.push(sec("행정심판례", results[1].text))
-    if (results[2] && !results[2].isError) {
+    parts.push(secOrSkip("대법원 판례", results[0]))
+    parts.push(secOrSkip("행정심판례", results[1]))
+    if (results[2]) {
       const domainNames: Record<string, string> = {
         tax: "조세심판원 결정",
         labor: "중앙노동위 결정",
         privacy: "개인정보위 결정",
       }
-      parts.push(sec(domainNames[domain] || "전문 결정례", results[2].text))
+      parts.push(secOrSkip(domainNames[domain] || "전문 결정례", results[2]))
     }
 
     // 해석례 (키워드 확장)
     const exp = detectExpansions(input.query)
     if (exp.includes("interpretation")) {
       const interp = await callTool(searchInterpretations, apiClient, { query: input.query, display: 5, apiKey: input.apiKey })
-      if (!interp.isError) parts.push(sec("법령 해석례", interp.text))
+      parts.push(secOrSkip("법령 해석례", interp))
     }
 
     return wrapResult(parts.join("\n"))
@@ -359,16 +362,12 @@ export async function chainAmendmentTrack(
 
     // Step 1: 신구대조표
     const oldNew = await callTool(compareOldNew, apiClient, { ...id, apiKey: input.apiKey })
-    if (!oldNew.isError) {
-      parts.push(sec("신구대조표 (최근 개정)", oldNew.text))
-    }
+    parts.push(secOrSkip("신구대조표 (최근 개정)", oldNew))
 
     // Step 2: 조문별 개정 이력 (lawId 필요)
     if (lawId) {
       const artHistory = await callTool(getArticleHistory, apiClient, { lawId, apiKey: input.apiKey })
-      if (!artHistory.isError) {
-        parts.push(sec("조문별 개정 이력", artHistory.text))
-      }
+      parts.push(secOrSkip("조문별 개정 이력", artHistory))
     }
 
     // Scenario 확장
@@ -416,13 +415,13 @@ export async function chainOrdinanceCompare(
 
       // 3단 비교 (위임 근거 확인)
       const threeTier = await callTool(getThreeTier, apiClient, { mst: p.mst, apiKey: input.apiKey })
-      if (!threeTier.isError) parts.push(sec("위임 체계 (법률·시행령·시행규칙)", threeTier.text))
+      parts.push(secOrSkip("위임 체계 (법률·시행령·시행규칙)", threeTier))
     }
 
     // Step 2: 조례 검색 — "조례"/"규칙" 제거 (이미 조례 DB에서 검색하므로)
     const ordinanceQuery = input.query.replace(/\s*(조례|규칙|자치법규)\s*/g, " ").trim() || input.query
     const ordinances = await callTool(searchOrdinance, apiClient, { query: ordinanceQuery, display: 20, apiKey: input.apiKey })
-    if (!ordinances.isError) parts.push(sec("전국 자치법규 검색 결과", ordinances.text))
+    parts.push(secOrSkip("전국 자치법규 검색 결과", ordinances))
 
     // Step 3: 상위 1건 전문 자동 조회
     if (!ordinances.isError) {
@@ -430,7 +429,7 @@ export async function chainOrdinanceCompare(
       const seqMatch = ordinances.text.match(/\[(\d{5,})\]/)
       if (seqMatch) {
         const fullText = await callTool(getOrdinance, apiClient, { ordinSeq: seqMatch[1], apiKey: input.apiKey })
-        if (!fullText.isError) parts.push(sec("조례 전문 (상위 1건)", fullText.text))
+        parts.push(secOrSkip("조례 전문 (상위 1건)", fullText))
       }
     }
 
@@ -438,7 +437,7 @@ export async function chainOrdinanceCompare(
     const exp = detectExpansions(input.query)
     if (exp.includes("interpretation")) {
       const interp = await callTool(searchInterpretations, apiClient, { query: input.query, display: 5, apiKey: input.apiKey })
-      if (!interp.isError) parts.push(sec("법령 해석례", interp.text))
+      parts.push(secOrSkip("법령 해석례", interp))
     }
 
     // Scenario 확장
@@ -505,7 +504,7 @@ export async function chainFullResearch(
     if (lawsResult.length > 0) {
       if (exp.includes("annex_fee") || exp.includes("annex_table") || exp.includes("annex_form")) {
         const annexes = await callTool(getAnnexes, apiClient, { lawName: lawsResult[0].lawName, apiKey: input.apiKey })
-        if (!annexes.isError) parts.push(sec("별표/서식", annexes.text))
+        parts.push(secOrSkip("별표/서식", annexes))
       }
     }
 
@@ -552,7 +551,7 @@ export async function chainProcedureDetail(
 
     // Step 2: 3단 비교 (절차 체계 파악)
     const threeTier = await callTool(getThreeTier, apiClient, { mst: p.mst, apiKey: input.apiKey })
-    if (!threeTier.isError) parts.push(sec("법령 체계 (절차 근거)", threeTier.text))
+    parts.push(secOrSkip("법령 체계 (절차 근거)", threeTier))
 
     // Step 3: 별표(수수료/과태료) + 서식(신청서) 병렬
     const [annexFee, annexForm] = await Promise.all([
@@ -573,12 +572,12 @@ export async function chainProcedureDetail(
       })(),
     ])
 
-    if (!annexFee.isError) parts.push(sec(`${p.lawName} 별표/서식`, annexFee.text))
-    if (!annexForm.isError && annexForm.text) parts.push(sec("시행규칙 별표/서식", annexForm.text))
+    parts.push(secOrSkip(`${p.lawName} 별표/서식`, annexFee))
+    if (annexForm.text || annexForm.isError) parts.push(secOrSkip("시행규칙 별표/서식", annexForm))
 
     // Step 4: AI 검색으로 보완 (절차 상세)
     const aiResult = await callTool(searchAiLaw, apiClient, { query: input.query, display: 5, apiKey: input.apiKey })
-    if (!aiResult.isError) parts.push(sec("AI 검색 보완 정보", aiResult.text))
+    parts.push(secOrSkip("AI 검색 보완 정보", aiResult))
 
     // Scenario 확장
     const scenario = (input.scenario || detectScenario(input.query, "chain_procedure_detail")) as ScenarioType | null

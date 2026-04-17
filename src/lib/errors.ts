@@ -55,11 +55,15 @@ export class LawApiError extends Error {
 /**
  * 검색 결과 없음 힌트 생성
  * 법제처 API는 공백 키워드를 AND 조건으로 처리하므로, 키워드가 많으면 결과가 0건이 되기 쉬움
+ *
+ * [NOT_FOUND] 프리픽스로 LLM이 기계적으로 실패를 감지하게 함 (환각 방지 v3.5.4)
  */
 export function noResultHint(query: string, label?: string): ToolResponse {
   const prefix = label ? `${label} ` : ""
   const keywords = query.trim().split(/\s+/)
-  const lines = [`${prefix}'${query}' 검색 결과가 없습니다.`]
+  const lines = [`[NOT_FOUND] ${prefix}'${query}' 검색 결과가 없습니다.`]
+  lines.push("")
+  lines.push("⚠️ 이 도구는 실제 데이터를 찾지 못했습니다. LLM이 결과를 추측하거나 지어내지 마세요. 사용자에게 '검색 실패'를 보고하고 아래 제안을 우선 시도하세요.")
 
   if (keywords.length >= 2) {
     lines.push("")
@@ -69,6 +73,25 @@ export function noResultHint(query: string, label?: string): ToolResponse {
     lines.push("다른 키워드로 재시도하세요.")
   }
 
+  return {
+    content: [{ type: "text", text: lines.join("\n") }],
+    isError: true,
+  }
+}
+
+/**
+ * 명시적 "데이터 없음" 응답 생성 (환각 방지 v3.5.4)
+ * noResultHint는 검색 실패용. 특정 리소스가 없을 때(조문, 별표, 파일 등) 사용.
+ */
+export function notFoundResponse(message: string, suggestions?: string[]): ToolResponse {
+  const lines = [`[NOT_FOUND] ${message}`]
+  lines.push("")
+  lines.push("⚠️ 이 도구는 요청한 데이터를 찾지 못했습니다. LLM이 임의로 답변을 생성하지 마세요. '해당 데이터 없음'을 사용자에게 명시하세요.")
+  if (suggestions && suggestions.length > 0) {
+    lines.push("")
+    lines.push("재시도 제안:")
+    suggestions.forEach((s) => lines.push(`  - ${s}`))
+  }
   return {
     content: [{ type: "text", text: lines.join("\n") }],
     isError: true,

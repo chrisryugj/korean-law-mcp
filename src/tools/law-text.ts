@@ -72,7 +72,7 @@ export async function getLawText(
       return {
         content: [{
           type: "text",
-          text: "법령 데이터를 찾을 수 없습니다."
+          text: "[NOT_FOUND] 법령 데이터를 찾을 수 없습니다.\n\n⚠️ 법제처 API가 해당 mst/lawId에 대해 데이터를 반환하지 않았습니다. LLM이 조문을 추측/생성하지 마세요. search_law로 유효한 mst를 먼저 확인하세요."
         }],
         isError: true
       }
@@ -126,7 +126,7 @@ export async function getLawText(
     if (articleUnits.length === 0) {
       // 조문 범위 확인
       const range = extractArticleRange(lawData)
-      let errorMsg = resultText + "조문 내용을 찾을 수 없습니다."
+      let errorMsg = resultText + "[NOT_FOUND] 조문 내용을 찾을 수 없습니다.\n⚠️ LLM은 조문을 추측/생성하지 말고 아래 안내대로 재조회하세요."
 
       if (input.jo) {
         // 특정 조문 요청했는데 없는 경우
@@ -151,7 +151,7 @@ export async function getLawText(
           errorMsg += `\n\n   3. 키워드 검색:`
           errorMsg += `\n      search_all(query="${lawName.replace(/\s+(시행령|시행규칙)/, '')}")`
         } else {
-          errorMsg += `\n\n조문을 찾을 수 없습니다. 다음을 시도해보세요:`
+          errorMsg += `\n\n[NOT_FOUND] 조문을 찾을 수 없습니다. 다음을 시도해보세요:`
           errorMsg += `\n   - 전체 법령 조회 (jo 파라미터 생략)`
           errorMsg += `\n   - 키워드 검색 (search_all 도구 사용)`
         }

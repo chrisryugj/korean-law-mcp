@@ -41,7 +41,7 @@ export async function getOrdinance(
       return {
         content: [{
           type: "text",
-          text: "자치법규 데이터를 찾을 수 없습니다."
+          text: "[NOT_FOUND] 자치법규 데이터를 찾을 수 없습니다.\n⚠️ LLM은 조례 내용을 추측/생성하지 마세요. search_ordinance로 유효한 ordinSeq를 먼저 확인하세요."
         }],
         isError: true
       }

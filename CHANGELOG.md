@@ -1,5 +1,36 @@
 # Changelog
 
+## [3.5.4] - 2026-04-18
+
+### Fixed (실사용 피드백: LLM이 조회 실패를 "성공"으로 오인하고 답변 생성)
+사용자 피드백: "실사용하면 자꾸 답변 못 찾고 AI가 지맘대로 답변함. 못 찾으면 리턴값을 명확하게 주면 좋겠음."
+
+**근본 원인**: 일부 도구가 조회 실패 시 `isError` 플래그를 설정하지 않거나, 응답 텍스트에 "없습니다"만 포함되어 LLM이 실패를 감지하지 못하고 창작 답변 생성.
+
+### Added (환각 방지 명시 시그널)
+- **`[NOT_FOUND]` / `[HALLUCINATION_DETECTED]` / `[API_ERROR]` 머신 파싱 가능 프리픽스** — 모든 실패 응답에 기계적으로 감지 가능한 마커 추가. LLM이 실패를 놓치지 않고 사용자에게 "검색 실패" 보고하도록 유도
+- **`lib/errors.ts` `notFoundResponse(message, suggestions?)` 신규 헬퍼** — 특정 리소스 없을 때(조문/별표/파일 등) 일관된 NOT_FOUND 응답 생성
+- **모든 "없습니다" 응답에 LLM 경고문 삽입** — "⚠️ LLM은 {조문/판례/법령}을 추측/생성하지 마세요" 문구 표준화
+
+### Changed (isError 누락 수정 — 10+ 위치)
+- `tools/annex.ts` — 별표 없음/선택자 매칭 실패/파일 링크 없음 3개 케이스 모두 `isError: true` 추가, `notFoundResponse` 사용
+- `tools/verify-citations.ts` — `failCount > 0`일 때 `isError: true` 설정 + 헤더에 `[HALLUCINATION_DETECTED]` 마커 (가장 심각한 버그: 환각 검출됐는데 "검증 성공"으로 오인 가능)
+- `tools/law-text.ts` / `tools/article-detail.ts` / `tools/article-history.ts` / `tools/historical-law.ts` — 법령/조문 없음 응답 강화
+- `tools/law-linkage.ts` — 연계 법령 없음 응답에 `isError: true` 추가
+- `tools/autocomplete.ts` / `tools/admin-rule.ts` / `tools/comparison.ts` — `isError: true` 누락 수정
+- `tools/precedent-summary.ts` / `tools/precedent-keywords.ts` / `tools/knowledge-base.ts` / `tools/kb-utils.ts` / `tools/ordinance.ts` — NOT_FOUND 마커 + LLM 경고문
+- `tools/precedents.ts` / `tools/treaties.ts` / `tools/ordinance-search.ts` — 검색 실패 응답 강화
+
+### Changed (체인 도구 부분 실패 투명화)
+- `tools/chains.ts` `secOrSkip()` — 에러 snippet 80자 → 200자 확장, 섹션 제목에 `[NOT_FOUND / FAILED]` 마커 + LLM 경고문 삽입
+- 모든 silent-drop 패턴(`if (!result.isError) parts.push(sec(...))`) 제거 → `parts.push(secOrSkip(...))`로 일괄 전환. 체인 중 일부 단계가 실패해도 "왜 빠졌는지" 명시 노출
+- `noResult()` — NOT_FOUND 마커 + "체인 실행 중단 — LLM은 추측 금지" 지시문 추가
+
+### Impact
+- LLM이 실패 응답을 기계적으로 감지 가능해져 창작/환각 답변 방지
+- 체인 도구가 부분 실패해도 사용자에게 "어떤 데이터가 왜 빠졌는지" 명시적으로 노출
+- 특히 `verify_citations`의 `isError` 누락은 환각 검출의 의미를 무력화하던 심각한 버그였음
+
 ## [3.5.3] - 2026-04-18
 
 ### Fixed (verify_citations 실제 검증 후 3개 치명 버그 수정)

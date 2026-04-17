@@ -86,7 +86,7 @@ export async function searchOrdinance(
       const { expanded } = expandOrdinanceQuery(input.query)
       const triedQueries = [normalizedQuery, ...expanded].slice(0, 3).join("', '")
       const keywords = input.query.trim().split(/\s+/)
-      const hint = [`'${input.query}' 자치법규 검색 결과가 없습니다.`, `시도한 검색어: '${triedQueries}'`]
+      const hint = [`[NOT_FOUND] '${input.query}' 자치법규 검색 결과가 없습니다.`, `시도한 검색어: '${triedQueries}'`, "", "⚠️ LLM은 조례 내용을 추측하지 마세요. 사용자에게 '검색 실패'를 보고하세요."]
       if (keywords.length >= 2) {
         hint.push("")
         hint.push("힌트: 법제처 API는 공백 구분 키워드를 AND 조건으로 처리합니다. 키워드가 많을수록 결과가 줄어듭니다.")

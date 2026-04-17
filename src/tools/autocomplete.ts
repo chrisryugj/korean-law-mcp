@@ -70,8 +70,9 @@ export async function suggestLawNames(
       return {
         content: [{
           type: "text",
-          text: `'${input.partial}'로 시작하는 법령을 찾을 수 없습니다.`
-        }]
+          text: `[NOT_FOUND] '${input.partial}'로 시작하는 법령을 찾을 수 없습니다.\n⚠️ LLM은 법령명을 추측하지 마세요.`
+        }],
+        isError: true
       }
     }
 

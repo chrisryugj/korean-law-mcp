@@ -103,7 +103,19 @@
 > 모든 결과 끝에 **"이어서 할 수 있는 조회"**가 제안됩니다. 복사해서 바로 이어가세요.
 
 <details>
-<summary>v3.2.1~v3.5.3 변경 이력</summary>
+<summary>v3.2.1~v3.5.4 변경 이력</summary>
+
+**v3.5.4** — 실사용 피드백 반영: NOT_FOUND 명시 시그널 전면 도입
+
+사용자 피드백: "실사용하면 자꾸 답변 못 찾고 AI가 지맘대로 답변함. 못 찾으면 리턴값을 명확하게."
+
+**근본 원인**: 일부 도구가 조회 실패 시 `isError` 플래그를 세팅하지 않거나 "없습니다"만 반환 → LLM이 실패 감지 못하고 창작 답변 생성.
+
+- **`[NOT_FOUND]` / `[HALLUCINATION_DETECTED]` 머신 파싱 마커 전면 도입** — 모든 실패 응답에 기계적으로 감지 가능한 프리픽스 + "⚠️ LLM은 추측/생성 금지" 경고문 표준화
+- **`verify_citations`** — `failCount > 0`일 때 `isError: true` 설정. 환각 검출됐는데 "검증 성공"으로 오인되던 심각한 버그 수정
+- **`annex.ts` / `law-text.ts` / `article-detail.ts` 등 10+개 파일** — `isError: true` 누락 수정
+- **체인 도구 부분 실패 투명화** — `chains.ts`의 silent-drop 패턴 제거. 실패한 섹션도 `[NOT_FOUND / FAILED]` 마커와 사유를 명시 노출 (80자 → 200자 확장)
+- 신규 헬퍼 `notFoundResponse(message, suggestions?)`로 일관성 확보
 
 **v3.5.3** — `verify_citations` 실증 검증 후 3개 치명 버그 수정
 

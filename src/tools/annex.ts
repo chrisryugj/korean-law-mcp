@@ -7,7 +7,7 @@ import type { LawApiClient } from "../lib/api-client.js"
 import { fetchWithRetry } from "../lib/fetch-with-retry.js"
 import { parseAnnexFile } from "../lib/annex-file-parser.js"
 import { truncateResponse, MAX_RESPONSE_SIZE } from "../lib/schemas.js"
-import { formatToolError } from "../lib/errors.js"
+import { formatToolError, notFoundResponse } from "../lib/errors.js"
 
 /** 법제처 별표/서식 API 응답 개별 항목 */
 interface AnnexItem {
@@ -127,9 +127,14 @@ export async function getAnnexes(
     }
 
     if (annexList.length === 0) {
-      return {
-        content: [{ type: "text", text: `"${normalizedLawName}"에 대한 별표/서식이 없습니다.` }]
-      }
+      return notFoundResponse(
+        `"${normalizedLawName}"에 대한 별표/서식이 법제처 DB에 없습니다.`,
+        [
+          "법령명 오탈자 확인 (예: '관세법 시행령' vs '관세법')",
+          `search_law({ query: "${normalizedLawName}" }) 로 정확한 법령명 확인`,
+          "모법에 별표가 있을 수 있음 (시행규칙 대신 시행령으로 재시도)",
+        ]
+      )
     }
 
     // 최신본 우선 정렬
@@ -163,21 +168,24 @@ async function extractAnnexContent(
   const matched = findMatchingAnnex(annexList, annexSelector)
   if (!matched) {
     const availableBylSeq = annexList.map((a) => a.별표번호).filter(Boolean).slice(0, 20).join(", ")
-    return {
-      content: [{
-        type: "text",
-        text: `별표 선택값 "${annexSelector}"에 해당하는 항목을 찾을 수 없습니다.\n사용 가능한 별표번호(일부): ${availableBylSeq || "없음"}\n예: get_annexes({ lawName: "${normalizedLawName}", bylSeq: "${annexList[0]?.별표번호 || "000100"}" }) 또는 get_annexes({ lawName: "${normalizedLawName} 별표4" })`
-      }]
-    }
+    return notFoundResponse(
+      `별표 선택값 "${annexSelector}"에 해당하는 항목을 찾을 수 없습니다. (법령: ${normalizedLawName})`,
+      [
+        `사용 가능한 별표번호(일부): ${availableBylSeq || "없음"}`,
+        `예: get_annexes({ lawName: "${normalizedLawName}", bylSeq: "${annexList[0]?.별표번호 || "000100"}" })`,
+        `예: get_annexes({ lawName: "${normalizedLawName} 별표4" })`,
+      ]
+    )
   }
 
   const annexTitle = matched.별표명 || "제목 없음"
   const fileLink = matched.별표서식파일링크 || matched.별표서식PDF파일링크 || matched.별표파일링크 || ""
 
   if (!fileLink) {
-    return {
-      content: [{ type: "text", text: `"${annexTitle}"의 파일 링크가 없습니다.` }]
-    }
+    return notFoundResponse(
+      `"${annexTitle}"의 파일 링크가 법제처 응답에 포함되지 않았습니다.`,
+      ["법령 전체 별표 목록을 다시 조회하세요: get_annexes({ lawName: '...' })"]
+    )
   }
 
   // 파일 다운로드

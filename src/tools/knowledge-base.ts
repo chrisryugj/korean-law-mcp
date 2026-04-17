@@ -94,7 +94,7 @@ export async function getLegalTermDetail(
 
     if (!termName && !definition) {
       return {
-        content: [{ type: "text", text: `'${args.query}' 용어를 찾을 수 없습니다.` }],
+        content: [{ type: "text", text: `[NOT_FOUND] '${args.query}' 용어를 찾을 수 없습니다.\n⚠️ LLM은 용어 정의를 추측/생성하지 마세요.` }],
         isError: true,
       };
     }
@@ -304,7 +304,7 @@ export async function getTermArticles(
       return {
         content: [{
           type: "text",
-          text: `'${args.term}' 용어가 사용된 조문을 찾을 수 없습니다.`,
+          text: `[NOT_FOUND] '${args.term}' 용어가 사용된 조문을 찾을 수 없습니다.\n⚠️ LLM은 조문을 추측하지 마세요.`,
         }],
         isError: true,
       };
@@ -368,7 +368,7 @@ export async function getRelatedLaws(
       return {
         content: [{
           type: "text",
-          text: `관련법령 조회 실패.`,
+          text: `[API_ERROR] 관련법령 조회 실패.\n⚠️ LLM은 관련 법령을 추측/생성하지 마세요. 잠시 후 재시도하세요.`,
         }],
         isError: true,
       };
@@ -382,7 +382,7 @@ export async function getRelatedLaws(
       return {
         content: [{
           type: "text",
-          text: `관련법령을 찾을 수 없습니다.`,
+          text: `[NOT_FOUND] 관련법령을 찾을 수 없습니다.\n⚠️ LLM은 관련 법령을 추측하지 마세요.`,
         }],
         isError: true,
       };

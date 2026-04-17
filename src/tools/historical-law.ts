@@ -46,7 +46,7 @@ export async function searchHistoricalLaw(
     const histories = parseHistoryHtml(html, args.lawName);
 
     if (histories.length === 0) {
-      let errorMsg = `'${args.lawName}'의 연혁을 찾을 수 없습니다.`;
+      let errorMsg = `[NOT_FOUND] '${args.lawName}'의 연혁을 찾을 수 없습니다.\n⚠️ LLM은 연혁을 추측/생성하지 마세요. 법령명을 정확히 확인하거나 search_law로 먼저 검색하세요.`;
 
       return {
         content: [{
@@ -148,7 +148,7 @@ export async function getHistoricalLaw(
           if (article.조문제목) output += `제목: ${article.조문제목}\n`;
           output += `${article.조문내용 || "내용 없음"}\n`;
         } else {
-          output += `${args.jo}를 찾을 수 없습니다.\n`;
+          output += `[NOT_FOUND] ${args.jo}를 찾을 수 없습니다.\n⚠️ LLM은 조문을 추측/생성하지 마세요.\n`;
           output += `\n조문 목록:\n`;
           for (const a of articles.slice(0, 20)) {
             output += `  - 제${a.조문번호 || a.조번호}조 ${a.조문제목 || ""}\n`;

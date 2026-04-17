@@ -60,8 +60,9 @@ export async function compareOldNew(
       return {
         content: [{
           type: "text",
-          text: resultText + "개정 이력이 없거나 신구법 대조 데이터가 없습니다."
-        }]
+          text: resultText + "[NOT_FOUND] 개정 이력이 없거나 신구법 대조 데이터가 없습니다.\n⚠️ LLM은 대조 내용을 추측하지 마세요."
+        }],
+        isError: true
       }
     }
 
@@ -72,8 +73,9 @@ export async function compareOldNew(
       return {
         content: [{
           type: "text",
-          text: resultText + "개정 이력이 없거나 신구법 대조 데이터가 없습니다."
-        }]
+          text: resultText + "[NOT_FOUND] 개정 이력이 없거나 신구법 대조 데이터가 없습니다.\n⚠️ LLM은 대조 내용을 추측하지 마세요."
+        }],
+        isError: true
       }
     }
 

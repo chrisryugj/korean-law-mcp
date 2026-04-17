@@ -1,7 +1,7 @@
 {
   "name": "korean-law",
-  "version": "3.5.3",
-  "description": "법제처 41개 API → 16개 MCP 도구. 법령·판례·조례·조약 + LLM 환각 방지 인용 검증",
+  "version": "3.5.4",
+  "description": "법제처 41개 API → 16개 MCP 도구. 법령·판례·조례·조약 + LLM 환각 방지 인용 검증 + NOT_FOUND 명시 시그널",
   "author": {
     "name": "Chris",
     "email": "ryuseungin@gmail.com",

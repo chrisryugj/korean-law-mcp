@@ -96,7 +96,10 @@ async function handleLinkage(apiClient: LawApiClient, input: LinkageInput, cfg: 
     }
 
     if (result.items.length === 0) {
-      return { content: [{ type: "text", text: truncateResponse(`'${input.query}' ${cfg.emptyMsg}`) }] }
+      return {
+        content: [{ type: "text", text: truncateResponse(`[NOT_FOUND] '${input.query}' ${cfg.emptyMsg}\n⚠️ LLM은 연계 정보를 추측/생성하지 마세요.`) }],
+        isError: true
+      }
     }
 
     let output = `${cfg.title} (총 ${result.totalCnt}건, ${result.page}페이지)\n`

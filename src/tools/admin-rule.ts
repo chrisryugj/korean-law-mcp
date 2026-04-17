@@ -129,7 +129,8 @@ export async function getAdminRule(
       return {
         content: [{
           type: "text",
-          text: "행정규칙 전문을 조회할 수 없습니다.\n\n" +
+          text: "[NOT_FOUND] 행정규칙 전문을 조회할 수 없습니다.\n\n" +
+                "⚠️ LLM은 행정규칙 내용을 추측/생성하지 마세요.\n" +
                 "[주의] 법제처 API 제한: 일부 행정규칙은 전문 조회가 지원되지 않습니다."
         }],
         isError: true
@@ -257,8 +258,8 @@ export async function compareAdminRuleOldNew(
       const maxCount = Math.max(oldArticles.length, newArticles.length)
 
       if (maxCount === 0) {
-        resultText += "신구법 대조 데이터가 없습니다."
-        return { content: [{ type: "text", text: resultText }] }
+        resultText += "[NOT_FOUND] 신구법 대조 데이터가 없습니다.\n⚠️ LLM은 대조 내용을 추측하지 마세요."
+        return { content: [{ type: "text", text: resultText }], isError: true }
       }
 
       const displayCount = Math.min(maxCount, 30)

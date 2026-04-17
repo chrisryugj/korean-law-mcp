@@ -10,7 +10,7 @@
       "name": "korean-law",
       "source": ".",
       "description": "법제처 41개 API → 16개 MCP 도구. 법령·판례·조례·조약 검색 + LLM 환각 방지 인용 검증",
-      "version": "3.5.3",
+      "version": "3.5.4",
       "author": {
         "name": "Chris"
       },

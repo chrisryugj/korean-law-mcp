@@ -124,7 +124,7 @@ async function verifyOne(
     // searchDisplay=100: "상법"처럼 짧은 법령명이 부분매칭에 밀려 기본 20건에 안 들어올 때 대비
     const results = await findLaws(apiClient, cite.lawName, apiKey, 5, 100)
     if (results.length === 0) {
-      return `✗ ${inputLabel} — 법제처 DB에 해당 법령 없음 (법령명 오탈자 가능)`
+      return `✗ ${inputLabel} — [NOT_FOUND] 법제처 DB에 해당 법령 없음 (법령명 오탈자 또는 존재하지 않는 법령)`
     }
     chosen = results[0]
 
@@ -167,7 +167,7 @@ async function verifyOne(
           rangeHint = ` (존재 범위: 제${Math.min(...nums)}조~제${Math.max(...nums)}조)`
         }
       } catch { /* ignore */ }
-      return `✗ ${formatCitationLabel(cite, chosen.lawName)} — 해당 조문 없음${rangeHint}`
+      return `✗ ${formatCitationLabel(cite, chosen.lawName)} — [NOT_FOUND] 해당 조문 없음${rangeHint}`
     }
 
     // 3단계: 항 검증 (명시된 경우)
@@ -189,7 +189,7 @@ async function verifyOne(
       if (maxHang === 0) {
         return `⚠ ${officialLabel}${joTitle} 실존, 제${cite.hang}항 확인 실패 (API 응답 형식 이상)`
       }
-      return `✗ ${officialLabel}${joTitle} — 제${cite.hang}항 없음 (최대 제${maxHang}항)`
+      return `✗ ${officialLabel}${joTitle} — [NOT_FOUND] 제${cite.hang}항 없음 (최대 제${maxHang}항)`
     }
 
     return `✓ ${officialLabel}${joTitle} 실존`
@@ -208,7 +208,7 @@ export async function verifyCitations(
       return {
         content: [{
           type: "text",
-          text: "인용된 조문이 발견되지 않았습니다.\n\n지원 패턴: '민법 제750조', '상법 제401조의2 제2항 제3호'. 법령명이 빠진 단독 '제N조' 인용은 앞 문맥에서 법령명을 추출하려고 시도합니다.",
+          text: "[NO_CITATIONS_FOUND] 입력 텍스트에서 조문 인용이 발견되지 않았습니다.\n\n지원 패턴: '민법 제750조', '상법 제401조의2 제2항 제3호'. 법령명이 빠진 단독 '제N조' 인용은 앞 문맥에서 법령명을 추출하려고 시도합니다.\n\n⚠️ 이 결과는 '검증 성공'이 아니라 '검증할 인용이 없음'입니다. 인용을 포함한 텍스트로 재요청하세요.",
         }],
       }
     }
@@ -222,12 +222,20 @@ export async function verifyCitations(
     const failCount = results.filter((r) => r.startsWith("✗")).length
     const warnCount = results.filter((r) => r.startsWith("⚠")).length
 
-    let output = `== 인용 검증 결과 ==\n총 ${citations.length}건 | ✓ ${okCount} 실존 | ✗ ${failCount} 오류 | ⚠ ${warnCount} 확인필요\n\n`
+    // 환각 감지 시 isError=true로 LLM이 "검증 통과"로 오인하지 못하게 차단
+    const hasHallucination = failCount > 0
+
+    const headerMarker = hasHallucination
+      ? "[HALLUCINATION_DETECTED] "
+      : warnCount > 0 ? "[PARTIAL_VERIFIED] " : "[VERIFIED] "
+    let output = `${headerMarker}== 인용 검증 결과 ==\n총 ${citations.length}건 | ✓ ${okCount} 실존 | ✗ ${failCount} 오류 | ⚠ ${warnCount} 확인필요\n\n`
     for (const line of results) {
       output += `${line}\n`
     }
-    if (failCount > 0) {
-      output += `\n⚠️ ${failCount}건 인용이 법제처 DB에 실존하지 않습니다. LLM 환각 가능성 — 원문 재확인 필요.\n`
+    if (hasHallucination) {
+      output += `\n⚠️ [HALLUCINATION_DETECTED] ${failCount}건 인용이 법제처 DB에 실존하지 않습니다.\n`
+      output += `   LLM이 지어낸 인용일 가능성이 높습니다. 원문을 수정하거나 사용자에게 '인용 오류'를 명시 보고하세요.\n`
+      output += `   절대로 "검증 완료"로 답변하지 마세요.\n`
     }
     if (warnCount > 0) {
       output += `\n💡 ⚠ 항목은 법령명 불명확/부분 매칭/API 일시 실패 등. 법령명을 명시하거나 재시도하세요.\n`
@@ -235,6 +243,7 @@ export async function verifyCitations(
 
     return {
       content: [{ type: "text", text: truncateResponse(output) }],
+      ...(hasHallucination ? { isError: true } : {}),
     }
   } catch (error) {
     return formatToolError(error, "verify_citations")

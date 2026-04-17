@@ -98,7 +98,7 @@ export async function fallbackTermSearch(
       return {
         content: [{
           type: "text",
-          text: `'${term}' ${termType} 연계 정보를 찾을 수 없습니다.`,
+          text: `[NOT_FOUND] '${term}' ${termType} 연계 정보를 찾을 수 없습니다.\n⚠️ LLM은 연계 정보를 추측하지 마세요.`,
         }],
         isError: true,
       }
