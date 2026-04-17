@@ -15,21 +15,23 @@
 
 ---
 
-## What's New in v3.5.0 — Citation Hallucination Guard
+## What's New in v3.5 — Citation Hallucination Guard
 
 **Catches fake article citations in AI-generated legal answers in real time.** Cross-verifies every citation against Korea's official law database.
 
 ```
-"Under Civil Act Article 750, damages may be claimed for tort,
- and under Commercial Act Article 401-2 Paragraph 7 and Article 999,
- directors can be held liable."
+"Under Civil Act Article 750, damages may be claimed for tort;
+ Labor Standards Act Article 60 Paragraph 1 provides annual leave;
+ Commercial Act Article 401-2 Paragraph 7 imposes director liability;
+ Criminal Act Article 9999 imposes aggravated punishment."
 ```
 
-→ Run `verify_citations`:
+→ Run `verify_citations` (actual verification result against 법제처 API):
 
-- ✓ Civil Act Article 750 (Tort) — exists
-- ✗ Commercial Act Article 401-2 — Paragraph 7 doesn't exist (max Paragraph 3)
-- ✗ Commercial Act Article 999 — no such article (valid range: Art.1~Art.637)
+- ✓ Civil Act Article 750 (Tort liability) — exists
+- ✓ Labor Standards Act Article 60 (Annual paid leave) Paragraph 1 — exists
+- ✗ **Commercial Act Article 401-2 — Paragraph 7 doesn't exist (max Paragraph 2)**
+- ✗ **Criminal Act Article 9999 — no such article (valid range: Art.1~Art.372)**
 
 **Don't blindly trust ChatGPT/Claude legal answers.** Essential reliability check for legal AI services, law firms, students, contract review.
 

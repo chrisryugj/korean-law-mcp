@@ -14,20 +14,23 @@
 
 ---
 
-## v3.5.0 — AI 법률 답변의 환각을 잡아내다
+## v3.5 — AI 법률 답변의 환각을 잡아내다
 
 **LLM이 지어낸 가짜 조문을 실시간으로 탐지.** 법제처 공식 DB로 모든 인용을 교차검증.
 
 ```
 "민법 제750조에 따라 불법행위 손해배상을 청구하고,
- 상법 제401조의2 제7항 및 제999조에 따라 이사의 책임을 물을 수 있습니다"
+ 근로기준법 제60조 제1항은 연차유급휴가를 규정하며,
+ 상법 제401조의2 제7항에 따라 이사 책임을 물을 수 있고,
+ 형법 제9999조는 가중처벌을 정한다"
 ```
 
-→ `verify_citations` 한 번으로:
+→ `verify_citations` 한 번으로 (실제 법제처 API 교차검증 결과):
 
 - ✓ 민법 제750조(불법행위의 내용) 실존
-- ✗ 상법 제401조의2 — 제7항 없음 (최대 제3항)
-- ✗ 상법 제999조 — 해당 조문 없음 (존재 범위: 제1조~제637조)
+- ✓ 근로기준법 제60조(연차 유급휴가) 제1항 실존
+- ✗ **상법 제401조의2 — 제7항 없음 (최대 제2항)**
+- ✗ **형법 제9999조 — 해당 조문 없음 (존재 범위: 제1조~제372조)**
 
 **ChatGPT·Claude가 쓴 법률 답변을 그대로 믿지 마세요.** 법률 AI 서비스, 로펌, 학생, 계약서 검토에서 신뢰도 체크 필수.
 
@@ -100,11 +103,25 @@
 > 모든 결과 끝에 **"이어서 할 수 있는 조회"**가 제안됩니다. 복사해서 바로 이어가세요.
 
 <details>
-<summary>v3.2.1~v3.5.0 변경 이력</summary>
+<summary>v3.2.1~v3.5.3 변경 이력</summary>
+
+**v3.5.3** — `verify_citations` 실증 검증 후 3개 치명 버그 수정
+
+실제 법제처 API로 5건 테스트 → false negative 3건 발견 → 근본 원인 수정:
+
+- **"민법" → "난민법" 부분매칭 오매칭** — 기존 `chains.ts`의 `findLaws`/`scoreLawRelevance`가 이미 해결해둔 로직인데 verify_citations가 재사용하지 않고 자체 로직으로 중복 구현했던 것. 공용 모듈 `lib/law-search.ts`로 추출하여 양쪽 재사용 (중복 제거)
+- **원숫자(①②③…) 항번호 파싱 실패** — 법제처 API가 `항번호`를 `"① "` 형태로 리턴하는데 기존 `parseInt(raw.replace(/[^\d]/g, ""))`가 유니코드 원숫자를 제거해 NaN. 근로기준법 제60조 제1항이 실존함에도 "최대 제0항" 오판정 → `lib/article-parser.ts`에 `parseHangNumber()` 원숫자 매핑 유틸 추가
+- **짧은 법령명 검색 누락** — 법제처 lawSearch API가 `display=20`에서 "상법"을 결과 34번째로 리턴. `apiClient.searchLaw`에 display 파라미터 추가, verify_citations는 `searchDisplay=100`으로 호출
+
+검증 후 5/5 정확 판정 (위 예시 결과가 그 출력).
+
+**v3.5.2** — kordoc 2.3.0 → 2.4.0 업데이트 (별표/서식 파싱 엔진)
+
+**v3.5.1** — lite/full 프로필 체계 제거 (V3_EXPOSED 16개 고정 노출 도입 후 실질 미사용). `tool-profiles.ts`에서 `LITE_TOOLS`/`parseProfile`/`filterToolsByProfile` 제거, 헬스 엔드포인트 거짓 `profiles` 필드 → 정확한 `tools: { exposed: 16, total: 92 }` 로 교체. Breaking change 아님 (`?profile=lite`도 이미 무시되던 값)
 
 **v3.5.0** — Killer feature: `verify_citations` 인용 검증 + Critical 핫픽스 + 보안 강화
 
-- **`verify_citations`** 신규 — LLM 환각 방지. 사용자 텍스트에서 조문 인용 정규식 추출 + 직전 30자 lookback으로 법령명 역추적 + `search_law`/`get_law_text` 병렬로 실존 검증. 결과: ✓(실존) / ✗(없음, 존재 범위 제시) / ⚠(법령명 불명확)
+- **`verify_citations`** 신규 — LLM 환각 방지. 사용자 텍스트에서 조문 인용 정규식 추출 + 직전 30자 lookback으로 법령명 역추적 + 법제처 DB 병렬 교차검증. 결과: ✓(실존) / ✗(없음, 존재 범위 제시) / ⚠(법령명 불명확)
 - **Critical 핫픽스** — v3.4.0 `full` 파라미터가 12개 도메인(tax_tribunal, customs, ftc, pipc, nlrc, acr, treaty, interpretation 등)에서 스키마에 필드가 없어 묵묵히 무시되던 문제 수정. `unified-decisions.ts`가 하위 핸들러 응답을 받은 뒤 `compactLongSections()` 후처리로 계단식 축약 일괄 적용
 - **보안 High 2건** — `fetch-with-retry.ts` 타임아웃/네트워크 에러에 API 키 포함 URL이 로그로 유출되던 문제 → `maskSensitiveUrl()`로 `OC=***` 마스킹. `trust proxy true` → `TRUST_PROXY` 환경변수(기본 `1`), X-Forwarded-For 스푸핑 rate limit 우회 차단
 - **품질 3건** — `decision-compact.ts` 날짜 정규식 경계 가드, TAIL 경계 `". "` 오탐 제거, `stripRepeatedSummary` 종료점 정확 탐지
