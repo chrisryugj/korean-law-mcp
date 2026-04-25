@@ -349,6 +349,33 @@ MCP 도구 설계에서 **도구 수 ≠ 기능 수**입니다.
 
 > 내부적으로 `npx korean-law-mcp@latest`를 실행하므로 npm에 배포된 최신 버전이 항상 사용됩니다.
 
+#### Troubleshooting: `Permission denied (publickey)` 에러
+
+설치 중 다음 에러가 뜨면 Claude Code 설치기가 GitHub에 SSH로 접속을 시도했는데 SSH 키가 등록돼 있지 않은 경우입니다 (특히 처음 Git을 쓰는 비개발자/법률 실무자에게 자주 발생).
+
+```
+Failed to install: Failed to clone repository: Cloning into
+  '/Users/<user>/.claude/plugins/cache/temp_github_<id>'...
+  git@github.com: Permission denied (publickey).
+  fatal: Could not read from remote repository.
+```
+
+**해결 방법 (둘 중 하나 선택):**
+
+1. **HTTPS로 강제 우회 (가장 간단, 추천):** 터미널에 한 줄 실행 후 다시 `/plugin install` 시도
+   ```bash
+   git config --global url."https://github.com/".insteadOf "git@github.com:"
+   ```
+
+2. **SSH 키 생성 후 GitHub에 등록:** GitHub 계정으로 다른 저장소를 SSH로 자주 쓸 예정이라면
+   ```bash
+   ssh-keygen -t ed25519 -C "your-email@example.com"   # 엔터 3번
+   cat ~/.ssh/id_ed25519.pub                            # 출력 복사
+   ```
+   복사한 공개키를 [GitHub → Settings → SSH and GPG keys → New SSH key](https://github.com/settings/keys)에 붙여넣기
+
+설치 후에도 위 rewrite 설정은 그대로 둬도 무방합니다 (HTTPS clone이 항상 동작).
+
 ---
 
 ### 방법 2: Claude.ai 웹에서 바로 사용 (설치 없음)

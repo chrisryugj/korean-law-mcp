@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased] - 2026-04-26
+
+### Docs (issue #29: 플러그인 설치 시 SSH 키 미설정 사용자 지원)
+- **README Troubleshooting 섹션 추가** — `/plugin install korean-law@korean-law-marketplace` 실행 시 `git@github.com: Permission denied (publickey)` 에러를 만나는 사용자를 위한 우회 방법 명시
+  - **원인**: `marketplace.json`은 표준 github short form(`{ source: "github", repo: "..." }`)을 쓰지만, Claude Code 설치기가 SSH URL로 clone을 시도하는 동작에서 발생. SSH 키가 이미 설정된 개발자에게는 보이지 않는 실패 모드지만, 본 플러그인의 주 타겟인 법률 실무자/비개발자에게는 진입 장벽
+  - **추가된 우회 안내**: (1) `git config --global url."https://github.com/".insteadOf "git@github.com:"` 한 줄로 HTTPS 강제 (추천), (2) `ssh-keygen` + GitHub Settings 등록
+- 매니페스트 자체는 표준이라 변경 없음 — 향후 Claude Code 측에서 공개 GitHub 저장소에 HTTPS 기본 사용으로 개선되면 안내 제거 예정
+
 ## [3.5.4] - 2026-04-18
 
 ### Fixed (실사용 피드백: LLM이 조회 실패를 "성공"으로 오인하고 답변 생성)
