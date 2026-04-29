@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/chrisryugj-korean-law-mcp-badge.png)](https://mseep.ai/app/chrisryugj-korean-law-mcp)
+
 # Korean Law MCP
 
 **법제처 41개 API를 16개 도구로.** 법령, 판례, 행정규칙, 자치법규, 조약, 해석례 + **LLM 환각 방지 인용 검증**을 AI 어시스턴트나 터미널에서 바로 사용.
