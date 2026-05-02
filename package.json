@@ -50,13 +50,19 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
-    "@xmldom/xmldom": "^0.9.8",
+    "@xmldom/xmldom": "^0.9.10",
     "commander": "^14.0.3",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "kordoc": "^2.4.0",
     "pdfjs-dist": "^5.5.207",
     "zod": "^3.25.76 || ^4.0.0"
+  },
+  "overrides": {
+    "@hono/node-server": "1.19.14",
+    "express-rate-limit": "8.2.2",
+    "hono": "4.12.16",
+    "path-to-regexp": "8.4.2"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
