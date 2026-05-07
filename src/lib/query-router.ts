@@ -103,6 +103,10 @@ const routePatterns: Pattern[] = [
     ],
     tool: "get_law_text",
     extract: (query) => {
+      // impact_map 키워드가 있으면 양보 (영향그래프/인용한 판례 등)
+      if (/(?:파급|영향\s*그래프|impact|인용한\s*(?:모든|판례|판결|어디))/i.test(query)) {
+        return { _skip: true }
+      }
       const jo = extractArticleNumber(query)
       const lawName = extractLawName(query)
       return { _searchQuery: lawName, jo, _needsMst: true }
@@ -559,6 +563,78 @@ const routePatterns: Pattern[] = [
     extract: (query) => ({ query }),
     reason: "지역명 시작 → 자치법규 검색",
     priority: 20,
+  },
+
+  // ── 29-0. 조문 영향 그래프 (impact_map, v4.0) ──
+  // "민법 103조 영향", "민법 제103조 파급효과", "이 조문 인용한 판례 전부"
+  {
+    name: "impact_map",
+    patterns: [
+      /(.+?)\s*제?(\d+)조(?:의(\d+))?\s*(?:파급|영향\s*그래프|impact|인용한\s*(?:모든|판례|판결))/i,
+      /(.+?)\s*제?(\d+)조(?:의(\d+))?\s*인용\s*(?:판례|모두|전부|어디)/,
+      /조문\s*(?:파급|임팩트|영향\s*그래프)/,
+    ],
+    tool: "impact_map",
+    extract: (query) => {
+      const joMatch = query.match(/제?(\d+)조(?:의(\d+))?/)
+      const lawNameMatch = query.match(/^(.+?)\s*제?\d+조/)
+      const lawName = lawNameMatch ? lawNameMatch[1].trim() : ""
+      const jo = joMatch ? (joMatch[2] ? `제${joMatch[1]}조의${joMatch[2]}` : `제${joMatch[1]}조`) : ""
+      if (!lawName || !jo) return { _fallback: true, query }
+      return { lawName, jo }
+    },
+    reason: "조문 영향 그래프 키워드 → impact_map (역방향 인용 그래프 + mermaid)",
+    priority: 2,
+  },
+
+  // ── 29-0-1. 시점 비교 (time_travel, v4.0) ──
+  // "관세법 2024 vs 2026", "관세법 2024-01-01 부터 2026-04-01 까지"
+  {
+    name: "time_travel",
+    patterns: [
+      /(.+?)\s*(\d{4})[\.\-년]?\s*(?:vs|vs\.|↔|와|과|~|부터.*?(?:까지|에서)?)\s*(\d{4})/,
+      /시점\s*비교|버전\s*비교|두\s*시점|time\s*travel/i,
+    ],
+    tool: "chain_amendment_track",
+    extract: (query, match) => {
+      // 두 시점에서 YYYYMMDD 추출 시도
+      const dates = query.match(/(\d{4})[\.\-]?(\d{1,2})?[\.\-]?(\d{1,2})?/g) || []
+      const lawName = (match?.[1] || query).trim()
+      const params: Record<string, unknown> = { query: lawName, scenario: "time_travel" }
+      const toYmd = (s: string): string | undefined => {
+        const m = s.match(/(\d{4})[\.\-]?(\d{1,2})?[\.\-]?(\d{1,2})?/)
+        if (!m) return undefined
+        const y = m[1]
+        const mo = (m[2] || "01").padStart(2, "0")
+        const d = (m[3] || "01").padStart(2, "0")
+        return `${y}${mo}${d}`
+      }
+      if (dates[0]) {
+        const f = toYmd(dates[0])
+        if (f) params.fromDate = f
+      }
+      if (dates[1]) {
+        const t = toYmd(dates[1])
+        if (t) params.toDate = t
+      }
+      return params
+    },
+    reason: "두 시점 비교 → chain_amendment_track (time_travel 시나리오 + 자동 diff)",
+    priority: 3,
+  },
+
+  // ── 29-0-2. 시민 시나리오 (action_plan, v4.0) ──
+  // "전세금 못 받았어", "음주운전 걸렸어", "해고 통보 받았어"
+  {
+    name: "action_plan",
+    patterns: [
+      /(?:받았어|걸렸어|당했어|못\s*받|돼\?|어떻게\s*해야)/,
+      /실행\s*가이드|시민\s*가이드|step\s*by\s*step|action\s*plan/i,
+    ],
+    tool: "chain_full_research",
+    extract: (query) => ({ query, scenario: "action_plan" }),
+    reason: "시민 상황 키워드 → chain_full_research (action_plan 5단계 가이드)",
+    priority: 7,
   },
 
   // ── 29-1. 인용 검증 (citation validator) ──

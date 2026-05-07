@@ -57,6 +57,7 @@ import { getLawSystemTree, getLawSystemTreeSchema } from "./tools/law-system-tre
 import { getLinkedOrdinances, LinkedOrdinancesSchema, getLinkedOrdinanceArticles, LinkedOrdinanceArticlesSchema, getDelegatedLaws, DelegatedLawsSchema, getLinkedLawsFromOrdinance, LinkedLawsFromOrdinanceSchema } from "./tools/law-linkage.js"
 import { analyzeDocument, AnalyzeDocumentSchema } from "./tools/document-analysis.js"
 import { verifyCitations, VerifyCitationsSchema } from "./tools/verify-citations.js"
+import { impactMap, ImpactMapSchema } from "./tools/impact-map.js"
 // Chain tool imports
 import {
   chainLawSystem, chainLawSystemSchema,
@@ -647,6 +648,14 @@ export const allTools: McpTool[] = [
     handler: verifyCitations
   },
 
+  // === 영향 그래프 (v4.0 killer feature) ===
+  {
+    name: "impact_map",
+    description: "[영향그래프] 조문 한 줄의 파급효과 그래프. 특정 조문(예: 민법 제103조)을 인용한 모든 판례·헌재·해석례·행심·자치법규를 역방향 탐색 + 그 조문이 인용한 다른 법령(정방향) + mermaid 시각화. lawName + jo 필수. 다른 chain은 query 단방향이지만 이 도구는 '한 조문 → 영향받는 모든 곳' 역방향.",
+    schema: ImpactMapSchema,
+    handler: impactMap
+  },
+
   // === 메타 도구 (lite 프로필용) ===
   {
     name: "discover_tools",
@@ -719,7 +728,8 @@ const V3_EXPOSED = new Set([
   "get_annexes",
   "search_decisions", "get_decision_text",
   "discover_tools", "execute_tool",
-  "verify_citations",  // v3.5: LLM 환각 방지 인용 검증 (killer feature)
+  "verify_citations",  // v3.5: LLM 환각 방지 인용 검증
+  "impact_map",        // v4.0: 조문 영향 그래프 (역방향 탐색 + mermaid)
 ])
 
 // 이름 기반 O(1) 조회용 Map

@@ -1,5 +1,65 @@
 # Changelog
 
+## [4.0.0] - 2026-05-07
+
+### Added (3개 킬러 기능 한꺼번에 — 도구 추가는 1개로 최소화, 기존 시나리오 시스템 재활용)
+
+#### 1. `impact_map` (신규 도구) — 조문 한 줄의 파급효과 그래프
+**왜 필요했나**: 법령은 단독으로 살지 않는다. 한 조문(예: 민법 제103조)은 수십 건 판례에 인용되고, 헌재 결정의 근거가 되고, 자치법규에 묻어가고, 행정해석을 낳는다. 이 "조문 한 줄의 그림자"를 매뉴얼로 추적하면 법무팀 며칠 작업. 한 번에 보는 도구가 없었음.
+
+- **입력**: `lawName` + `jo` (예: `민법`, `제103조`)
+- **역방향 탐색** (병렬): 대법원 판례 / 헌재 결정 / 법령해석례 / 행정심판례 / 자치법규
+- **정방향 탐색**: 그 조문 본문 안에서 인용된 다른 법령 자동 추출 (`「OO법」` 패턴)
+- **출력**: 텍스트 트리 + **mermaid 그래프 코드** (claude.ai에서 시각화)
+- **차별점**: 다른 모든 chain은 query 단방향. 이 도구는 "특정 조문 → 영향받는 모든 곳" 역방향 그래프.
+- **검증**: `민법 제103조` 호출 시 판례 1건/헌재 6건/조례 2건 정확 추출 (테스트 완료)
+
+#### 2. `time_travel` 시나리오 — 두 시점 본문 자동 diff
+**왜 필요했나**: 기존 `compare_old_new`는 직전 개정 신구대조표만. "2024년 1월 vs 2026년 5월" 같은 임의 시점 비교 불가능. 법무팀/공무원/연구자 매뉴얼 비교 작업.
+
+- **호스트**: `chain_amendment_track` (신규 도구 추가 X — 시나리오 확장)
+- **신규 파라미터**: `fromDate`, `toDate` (YYYYMMDD)
+- **처리**: 연혁(`lsHistory`)에서 두 시점에 시행 중이었던 MST 결정 → 본문 raw JSON 조회 → 조문 단위 자동 diff
+- **출력**: 추가(+) / 삭제(-) / 변경(△) 조문 분류 + 변경 전후 본문 미리보기 + 자수 변화량
+- **검증**: 개인정보보호법 2020-01-01 vs 2025-11-01 비교 시 제25조(영상정보처리기기→고정형 영상정보처리기기 명칭 변경, 자수 +222), 제26조(업무위탁 +326자), 제32조의2(인증기관 행정자치부장관→보호위원회 변경) 등 정확 검출
+
+#### 3. `action_plan` 시나리오 — 시민 친화 5단계 실행 가이드
+**왜 필요했나**: "전세금 못 받았어", "음주운전 걸렸어"처럼 시민이 자연어로 던지는 질문 → 기존 chain은 법령/판례 데이터 덤프만 줌. 시민이 "그래서 뭘 해야 하나"는 모름.
+
+- **호스트**: `chain_full_research`
+- **5단계 출력**:
+  1. STEP 1 ─ 상황 진단 (적용 법령 자동 식별)
+  2. STEP 2 ─ 권리·구제 수단 (실제 판례 시그널 + "패소 사유의 역 = 승소 조건")
+  3. STEP 3 ─ 신청 기관 / 기한 (행정규칙 + 해석례)
+  4. STEP 4 ─ 필요 서류 / 양식 (별표/별지서식 자동)
+  5. STEP 5 ─ 함정 / 주의 (시효·개정·법률구조공단 안내)
+- **시민 키워드 → 법률 도메인 자동 매핑**: 전세금→주택임대차보호법 보증금, 해고→근로기준법 부당해고, 음주운전→도로교통법, 체불→근로기준법 임금, 산재→산업재해보상보험법 등 10개 도메인
+- **검증**: "전세금 못 받았어" → 주택임대차보호법 자동 매핑, 판례 20건/해석 4건/별표 2건/행정규칙 4건 일괄 수집
+
+### Added (기존 도구 활용 자연어 라우팅)
+- **`query-router.ts`** 신규 패턴 3개:
+  - `impact_map`: "민법 제103조 영향그래프" / "민법 제103조 인용한 판례" → impact_map 직행
+  - `time_travel`: "관세법 2024 vs 2026" / "관세법 시점 비교" → chain_amendment_track + scenario=time_travel + 자동 fromDate/toDate 추출
+  - `action_plan`: "전세금 못 받았어" / "음주운전 걸렸어" / "해고 받았어" → chain_full_research + scenario=action_plan
+- **specific_article 패턴 양보 로직**: "제N조 영향그래프/파급/인용한 판례" 키워드 동반 시 _skip → impact_map에 위임
+
+### Fixed (4.0 작업 중 발견)
+- **`api-client.fetchApi`**: `type=HTML` 응답에 `checkHtmlError`가 무조건 throw 하던 버그 → `type !== "HTML"`일 때만 적용하도록 수정. 기존 `searchHistoricalLaw`/`getHistoricalLaw` 등 lsHistory 기반 도구가 핫픽스(v3.5.5) 이후 깨져있던 것을 함께 복구.
+
+### Changed
+- **노출 도구 16 → 17개** (`impact_map` 추가)
+- **시나리오 7 → 9개** (`time_travel`, `action_plan` 추가)
+- `chainAmendmentTrackSchema`: `scenario` enum 확장(`timeline`, `time_travel`), `fromDate`/`toDate` 필드 신규
+- `chainFullResearchSchema`: `scenario` enum 확장(`customs`, `action_plan`)
+- `ScenarioContext`: `extras?: Record<string, unknown>` 필드 추가 — 시나리오별 추가 파라미터 전달용
+
+### Files
+- 신규: `src/tools/impact-map.ts`, `src/tools/scenarios/time-travel.ts`, `src/tools/scenarios/action-plan.ts`, `src/lib/historical-utils.ts`
+- 수정: `src/tools/scenarios/types.ts`, `src/tools/scenarios/index.ts`, `src/tools/chains.ts`, `src/tool-registry.ts`, `src/lib/query-router.ts`, `src/lib/api-client.ts`
+
+### Design Note
+v4.0의 핵심 원칙은 **"신규 도구 최소화, 기존 시나리오 시스템 재활용"**. 3개 킬러 기능을 만들면서 새 도구는 1개(`impact_map`)만 추가하고 나머지 2개는 기존 chain의 시나리오로 통합. 도구 수 폭증 방지 + LLM이 도구 선택할 때 혼란 줄이기.
+
 ## [3.5.5] - 2026-05-06
 
 ### Fixed (긴급 핫픽스: 법제처 API 봇 차단 우회)

@@ -32,6 +32,8 @@ export interface ScenarioContext {
     lawType: string
   }
   apiKey?: string
+  /** 시나리오별 추가 파라미터 (time_travel: fromDate/toDate, action_plan: situation 등) */
+  extras?: Record<string, unknown>
 }
 
 /** 지원하는 시나리오 목록 */
@@ -41,8 +43,10 @@ export type ScenarioType =
   | "manual"        // chain_procedure_detail: 공무원 처리 매뉴얼
   | "delegation"    // chain_law_system: 위임입법 미이행 감시
   | "impact"        // chain_law_system: 법령 개정 영향도
-  | "timeline"      // chain_amendment_track: 시계열 타임라인
+  | "timeline"      // chain_amendment_track: 시계열 타임라인 (판례·해석례 매핑)
+  | "time_travel"   // chain_amendment_track: 두 시점 본문 자동 diff (v4.0)
   | "compliance"    // chain_ordinance_compare: 상위법 적합성
+  | "action_plan"   // chain_full_research: 시민 친화 step-by-step 가이드 (v4.0)
 
 /** callTool 래퍼 — 체인과 동일 시그니처 */
 export async function callTool(

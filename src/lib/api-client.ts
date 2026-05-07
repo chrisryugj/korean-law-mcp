@@ -386,7 +386,10 @@ export class LawApiClient {
     await this.throwIfError(response, `fetchApi(${params.target})`)
 
     const text = await response.text()
-    this.checkHtmlError(text, "API 응답 오류 - 파라미터를 확인해주세요")
+    // type=HTML 응답은 HTML이 정상 — checkHtmlError(XML/JSON 응답에 HTML이 오면 에러) 우회
+    if (params.type !== "HTML") {
+      this.checkHtmlError(text, "API 응답 오류 - 파라미터를 확인해주세요")
+    }
 
     return text
   }

@@ -13,6 +13,8 @@ import { runDelegationScenario } from "./delegation.js"
 import { runImpactScenario } from "./impact.js"
 import { runTimelineScenario } from "./timeline.js"
 import { runComplianceScenario } from "./compliance.js"
+import { runTimeTravelScenario } from "./time-travel.js"
+import { runActionPlanScenario } from "./action-plan.js"
 
 const SCENARIO_RUNNERS: Record<ScenarioType, (ctx: ScenarioContext) => Promise<ScenarioResult>> = {
   penalty: runPenaltyScenario,
@@ -22,6 +24,8 @@ const SCENARIO_RUNNERS: Record<ScenarioType, (ctx: ScenarioContext) => Promise<S
   impact: runImpactScenario,
   timeline: runTimelineScenario,
   compliance: runComplianceScenario,
+  time_travel: runTimeTravelScenario,
+  action_plan: runActionPlanScenario,
 }
 
 /** 시나리오 실행 — 알 수 없는 타입이면 빈 결과 반환 */
@@ -72,8 +76,21 @@ export function detectScenario(query: string, hostChain: string): ScenarioType |
   }
 
   if (hostChain === "chain_amendment_track") {
+    // time_travel 우선 (두 시점 명시 패턴)
+    if (/\d{4}\s*[\.\-년]\s*\d{1,2}.*(?:vs|와|과|↔|~|부터|에서)/.test(query) ||
+        /시점\s*비교|버전\s*비교|두\s*시점|time\s*travel/i.test(query)) {
+      return "time_travel"
+    }
     if (/시계열|타임라인|판례\s*변화|해석\s*변화|적용\s*시점|소급/.test(query)) {
       return "timeline"
+    }
+  }
+
+  if (hostChain === "chain_full_research") {
+    // 시민 시나리오 키워드 (action_plan)
+    if (/(?:받았어|걸렸어|당했어|돼\?|되나|어떻게\s*해야|뭘\s*해야|뭐\s*해야)/.test(query) ||
+        /실행\s*가이드|단계\s*별|step\s*by\s*step|시민\s*가이드|action\s*plan/i.test(query)) {
+      return "action_plan"
     }
   }
 

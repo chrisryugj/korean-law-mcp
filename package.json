@@ -1,7 +1,7 @@
 {
   "name": "korean-law-mcp",
-  "version": "3.5.5",
-  "description": "법제처 41개 API → 16개 MCP 도구. 법령·판례·조례·조약 + LLM 환각 방지 인용 검증 + NOT_FOUND 명시 시그널",
+  "version": "4.0.0",
+  "description": "법제처 41개 API → 17개 MCP 도구. 법령·판례·조례·조약 + LLM 환각 방지 인용 검증 + 조문 영향 그래프(impact_map) + 시점 비교(time_travel) + 시민 가이드(action_plan)",
   "type": "module",
   "main": "build/index.js",
   "types": "build/index.d.ts",

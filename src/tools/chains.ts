@@ -334,8 +334,12 @@ export const chainAmendmentTrackSchema = z.object({
   query: z.string().describe("법령명 (예: '관세법', '지방세특례제한법')"),
   mst: z.string().optional().describe("법령일련번호 (알고 있으면)"),
   lawId: z.string().optional().describe("법령ID (알고 있으면)"),
-  scenario: z.enum(["timeline"]).optional()
-    .describe("확장 시나리오. timeline=시계열 종합 타임라인 (개정 구간별 판례·해석례 매핑). 미지정 시 쿼리에서 자동 감지."),
+  scenario: z.enum(["timeline", "time_travel"]).optional()
+    .describe("확장 시나리오. timeline=시계열 타임라인(판례·해석례 매핑) | time_travel=두 시점 본문 자동 diff(v4.0, fromDate/toDate 필요). 미지정 시 쿼리에서 자동 감지."),
+  fromDate: z.string().regex(/^\d{8}$/).optional()
+    .describe("[time_travel 전용] 비교 시작 시점 YYYYMMDD (예: '20240101')"),
+  toDate: z.string().regex(/^\d{8}$/).optional()
+    .describe("[time_travel 전용] 비교 종료 시점 YYYYMMDD (예: '20251101')"),
   apiKey: z.string().optional(),
 })
 
@@ -374,7 +378,10 @@ export async function chainAmendmentTrack(
     const scenario = (input.scenario || detectScenario(input.query, "chain_amendment_track")) as ScenarioType | null
     if (scenario) {
       const law = mst ? { lawName, lawId: lawId || "", mst, lawType: "" } : undefined
-      const ctx: ScenarioContext = { apiClient, query: input.query, law, apiKey: input.apiKey }
+      const extras: Record<string, unknown> = {}
+      if (input.fromDate) extras.fromDate = input.fromDate
+      if (input.toDate) extras.toDate = input.toDate
+      const ctx: ScenarioContext = { apiClient, query: input.query, law, apiKey: input.apiKey, extras }
       const sr = await runScenario(scenario, ctx)
       parts.push(formatSections(sr.sections))
       parts.push(formatSuggestedActions(sr.suggestedActions))
@@ -461,9 +468,9 @@ export async function chainOrdinanceCompare(
 // ========================================
 
 export const chainFullResearchSchema = z.object({
-  query: z.string().describe("자연어 질문 (예: '기간제 근로자 2년 초과 사용', '음주운전 처벌 기준')"),
-  scenario: z.enum(["customs"]).optional()
-    .describe("확장 시나리오. customs=관세·통관 종합 (관세3법 + 해석례 + FTA조약 + 세율표 + 조세심판). 미지정 시 쿼리에서 자동 감지."),
+  query: z.string().describe("자연어 질문 (예: '기간제 근로자 2년 초과 사용', '음주운전 처벌 기준', '전세금 못 받았어')"),
+  scenario: z.enum(["customs", "action_plan"]).optional()
+    .describe("확장 시나리오. customs=관세·통관 종합 | action_plan=시민 친화 5단계 실행 가이드(v4.0, 진단→권리→기관/기한→서류→함정). 미지정 시 쿼리에서 자동 감지."),
   apiKey: z.string().optional(),
 })
 
