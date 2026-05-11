@@ -3,6 +3,7 @@
  */
 
 import { z } from "zod"
+import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError } from "../lib/errors.js"
 
 export const ExternalLinksSchema = z.object({
@@ -25,7 +26,7 @@ export async function getExternalLinks(
   input: ExternalLinksInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    let resultText = "🔗 외부 링크\n\n"
+    let resultText = "외부 링크\n\n"
 
     switch (input.linkType) {
       case "law": {
@@ -121,7 +122,7 @@ export async function getExternalLinks(
     return {
       content: [{
         type: "text",
-        text: resultText
+        text: truncateResponse(resultText)
       }]
     }
   } catch (error) {
@@ -133,7 +134,7 @@ export async function getExternalLinks(
  * 법령 외부 링크 생성
  */
 function generateLawLinks(lawId?: string, mst?: string, lawName?: string, jo?: string): string {
-  let links = "📜 법령 관련 링크:\n\n"
+  let links = "법령 관련 링크:\n\n"
   let linkNum = 1
 
   // 1. 한글 URL (법령명 기반) - 우선순위 최상위
@@ -172,7 +173,7 @@ function generateLawLinks(lawId?: string, mst?: string, lawName?: string, jo?: s
  * 판례 외부 링크 생성
  */
 function generatePrecedentLinks(precedentId: string): string {
-  let links = "⚖️ 판례 관련 링크:\n\n"
+  let links = "판례 관련 링크:\n\n"
 
   const lawUrl = `https://www.law.go.kr/LSW/precInfoP.do?precSeq=${precedentId}`
   links += `1. [법제처 판례 상세](${lawUrl})\n\n`
@@ -189,7 +190,7 @@ function generatePrecedentLinks(precedentId: string): string {
  * 법령해석례 외부 링크 생성
  */
 function generateInterpretationLinks(interpretationId: string): string {
-  let links = "📖 법령해석례 관련 링크:\n\n"
+  let links = "법령해석례 관련 링크:\n\n"
 
   const detailUrl = `https://www.law.go.kr/LSW/lsExpcInfoP.do?lsExpcSeq=${interpretationId}`
   links += `1. [법제처 해석례 상세](${detailUrl})\n\n`
@@ -203,7 +204,7 @@ function generateInterpretationLinks(interpretationId: string): string {
  * 자치법규 외부 링크 생성
  */
 function generateOrdinanceLinks(ordinanceId?: string, mst?: string, lawName?: string, jo?: string): string {
-  let links = "🏛️ 자치법규 관련 링크:\n\n"
+  let links = "자치법규 관련 링크:\n\n"
   let linkNum = 1
 
   // 1. 한글 URL (법령명 기반)
@@ -242,7 +243,7 @@ function generateOrdinanceLinks(ordinanceId?: string, mst?: string, lawName?: st
  * 행정규칙 외부 링크 생성
  */
 function generateAdminRuleLinks(adminRuleId: string): string {
-  let links = "📋 행정규칙 관련 링크:\n\n"
+  let links = "행정규칙 관련 링크:\n\n"
 
   const detailUrl = `https://www.law.go.kr/LSW/admRulInfoP.do?admRulSeq=${adminRuleId}`
   links += `1. [법제처 행정규칙 상세](${detailUrl})\n\n`

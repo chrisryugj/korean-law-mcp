@@ -6,6 +6,7 @@
 import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 import { getThreeTier } from "./three-tier.js"
+import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError } from "../lib/errors.js"
 
 export const GetLawTreeSchema = z.object({
@@ -73,7 +74,7 @@ export async function getLawTree(
 
     // Build tree visualization
     let output = `=== 법령 트리 구조 ===\n\n`
-    output += `📜 ${lawName || "법률"}\n`
+    output += `${lawName || "법률"}\n`
 
     if (structure.law.length > 0) {
       output += `\n└─ 법률 (${structure.law.length}개 조항)\n`
@@ -105,12 +106,12 @@ export async function getLawTree(
       }
     }
 
-    output += `\n\n💡 상세한 위임 관계는 get_three_tier Tool을 사용하세요.`
+    // 후속 도구 안내 제거 (LLM이 이미 도구 목록을 알고 있음)
 
     return {
       content: [{
         type: "text",
-        text: output
+        text: truncateResponse(output)
       }]
     }
   } catch (error) {

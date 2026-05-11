@@ -130,13 +130,20 @@ async function runInteractive(): Promise<void> {
 
     console.log()
     executing = false
+    sigintCount = 0
     rl.resume()
     rl.prompt()
   })
 
-  // Ctrl+C: 실행 중이면 중단 알림, 아니면 종료
+  // Ctrl+C: 실행 중이면 중단 알림, 2회 연속 시 강제 종료
+  let sigintCount = 0
   rl.on("SIGINT", () => {
     if (executing) {
+      sigintCount++
+      if (sigintCount >= 2) {
+        console.log(fmt.dim("\n강제 종료합니다."))
+        process.exit(130)
+      }
       console.log(fmt.yellow("\n  (Ctrl+C: 현재 쿼리 완료를 기다립니다. 강제 종료: Ctrl+C x2)"))
     } else {
       console.log(fmt.dim("\n종료합니다."))

@@ -61,10 +61,10 @@ export async function getThreeTier(
     for (let i = 0; i < maxArticles; i++) {
       const article = articles[i]
 
-      resultText += `━━━━━━━━━━━━━━━━━━━━━━\n`
+      resultText += `---\n`
       resultText += `${article.joNum}`
       if (article.title) resultText += ` ${article.title}`
-      resultText += `\n━━━━━━━━━━━━━━━━━━━━━━\n\n`
+      resultText += `\n---\n\n`
 
       if (article.delegations.length === 0) {
         resultText += `(위임 조문 없음)\n\n`
@@ -72,9 +72,9 @@ export async function getThreeTier(
       }
 
       for (const delegation of article.delegations) {
-        const typeLabel = delegation.type === "시행령" ? "📜 시행령"
-                        : delegation.type === "시행규칙" ? "📋 시행규칙"
-                        : "📑 행정규칙"
+        const typeLabel = delegation.type === "시행령" ? "[시행령]"
+                        : delegation.type === "시행규칙" ? "[시행규칙]"
+                        : "[행정규칙]"
 
         resultText += `${typeLabel} ${delegation.lawName}`
         if (delegation.joNum) resultText += ` ${delegation.joNum}`
@@ -88,7 +88,7 @@ export async function getThreeTier(
           if (cleanContent.length > 500) {
             const lastNewline = cleanContent.lastIndexOf('\n', 500)
             const cutPos = lastNewline > 300 ? lastNewline : 500
-            resultText += `${cleanContent.substring(0, cutPos)}\n   ⚠️ (위임 내용 ${cleanContent.length.toLocaleString()}자 중 일부만 표시)\n\n`
+            resultText += `${cleanContent.substring(0, cutPos)}\n   (위임 내용 ${cleanContent.length.toLocaleString()}자 중 일부만 표시)\n\n`
           } else if (cleanContent) {
             resultText += `${cleanContent}\n\n`
           }
@@ -100,7 +100,7 @@ export async function getThreeTier(
 
     if (articles.length > maxArticles) {
       resultText += `\n... 외 ${articles.length - maxArticles}개 조문 (생략)\n`
-      resultText += `💡 전체 ${articles.length}개 조문 중 처음 ${maxArticles}개만 표시합니다.\n`
+      resultText += `전체 ${articles.length}개 조문 중 처음 ${maxArticles}개만 표시합니다.\n`
     }
 
     return {

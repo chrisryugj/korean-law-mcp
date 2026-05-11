@@ -103,6 +103,10 @@ const routePatterns: Pattern[] = [
     ],
     tool: "get_law_text",
     extract: (query) => {
+      // impact_map 키워드가 있으면 양보 (영향그래프/인용한 판례 등)
+      if (/(?:파급|영향\s*그래프|impact|인용한\s*(?:모든|판례|판결|어디))/i.test(query)) {
+        return { _skip: true }
+      }
       const jo = extractArticleNumber(query)
       const lawName = extractLawName(query)
       return { _searchQuery: lawName, jo, _needsMst: true }
@@ -343,6 +347,57 @@ const routePatterns: Pattern[] = [
     priority: 17,
   },
 
+  // ── 17-1. 관세/통관 종합 (scenario: customs) ──
+  {
+    name: "customs_clearance",
+    patterns: [
+      /(?:관세|수입|수출|통관).*(?:법|절차|기준|체크|확인|검토)/,
+      /FTA.*(?:적용|원산지|세율|협정)/,
+      /HS\s*코드|품목\s*분류/,
+    ],
+    tool: "chain_full_research",
+    extract: (query) => ({ query, scenario: "customs" }),
+    reason: "관세·통관 키워드 → 종합 리서치 (관세 시나리오)",
+    priority: 13,
+  },
+
+  // ── 17-2. 처분·벌칙 기준 (scenario: penalty) ──
+  {
+    name: "penalty_check",
+    patterns: [
+      /(?:과태료|벌칙|과징금|영업\s*정지|행정\s*처분).*(?:기준|금액|감경|얼마)/,
+      /(?:위반|적발).*(?:처분|벌금|과태료)/,
+    ],
+    tool: "chain_action_basis",
+    extract: (query) => ({ query, scenario: "penalty" }),
+    reason: "처분·벌칙 키워드 → 처분근거 (벌칙 시나리오)",
+    priority: 13,
+  },
+
+  // ── 17-3. 위임입법 미이행 (scenario: delegation) ──
+  {
+    name: "delegation_audit",
+    patterns: [
+      /위임\s*입법|미이행|미제정|하위\s*법령\s*제정/,
+    ],
+    tool: "chain_law_system",
+    extract: (query) => ({ query, scenario: "delegation" }),
+    reason: "위임입법 키워드 → 법체계 (위임감시 시나리오)",
+    priority: 9,
+  },
+
+  // ── 17-4. 영향도 분석 (scenario: impact) ──
+  {
+    name: "regulation_impact",
+    patterns: [
+      /영향\s*도|영향\s*분석|연쇄\s*개정|파급\s*효과/,
+    ],
+    tool: "chain_law_system",
+    extract: (query) => ({ query, scenario: "impact" }),
+    reason: "영향도 키워드 → 법체계 (영향도 시나리오)",
+    priority: 9,
+  },
+
   // ── 18. "방법" 단독 — procedure 폴백 ──
   {
     name: "method_fallback",
@@ -367,6 +422,31 @@ const routePatterns: Pattern[] = [
     }),
     reason: "관세 해석 키워드 → 관세 해석례 검색",
     priority: 9,
+  },
+
+  // ── 19-1. 국세청 법령해석 (#35) ──
+  // search_decisions의 nts 도메인으로 라우팅 — 신규 노출 도구 없이 통합 도구 경유
+  // priority=3: admin_rule(4, '예규' 키워드 매칭)보다 우선 — 국세청/세목 키워드 동반 시 nts 우선
+  {
+    name: "nts_interpretation",
+    patterns: [
+      /국세청\s*(?:법령\s*)?해석|국세청\s*(?:해석|질의|회신|예규)/,
+      // "국세청 + 세목" 단독 패턴 (예: "국세청 양도세", "국세청 부가세")
+      /국세청\s+(?:양도|소득|법인|부가가치|부가|상속|증여|종합부동산|취득|재산|지방|양도소득)세/,
+      // 세목 + 해석/예규/질의 (양도세/부가세 같은 약칭 포함)
+      /(?:양도소득|양도|소득|법인|부가가치|부가|상속|증여|종합부동산|취득|재산|지방)세\s*(?:해석|예규|질의|회신)/,
+      /예규\s*(?:국세|소득세|법인세|부가세|양도소득세|양도세|상속세|증여세)/,
+    ],
+    tool: "search_decisions",
+    extract: (query) => {
+      const cleaned = query
+        .replace(/국세청|법령해석|해석례?|질의|회신|예규/g, "")
+        .replace(/\s+/g, " ")
+        .trim()
+      return { domain: "nts", query: cleaned || query }
+    },
+    reason: "국세청 해석 키워드 → search_decisions(domain=nts) — 국세청 직접 회신 해석례",
+    priority: 3,
   },
 
   // ── 20. 공정위 결정문 ──
@@ -508,6 +588,145 @@ const routePatterns: Pattern[] = [
     extract: (query) => ({ query }),
     reason: "지역명 시작 → 자치법규 검색",
     priority: 20,
+  },
+
+  // ── 29-0. 조문 영향 그래프 (impact_map, v4.0) ──
+  // "민법 103조 영향", "민법 제103조 파급효과", "이 조문 인용한 판례 전부"
+  {
+    name: "impact_map",
+    patterns: [
+      /(.+?)\s*제?(\d+)조(?:의(\d+))?\s*(?:파급|영향\s*그래프|impact|인용한\s*(?:모든|판례|판결))/i,
+      /(.+?)\s*제?(\d+)조(?:의(\d+))?\s*인용\s*(?:판례|모두|전부|어디)/,
+      /조문\s*(?:파급|임팩트|영향\s*그래프)/,
+    ],
+    tool: "impact_map",
+    extract: (query) => {
+      const joMatch = query.match(/제?(\d+)조(?:의(\d+))?/)
+      const lawNameMatch = query.match(/^(.+?)\s*제?\d+조/)
+      const lawName = lawNameMatch ? lawNameMatch[1].trim() : ""
+      const jo = joMatch ? (joMatch[2] ? `제${joMatch[1]}조의${joMatch[2]}` : `제${joMatch[1]}조`) : ""
+      if (!lawName || !jo) return { _fallback: true, query }
+      return { lawName, jo }
+    },
+    reason: "조문 영향 그래프 키워드 → impact_map (역방향 인용 그래프 + mermaid)",
+    priority: 2,
+  },
+
+  // ── 29-0-1. 시점 비교 (time_travel, v4.0) ──
+  // "관세법 2024 vs 2026", "관세법 2024-01-01 부터 2026-04-01 까지"
+  {
+    name: "time_travel",
+    patterns: [
+      /(.+?)\s*(\d{4})[\.\-년]?\s*(?:vs|vs\.|↔|와|과|~|부터.*?(?:까지|에서)?)\s*(\d{4})/,
+      /시점\s*비교|버전\s*비교|두\s*시점|time\s*travel/i,
+    ],
+    tool: "chain_amendment_track",
+    extract: (query, match) => {
+      // 두 시점에서 YYYYMMDD 추출 시도
+      const dates = query.match(/(\d{4})[\.\-]?(\d{1,2})?[\.\-]?(\d{1,2})?/g) || []
+      const lawName = (match?.[1] || query).trim()
+      const params: Record<string, unknown> = { query: lawName, scenario: "time_travel" }
+      const toYmd = (s: string): string | undefined => {
+        const m = s.match(/(\d{4})[\.\-]?(\d{1,2})?[\.\-]?(\d{1,2})?/)
+        if (!m) return undefined
+        const y = m[1]
+        const mo = (m[2] || "01").padStart(2, "0")
+        const d = (m[3] || "01").padStart(2, "0")
+        return `${y}${mo}${d}`
+      }
+      if (dates[0]) {
+        const f = toYmd(dates[0])
+        if (f) params.fromDate = f
+      }
+      if (dates[1]) {
+        const t = toYmd(dates[1])
+        if (t) params.toDate = t
+      }
+      return params
+    },
+    reason: "두 시점 비교 → chain_amendment_track (time_travel 시나리오 + 자동 diff)",
+    priority: 3,
+  },
+
+  // ── 29-0-2. 시민 시나리오 (action_plan, v4.0) ──
+  // "전세금 못 받았어", "음주운전 걸렸어", "해고 통보 받았어"
+  {
+    name: "action_plan",
+    patterns: [
+      /(?:받았어|걸렸어|당했어|못\s*받|돼\?|어떻게\s*해야)/,
+      /실행\s*가이드|시민\s*가이드|step\s*by\s*step|action\s*plan/i,
+    ],
+    tool: "chain_full_research",
+    extract: (query) => ({ query, scenario: "action_plan" }),
+    reason: "시민 상황 키워드 → chain_full_research (action_plan 5단계 가이드)",
+    priority: 7,
+  },
+
+  // ── 29-1. 인용 검증 (citation validator) ──
+  {
+    name: "verify_citations",
+    patterns: [
+      /인용\s*(?:검증|확인|체크)/,
+      /(?:조문|조항)\s*실존/,
+      /(?:환각|hallucination)\s*(?:검증|체크)/i,
+      /이\s*(?:텍스트|글|답변)에.*조문.*(?:맞|실제)/,
+    ],
+    tool: "verify_citations",
+    extract: (query) => ({ text: query }),
+    reason: "인용검증 키워드 → 조문 실존/내용 검증",
+    priority: 2,
+  },
+
+  // ── 29-2. 법령 비교 ──
+  {
+    name: "law_comparison",
+    patterns: [
+      /(.+?)\s*(?:와|과|vs\.?)\s*(.+?)\s*(?:차이|비교|다른\s*점)/,
+      /(.+?)\s*(?:vs|VS)\s*(.+)/,
+    ],
+    tool: "chain_law_system",
+    extract: (query) => ({ query, scenario: undefined }),
+    reason: "법령 비교 키워드 → 법체계 체인 (두 법령 모두 구조 확인)",
+    priority: 8,
+  },
+
+  // ── 29-3. 시간 필터 (최근 N년 개정) ──
+  // (기존 date-parser가 날짜범위 처리하지만 "최근 N년" 명시적 패턴 강화)
+  {
+    name: "time_filter_amendment",
+    patterns: [
+      /최근\s*\d+\s*(?:년|개월)\s*(?:이?내|동안)\s*개정/,
+      /(?:20\d{2})\s*년\s*이후\s*개정/,
+    ],
+    tool: "chain_amendment_track",
+    extract: (query) => ({ query: extractLawName(query) || query }),
+    reason: "시간 필터 + 개정 키워드 → 개정추적 체인",
+    priority: 9,
+  },
+
+  // ── 29-4. 손해배상·불법행위 (민사 일반) ──
+  {
+    name: "civil_liability",
+    patterns: [
+      /손해\s*배상|불법\s*행위|위자료|과실\s*비율/,
+    ],
+    tool: "chain_full_research",
+    extract: (query) => ({ query }),
+    reason: "민사 책임 키워드 → 종합 리서치 (민법+판례+해석례)",
+    priority: 12,
+  },
+
+  // ── 29-5. 계약서/약관 검토 (기존 chain_document_review 라우팅 강화) ──
+  {
+    name: "contract_review",
+    patterns: [
+      /(?:계약서|약관|협정서|합의서).*(?:검토|리스크|독소|위험|체크)/,
+      /(?:독소\s*조항|불공정\s*조항)/,
+    ],
+    tool: "chain_document_review",
+    extract: (query) => ({ text: query }),
+    reason: "계약서/약관 검토 키워드 → 문서 리스크 검토 체인",
+    priority: 6,
   },
 
   // ── 30. 명시적 법령명 (법, 령, 규칙으로 끝나는) ──

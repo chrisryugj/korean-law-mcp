@@ -7,7 +7,7 @@ import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 import { buildJO } from "../lib/law-parser.js"
 import { lawCache } from "../lib/cache.js"
-import { flattenContent, extractHangContent, cleanHtml } from "../lib/article-parser.js"
+import { formatArticleUnit } from "../lib/article-parser.js"
 import { truncateResponse } from "../lib/schemas.js"
 import type { ToolResponse } from "../lib/types.js"
 import { formatToolError } from "../lib/errors.js"
@@ -121,7 +121,7 @@ async function fetchArticlesForLaw(
     return { error: `${lawName}: 조문 내용을 찾을 수 없습니다.` }
   }
 
-  let resultText = `📜 ${lawName}\n`
+  let resultText = `${lawName}\n`
   let foundCount = 0
 
   for (const unit of articleUnits) {
@@ -134,56 +134,18 @@ async function fetchArticlesForLaw(
     if (!joCodes.has(unitJoCode)) continue
 
     foundCount++
-    const joTitle = unit.조문제목 || ""
 
-    if (joNum) {
-      const displayNum = joBranch && joBranch !== "0" ? `${joNum}조의${joBranch}` : `${joNum}조`
-      resultText += `제${displayNum}`
-      if (joTitle) resultText += ` ${joTitle}`
-      resultText += `\n`
-    }
-
-    let mainContent = ""
-    const rawContent = unit.조문내용
-
-    if (rawContent) {
-      const contentStr = flattenContent(rawContent)
-      if (contentStr) {
-        const headerMatch = contentStr.match(/^(제\d+조(?:의\d+)?\s*(?:\([^)]+\))?)[\s\S]*/)
-        if (headerMatch) {
-          const bodyPart = contentStr.substring(headerMatch[1].length).trim()
-          mainContent = bodyPart || contentStr
-        } else {
-          mainContent = contentStr
-        }
-      }
-    }
-
-    let paraContent = ""
-    if (unit.항) {
-      paraContent = extractHangContent(unit.항)
-    }
-
-    let finalContent = ""
-    if (mainContent) {
-      finalContent = mainContent
-      if (paraContent) {
-        finalContent += "\n" + paraContent
-      }
-    } else {
-      finalContent = paraContent
-    }
-
-    if (finalContent) {
-      const cleanContent = cleanHtml(finalContent)
-      resultText += `${cleanContent}\n\n`
+    const formatted = formatArticleUnit(unit)
+    if (formatted) {
+      if (formatted.header) resultText += `${formatted.header}\n`
+      if (formatted.body) resultText += `${formatted.body}\n\n`
     }
   }
 
   if (foundCount === 0) {
     resultText += "요청한 조문을 찾을 수 없습니다.\n"
   } else if (foundCount < lawReq.articles.length) {
-    resultText += `⚠️ ${lawReq.articles.length}개 중 ${foundCount}개 조문만 찾았습니다.\n`
+    resultText += `[주의] ${lawReq.articles.length}개 중 ${foundCount}개 조문만 찾았습니다.\n`
   }
 
   return { text: resultText, foundCount }
@@ -269,7 +231,7 @@ export async function getBatchArticles(
     }
     if (errors.length > 0) {
       if (finalText) finalText += "\n"
-      finalText += `⚠️ 오류:\n${errors.map(e => `  - ${e}`).join('\n')}`
+      finalText += `[ERROR] 오류:\n${errors.map(e => `  - ${e}`).join('\n')}`
     }
     if (!finalText) {
       finalText = "조회할 조문이 없습니다."

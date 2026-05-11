@@ -6,10 +6,10 @@ import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 import { buildJO } from "../lib/law-parser.js"
 import { lawCache } from "../lib/cache.js"
-import { flattenContent, extractHangContent, cleanHtml } from "../lib/article-parser.js"
+import { formatArticleUnit } from "../lib/article-parser.js"
 import { formatToolError } from "../lib/errors.js"
 
-import { MAX_RESPONSE_SIZE } from "../lib/schemas.js"
+import { MAX_RESPONSE_SIZE, truncateResponse } from "../lib/schemas.js"
 
 export const GetLawTextSchema = z.object({
   mst: z.string().optional().describe("법령일련번호 (search_law에서 획득)"),
@@ -72,7 +72,7 @@ export async function getLawText(
       return {
         content: [{
           type: "text",
-          text: "법령 데이터를 찾을 수 없습니다."
+          text: "[NOT_FOUND] 법령 데이터를 찾을 수 없습니다.\n\n⚠️ 법제처 API가 해당 mst/lawId에 대해 데이터를 반환하지 않았습니다. LLM이 조문을 추측/생성하지 마세요. search_law로 유효한 mst를 먼저 확인하세요."
         }],
         isError: true
       }
@@ -126,12 +126,12 @@ export async function getLawText(
     if (articleUnits.length === 0) {
       // 조문 범위 확인
       const range = extractArticleRange(lawData)
-      let errorMsg = resultText + "조문 내용을 찾을 수 없습니다."
+      let errorMsg = resultText + "[NOT_FOUND] 조문 내용을 찾을 수 없습니다.\n⚠️ LLM은 조문을 추측/생성하지 말고 아래 안내대로 재조회하세요."
 
       if (input.jo) {
         // 특정 조문 요청했는데 없는 경우
         if (range) {
-          errorMsg += `\n\n💡 이 법령은 제${range.min}조~제${range.max}조까지 총 ${range.count}개 조문만 존재합니다.`
+          errorMsg += `\n\n이 법령은 제${range.min}조~제${range.max}조까지 총 ${range.count}개 조문만 존재합니다.`
           errorMsg += `\n\n해결 방법:`
           errorMsg += `\n   1. 전체 조회:`
           if (input.mst) {
@@ -151,7 +151,7 @@ export async function getLawText(
           errorMsg += `\n\n   3. 키워드 검색:`
           errorMsg += `\n      search_all(query="${lawName.replace(/\s+(시행령|시행규칙)/, '')}")`
         } else {
-          errorMsg += `\n\n💡 조문을 찾을 수 없습니다. 다음을 시도해보세요:`
+          errorMsg += `\n\n[NOT_FOUND] 조문을 찾을 수 없습니다. 다음을 시도해보세요:`
           errorMsg += `\n   - 전체 법령 조회 (jo 파라미터 생략)`
           errorMsg += `\n   - 키워드 검색 (search_all 도구 사용)`
         }
@@ -182,84 +182,31 @@ export async function getLawText(
       }
 
       let tocText = resultText
-      tocText += `📋 목차 (총 ${tocItems.length}개 조문)\n\n`
+      tocText += `목차 (총 ${tocItems.length}개 조문)\n\n`
       tocText += tocItems.join("\n")
-      tocText += `\n\n💡 특정 조문 조회: get_law_text(`
+      tocText += `\n\n특정 조문 조회: get_law_text(`
       if (input.mst) {
         tocText += `mst="${input.mst}", jo="제XX조")`
       } else if (input.lawId) {
         tocText += `lawId="${input.lawId}", jo="제XX조")`
       }
-      tocText += `\n💡 여러 조문 일괄 조회: get_batch_articles 도구 사용`
+      tocText += `\n여러 조문 일괄 조회: get_batch_articles 도구 사용`
 
       lawCache.set(cacheKey, tocText)
       return {
         content: [{
           type: "text",
-          text: tocText
+          text: truncateResponse(tocText)
         }]
       }
     }
 
-    // 공통 파싱 유틸리티 (article-parser.ts에서 import)
-    // flattenContent, extractHangContent, cleanHtml은 상단 import 참조
-
     for (const unit of articleUnits) {
-      // 조문 여부 확인
-      if (unit.조문여부 !== "조문") continue
+      const formatted = formatArticleUnit(unit)
+      if (!formatted) continue
 
-      const joNum = unit.조문번호 || ""
-      const joBranch = unit.조문가지번호 || ""
-      const joTitle = unit.조문제목 || ""
-
-      // 조문 헤더 출력
-      if (joNum) {
-        const displayNum = joBranch && joBranch !== "0" ? `${joNum}조의${joBranch}` : `${joNum}조`
-        resultText += `제${displayNum}`
-        if (joTitle) resultText += ` ${joTitle}`
-        resultText += `\n`
-      }
-
-      // STEP 1: 조문내용 추출 (본문)
-      let mainContent = ""
-      const rawContent = unit.조문내용
-
-      if (rawContent) {
-        const contentStr = flattenContent(rawContent)
-        if (contentStr) {
-          // 제목 패턴 제거: 제X조(제목) 형식
-          const headerMatch = contentStr.match(/^(제\d+조(?:의\d+)?\s*(?:\([^)]+\))?)[\s\S]*/)
-          if (headerMatch) {
-            const bodyPart = contentStr.substring(headerMatch[1].length).trim()
-            mainContent = bodyPart || contentStr
-          } else {
-            mainContent = contentStr
-          }
-        }
-      }
-
-      // STEP 2: 항/호/목 내용 추출 (API가 단일 항을 객체로 반환하는 경우 포함)
-      let paraContent = ""
-      if (unit.항) {
-        paraContent = extractHangContent(unit.항)
-      }
-
-      // STEP 3: 본문 + 항/호/목 결합
-      let finalContent = ""
-      if (mainContent) {
-        finalContent = mainContent
-        if (paraContent) {
-          finalContent += "\n" + paraContent
-        }
-      } else {
-        finalContent = paraContent
-      }
-
-      // HTML 태그 제거 및 엔티티 변환
-      if (finalContent) {
-        const cleanContent = cleanHtml(finalContent)
-        resultText += `${cleanContent}\n\n`
-      }
+      if (formatted.header) resultText += `${formatted.header}\n`
+      if (formatted.body) resultText += `${formatted.body}\n\n`
     }
 
     // 응답 크기 제한 - 조문 경계에서 자르기 (mid-article 절단 방지)
@@ -302,14 +249,14 @@ export async function getLawText(
       const first = includedArticles[0] || "?"
       const last = includedArticles[includedArticles.length - 1] || "?"
 
-      resultText += `\n\n⚠️ 응답 크기 제한으로 ${totalArticles}개 조문 중 ${includedArticles.length}개만 포함 (${first}~${last})`
-      resultText += `\n💡 나머지 조문 조회: get_law_text(`
+      resultText += `\n\n[응답 크기 제한] ${totalArticles}개 조문 중 ${includedArticles.length}개만 포함 (${first}~${last})`
+      resultText += `\n나머지 조문 조회: get_law_text(`
       if (input.mst) {
         resultText += `mst="${input.mst}", jo="제XX조")`
       } else if (input.lawId) {
         resultText += `lawId="${input.lawId}", jo="제XX조")`
       }
-      resultText += `\n💡 여러 조문 일괄 조회: get_batch_articles 도구 사용`
+      resultText += `\n여러 조문 일괄 조회: get_batch_articles 도구 사용`
     }
 
     // Cache the result

@@ -6,7 +6,7 @@ import { z } from "zod"
 import { DOMParser } from "@xmldom/xmldom"
 import type { LawApiClient } from "../lib/api-client.js"
 import { truncateResponse } from "../lib/schemas.js"
-import { formatToolError } from "../lib/errors.js"
+import { formatToolError, noResultHint } from "../lib/errors.js"
 
 // search_admin_rule 스키마
 export const SearchAdminRuleSchema = z.object({
@@ -35,25 +35,7 @@ export async function searchAdminRule(
     const rules = doc.getElementsByTagName("admrul")
 
     if (rules.length === 0) {
-      let errorMsg = "검색 결과가 없습니다."
-      errorMsg += `\n\n💡 개선 방법:`
-      errorMsg += `\n   1. 단순 키워드 사용:`
-      const words = input.query.split(/\s+/)
-      if (words.length > 1) {
-        errorMsg += `\n      search_admin_rule(query="${words[0]}")`
-      }
-      errorMsg += `\n\n   2. 상위 법령명 검색:`
-      errorMsg += `\n      search_law(query="관련 법령명")`
-      errorMsg += `\n\n   3. 광범위 검색:`
-      errorMsg += `\n      search_all(query="${words[0] || input.query}")`
-
-      return {
-        content: [{
-          type: "text",
-          text: errorMsg
-        }],
-        isError: true
-      }
+      return noResultHint(input.query || "", "행정규칙")
     }
 
     let resultText = `행정규칙 검색 결과 (총 ${rules.length}건):\n\n`
@@ -78,7 +60,7 @@ export async function searchAdminRule(
       resultText += `   - 소관부처: ${orgName}\n\n`
     }
 
-    resultText += `\n💡 상세 내용을 조회하려면 get_admin_rule Tool을 사용하세요.`
+    // 후속 도구 안내 제거 (LLM이 이미 도구 목록을 알고 있음)
 
     return {
       content: [{
@@ -119,7 +101,7 @@ export async function getAdminRule(
     if (promDate) resultText += `공포일: ${promDate}\n`
     if (ruleType) resultText += `종류: ${ruleType}\n`
     if (orgName) resultText += `소관부처: ${orgName}\n`
-    resultText += `\n━━━━━━━━━━━━━━━━━━━━━━\n\n`
+    resultText += `\n---\n\n`
 
     // 조문 추출 - <조문내용> 태그 사용
     const joContents = doc.getElementsByTagName("조문내용")
@@ -128,8 +110,8 @@ export async function getAdminRule(
       // 첨부파일 확인
       const attachments = doc.getElementsByTagName("첨부파일링크")
       if (attachments.length > 0) {
-        resultText += "⚠️  이 행정규칙은 조문 형식이 아닌 첨부파일로 제공됩니다.\n\n"
-        resultText += "📎 첨부파일:\n"
+        resultText += "[주의] 이 행정규칙은 조문 형식이 아닌 첨부파일로 제공됩니다.\n\n"
+        resultText += "첨부파일:\n"
         for (let i = 0; i < attachments.length; i++) {
           const link = attachments[i].textContent || ""
           if (link) {
@@ -147,9 +129,9 @@ export async function getAdminRule(
       return {
         content: [{
           type: "text",
-          text: "행정규칙 전문을 조회할 수 없습니다.\n\n" +
-                "⚠️  법제처 API 제한: 일부 행정규칙은 전문 조회가 지원되지 않습니다.\n" +
-                "💡 대안: search_admin_rule 결과의 '행정규칙상세링크'를 통해 웹에서 확인하세요."
+          text: "[NOT_FOUND] 행정규칙 전문을 조회할 수 없습니다.\n\n" +
+                "⚠️ LLM은 행정규칙 내용을 추측/생성하지 마세요.\n" +
+                "[주의] 법제처 API 제한: 일부 행정규칙은 전문 조회가 지원되지 않습니다."
         }],
         isError: true
       }
@@ -169,8 +151,8 @@ export async function getAdminRule(
       // 첨부파일 확인
       const attachments = doc.getElementsByTagName("첨부파일링크")
       if (attachments.length > 0) {
-        resultText += "⚠️  이 행정규칙은 조문 형식이 아닌 첨부파일로 제공됩니다.\n\n"
-        resultText += "📎 첨부파일:\n"
+        resultText += "[주의] 이 행정규칙은 조문 형식이 아닌 첨부파일로 제공됩니다.\n\n"
+        resultText += "첨부파일:\n"
         for (let i = 0; i < attachments.length; i++) {
           const link = attachments[i].textContent || ""
           if (link) {
@@ -178,7 +160,7 @@ export async function getAdminRule(
           }
         }
       } else {
-        resultText += "⚠️  이 행정규칙은 조문 내용이 비어있습니다."
+        resultText += "[주의] 이 행정규칙은 조문 내용이 비어있습니다."
       }
       return {
         content: [{
@@ -200,7 +182,7 @@ export async function getAdminRule(
     // 부칙 추가
     const addendums = doc.getElementsByTagName("부칙내용")
     if (addendums.length > 0) {
-      resultText += `\n━━━━━━━━━━━━━━━━━━━━━━\n부칙\n━━━━━━━━━━━━━━━━━━━━━━\n\n`
+      resultText += `\n---\n부칙\n---\n\n`
       for (let i = 0; i < addendums.length; i++) {
         const content = addendums[i].textContent?.trim() || ""
         if (content.length > 0) {
@@ -212,7 +194,7 @@ export async function getAdminRule(
     // 별표 추가
     const annexes = doc.getElementsByTagName("별표내용")
     if (annexes.length > 0) {
-      resultText += `\n━━━━━━━━━━━━━━━━━━━━━━\n별표\n━━━━━━━━━━━━━━━━━━━━━━\n\n`
+      resultText += `\n---\n별표\n---\n\n`
       for (let i = 0; i < annexes.length; i++) {
         const title = doc.getElementsByTagName("별표제목")[i]?.textContent?.trim() || ""
         const content = annexes[i].textContent?.trim() || ""
@@ -269,15 +251,15 @@ export async function compareAdminRuleOldNew(
       const ruleName = doc.getElementsByTagName("행정규칙명")[0]?.textContent || "알 수 없음"
 
       let resultText = `행정규칙 신구법 대조: ${ruleName}\n`
-      resultText += `━━━━━━━━━━━━━━━━━━━━━━\n\n`
+      resultText += `---\n\n`
 
       const oldArticles = doc.getElementsByTagName("구조문")
       const newArticles = doc.getElementsByTagName("신조문")
       const maxCount = Math.max(oldArticles.length, newArticles.length)
 
       if (maxCount === 0) {
-        resultText += "신구법 대조 데이터가 없습니다."
-        return { content: [{ type: "text", text: resultText }] }
+        resultText += "[NOT_FOUND] 신구법 대조 데이터가 없습니다.\n⚠️ LLM은 대조 내용을 추측하지 마세요."
+        return { content: [{ type: "text", text: resultText }], isError: true }
       }
 
       const displayCount = Math.min(maxCount, 30)
@@ -285,7 +267,7 @@ export async function compareAdminRuleOldNew(
         const oldContent = oldArticles[i]?.textContent?.trim() || ""
         const newContent = newArticles[i]?.textContent?.trim() || ""
 
-        resultText += `━━━━━━━━━━━━━━━━━━━━━━\n`
+        resultText += `---\n`
         resultText += `[개정 전] ${oldContent || "(신설)"}\n\n`
         resultText += `[개정 후] ${newContent || "(삭제)"}\n\n`
       }
@@ -311,10 +293,7 @@ export async function compareAdminRuleOldNew(
 
     const rules = doc.getElementsByTagName("admrul")
     if (rules.length === 0) {
-      return {
-        content: [{ type: "text", text: "행정규칙 신구법 검색 결과가 없습니다." }],
-        isError: true
-      }
+      return noResultHint(input.query || "", "행정규칙 신구법")
     }
 
     let resultText = `행정규칙 신구법 검색 결과 (총 ${rules.length}건):\n\n`
@@ -333,7 +312,7 @@ export async function compareAdminRuleOldNew(
       resultText += `   - 소관부처: ${orgName}\n\n`
     }
 
-    resultText += `\n💡 본문 조회: compare_admin_rule_old_new(id="행정규칙ID")`
+    // 후속 도구 안내 제거 (LLM이 이미 도구 목록을 알고 있음)
 
     return { content: [{ type: "text", text: truncateResponse(resultText) }] }
   } catch (error) {

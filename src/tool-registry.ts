@@ -9,6 +9,8 @@ import { z } from "zod"
 import type { LawApiClient } from "./lib/api-client.js"
 import type { McpTool } from "./lib/types.js"
 import { formatToolError } from "./lib/errors.js"
+import { discoverTools, DiscoverToolsSchema, executeTool, ExecuteToolSchema, setAllToolsRef } from "./tools/meta-tools.js"
+import { searchDecisions, SearchDecisionsSchema, getDecisionText, GetDecisionTextSchema } from "./tools/unified-decisions.js"
 
 // Tool imports
 import { searchLaw, SearchLawSchema } from "./tools/search.js"
@@ -54,6 +56,8 @@ import { getHistoricalLaw, getHistoricalLawSchema, searchHistoricalLaw, searchHi
 import { getLawSystemTree, getLawSystemTreeSchema } from "./tools/law-system-tree.js"
 import { getLinkedOrdinances, LinkedOrdinancesSchema, getLinkedOrdinanceArticles, LinkedOrdinanceArticlesSchema, getDelegatedLaws, DelegatedLawsSchema, getLinkedLawsFromOrdinance, LinkedLawsFromOrdinanceSchema } from "./tools/law-linkage.js"
 import { analyzeDocument, AnalyzeDocumentSchema } from "./tools/document-analysis.js"
+import { verifyCitations, VerifyCitationsSchema } from "./tools/verify-citations.js"
+import { impactMap, ImpactMapSchema } from "./tools/impact-map.js"
 // Chain tool imports
 import {
   chainLawSystem, chainLawSystemSchema,
@@ -137,7 +141,7 @@ export const allTools: McpTool[] = [
   },
   {
     name: "get_ordinance",
-    description: "[자치법규] 조례/규칙 전문 조회.",
+    description: "[자치법규] 조례/규칙 전문 조회. jo 파라미터로 특정 조문 본문 조회 가능.",
     schema: GetOrdinanceSchema,
     handler: getOrdinance
   },
@@ -577,51 +581,53 @@ export const allTools: McpTool[] = [
   },
 
   // === 체인 도구 (다단계 자동 실행) ===
+  // 사용 원칙: 단일 조회(search_law/get_law_text)로 답이 되면 체인 쓰지 말 것.
+  // 체인은 "여러 API를 병렬로 엮어야 하는" 복합 질문 전용.
   {
     name: "chain_law_system",
-    description: "[⛓체인] 법체계 파악. 법령검색→3단비교→조문→별표 자동 연쇄. 법 구조 질문 시.",
+    description: "[⛓체인] 법령 전체 구조 종합. 1개 법령의 법률·시행령·시행규칙 3단 + 위임조문 + 하위법령 + 별표까지 한 번에. 예: '관세법 체계 알려줘', '이 법 하위법령 뭐 있어?', '위임관계 보여줘'. scenario=delegation: 위임은 있는데 미제정된 하위법령 감시(감사원용). scenario=impact: 법령 개정 시 연쇄 영향받는 하위법령/조례 탐지(입법영향평가용). 단순 법령명 검색만 필요하면 search_law 쓸 것.",
     schema: chainLawSystemSchema,
     handler: chainLawSystem
   },
   {
     name: "chain_action_basis",
-    description: "[⛓체인] 처분근거. 3단비교→해석례→판례→행정심판 병렬. 허가/처분 질문 시.",
+    description: "[⛓체인] 행정처분·허가·인가의 법적 근거 종합. 3단비교+해석례+판례+행심 병렬 조회. 예: '음식점 영업정지 근거', '건축허가 요건', '과징금 부과 기준 + 감경 판례'. scenario=penalty: 과태료/과징금/영업정지 금액·기간 별표 + 1·2·3차 위반 기준 + 감경 판례 + 행심 인용률까지. 공무원 처분 담당자/피처분자 모두 타겟. 단순 판례 검색이면 search_precedents 쓸 것.",
     schema: chainActionBasisSchema,
     handler: chainActionBasis
   },
   {
     name: "chain_dispute_prep",
-    description: "[⛓체인] 쟁송 대비. 판례→행정심판→도메인 결정례 병렬. 불복/소송 질문 시.",
+    description: "[⛓체인] 불복·소송·심판 준비. 대법원 판례 + 행정심판례 + 해당 도메인 결정례(조세심판·공정위·노동위 등) 병렬 수집. 예: '과세처분 불복 방법', '해고 부당노동 구제', '공정위 과징금 취소소송'. 소송/심판 전략 준비용. 단일 도메인만 보면 search_decisions 쓸 것.",
     schema: chainDisputePrepSchema,
     handler: chainDisputePrep
   },
   {
     name: "chain_amendment_track",
-    description: "[⛓체인] 개정 추적. 신구대조+조문이력 자동 연쇄. 개정/변경 질문 시.",
+    description: "[⛓체인] 법령·조문 개정 이력 종합. 신구대조표 + 조문별 개정이력 + 연혁법령. 예: '개인정보보호법 2023년 개정 뭐 바뀌었어', '이 조문 언제부터 적용'. scenario=timeline: 제정~현재 구간별로 판례/해석례 시계열 매핑(소급적용 쟁점용). 단순 최신 법령 조회는 get_law_text 쓸 것.",
     schema: chainAmendmentTrackSchema,
     handler: chainAmendmentTrack
   },
   {
     name: "chain_ordinance_compare",
-    description: "[⛓체인] 조례 비교. 상위법령→위임체계→전국 조례검색. 자치법규 질문 시.",
+    description: "[⛓체인] 자치법규(조례·규칙) 종합 분석. 상위법령 + 위임체계 + 전국 동일유형 조례 비교. 예: '서울시 주차 조례 전국 비교', '광진구 조례가 상위법 위임 범위 안인가'. scenario=compliance: 상위법 적합성 검증(지자체 법제심사용) — 위헌/위법 판결 선례 + 권익위 심판례까지. 특정 조례 단건 조회는 get_ordinance 쓸 것.",
     schema: chainOrdinanceCompareSchema,
     handler: chainOrdinanceCompare
   },
   {
     name: "chain_full_research",
-    description: "[⛓체인] 종합 리서치. AI검색→법령→판례→해석례 병렬 수집. 복합 질문 시 1회에 전체 자료 확보.",
+    description: "[⛓체인] 도메인·법령명이 불명확한 복합 질문 전용. AI검색 + 법령검색 + 판례 + 해석례 병렬. 예: '음주운전 처벌 기준', '퇴직금 중간정산', '상가 권리금 받는 법'. 일반인 자연어 질문용 폴백 체인. scenario=customs: 관세 3법(관세/FTA특례/대외무역) + 관세청 해석 + FTA 조약 + 조세심판 관세건. 법령명을 알면 search_law → get_law_text가 더 정확.",
     schema: chainFullResearchSchema,
     handler: chainFullResearch
   },
   {
     name: "chain_procedure_detail",
-    description: "[⛓체인] 절차/비용. 법령→3단비교→별표/서식 자동 연쇄. 신청/절차 질문 시.",
+    description: "[⛓체인] 행정 절차·비용·서식 종합. 법적 근거(법률·시행령·시행규칙) + 처리기한 + 별표/별지서식 + 수수료. 예: '건축허가 처리 절차', '법인설립 신고서', '영업허가 수수료'. scenario=manual: 일선 공무원용 처리 매뉴얼 — 훈령/예규/고시(내부지침) + 우리 지자체 조례 특칙 + FAQ 성격 해석례까지 포함. 단일 별표 조회는 get_annexes 쓸 것.",
     schema: chainProcedureDetailSchema,
     handler: chainProcedureDetail
   },
   {
     name: "chain_document_review",
-    description: "[⛓체인] 문서 종합검토. 리스크분석→법령검색→판례검색 자동 연쇄. 계약서/약관 검토 시 1회에 리스크+근거법령+관련판례 제공.",
+    description: "[⛓체인] 계약서·약관·협정서 조항별 리스크 검토. analyze_document + 근거법령 자동검색 + 관련 판례. 예: '이 임대차계약서 위험한 조항 있어?', '비밀유지약정 독소조항 체크'. 문서 본문을 text로 넘기면 조항 파싱 → 리스크 탐지 → 관련 법령/판례 매핑. 단순 리스크 분석만이면 analyze_document 쓸 것.",
     schema: chainDocumentReviewSchema,
     handler: chainDocumentReview
   },
@@ -632,6 +638,50 @@ export const allTools: McpTool[] = [
     description: "[문서분석] 계약서/약관/협정서 텍스트의 조항별 법적 리스크 분석. 문서 유형 자동 분류, 위험 조항 식별, 관련 법령 검색 힌트 제공.",
     schema: AnalyzeDocumentSchema,
     handler: analyzeDocument
+  },
+
+  // === 인용 검증 (killer feature) ===
+  {
+    name: "verify_citations",
+    description: "[인용검증] LLM 환각 방지 — 사용자/AI가 쓴 텍스트에서 '민법 제750조', '상법 제401조의2 제2항' 등 조문 인용을 추출하고 법제처 DB에 실제로 존재하는지 교차검증. 법률 답변 신뢰도 체크, 계약서 인용 검증, 법률 문서 교정용. text만 넘기면 자동 파싱 + 병렬 조회.",
+    schema: VerifyCitationsSchema,
+    handler: verifyCitations
+  },
+
+  // === 영향 그래프 (v4.0 killer feature) ===
+  {
+    name: "impact_map",
+    description: "[영향그래프] 조문 한 줄의 파급효과 그래프. 특정 조문(예: 민법 제103조)을 인용한 모든 판례·헌재·해석례·행심·자치법규를 역방향 탐색 + 그 조문이 인용한 다른 법령(정방향) + mermaid 시각화. lawName + jo 필수. 다른 chain은 query 단방향이지만 이 도구는 '한 조문 → 영향받는 모든 곳' 역방향.",
+    schema: ImpactMapSchema,
+    handler: impactMap
+  },
+
+  // === 메타 도구 (lite 프로필용) ===
+  {
+    name: "discover_tools",
+    description: "[메타] 위 체인/직접 도구로 안 되는 경우. 73개 전문도구(조세심판·관세·헌재·행심·공정위·개인정보위·노동위·학칙·조약·영문법령·용어 등) 카테고리 검색",
+    schema: DiscoverToolsSchema,
+    handler: discoverTools
+  },
+  {
+    name: "execute_tool",
+    description: "[메타] discover_tools 결과 도구를 프록시 실행. tool_name + params",
+    schema: ExecuteToolSchema,
+    handler: executeTool
+  },
+
+  // === 통합 도구 (v3) ===
+  {
+    name: "search_decisions",
+    description: "[통합검색] 18개 도메인(판례·해석례·헌재·행심·조세심판·관세·국세청·공정위·개인정보위·노동위·권익위·소청심사·학칙·공사공단·공공기관·조약·영문법령) 통합 검색. domain으로 선택. 세무 관련 국세청 직접 회신 해석은 domain='nts'.",
+    schema: SearchDecisionsSchema,
+    handler: searchDecisions
+  },
+  {
+    name: "get_decision_text",
+    description: "[통합조회] 18개 도메인 전문 조회. domain+id. full=false(기본) 시 본문 계단식 축약",
+    schema: GetDecisionTextSchema,
+    handler: getDecisionText
   },
 ]
 
@@ -659,23 +709,57 @@ function toMcpInputSchema(schema: unknown) {
 }
 
 /**
- * 서버에 모든 도구 등록
+ * v3 통합 프로필 — 15개 도구 노출, 나머지는 execute_tool로 접근
+ *
+ * 노출 기준:
+ *   1) 체인 도구가 fallback으로 자주 호출하는 종착 도구
+ *   2) discover_tools → execute_tool 왕복으로 평균 5초+ 손실 발생
+ *   3) 그 외는 execute_tool 경유 유지
+ *
+ * ⚠️ get_annexes 제거 금지:
+ *   헬스장 환불 케이스(trace ld-1775959823220, 79s)에서 별표 3의2를 가져오기 위해
+ *   discover_tools × 2 + execute_tool 헛발질로 ~15초 손실. 직노출로 해결.
  */
+const V3_EXPOSED = new Set([
+  "chain_full_research", "chain_law_system", "chain_action_basis",
+  "chain_dispute_prep", "chain_amendment_track", "chain_ordinance_compare",
+  "chain_procedure_detail", "chain_document_review",
+  "search_law", "get_law_text",
+  "get_annexes",
+  "search_decisions", "get_decision_text",
+  "discover_tools", "execute_tool",
+  "verify_citations",  // v3.5: LLM 환각 방지 인용 검증
+  "impact_map",        // v4.0: 조문 영향 그래프 (역방향 탐색 + mermaid)
+])
+
+// 이름 기반 O(1) 조회용 Map
+const toolMap = new Map<string, McpTool>()
+
 export function registerTools(server: Server, apiClient: LawApiClient) {
+  // Map 초기화
+  toolMap.clear()
+  for (const tool of allTools) toolMap.set(tool.name, tool)
+
+  // 메타 도구가 전체 도구 목록 참조할 수 있도록 주입
+  setAllToolsRef(allTools)
+
+  // V3_EXPOSED 16개만 노출 (나머지는 execute_tool 경유)
+  const exposedTools = allTools.filter(t => V3_EXPOSED.has(t.name))
+
   // ListTools 핸들러
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: allTools.map(tool => ({
+    tools: exposedTools.map(tool => ({
       name: tool.name,
       description: tool.description,
       inputSchema: toMcpInputSchema(tool.schema)
     }))
   }))
 
-  // CallTool 핸들러
+  // CallTool 핸들러 — 전체 도구 실행 가능 (execute_tool 프록시 지원)
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params
 
-    const tool = allTools.find(t => t.name === name)
+    const tool = toolMap.get(name)
     if (!tool) {
       return {
         content: [{ type: "text" as const, text: `Unknown tool: ${name}` }],

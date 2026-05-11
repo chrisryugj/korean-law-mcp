@@ -98,13 +98,13 @@ export async function fallbackTermSearch(
       return {
         content: [{
           type: "text",
-          text: `'${term}' ${termType} 연계 정보를 찾을 수 없습니다.`,
+          text: `[NOT_FOUND] '${term}' ${termType} 연계 정보를 찾을 수 없습니다.\n⚠️ LLM은 연계 정보를 추측하지 마세요.`,
         }],
         isError: true,
       }
     }
 
-    let output = `📚 '${term}' 관련 용어 (폴백 검색):\n\n`
+    let output = `'${term}' 관련 용어 (폴백 검색):\n\n`
     for (const item of items) {
       if (item.법령용어명) {
         output += `   • ${item.법령용어명}\n`
@@ -116,7 +116,7 @@ export async function fallbackTermSearch(
     return {
       content: [{
         type: "text",
-        text: `'${term}' ${termType} 연계 정보를 찾을 수 없습니다.\n\n💡 search_legal_terms(query="${term}")로 기본 검색을 시도해보세요.`,
+        text: `'${term}' ${termType} 연계 정보를 찾을 수 없습니다.`,
       }],
       isError: true,
     }

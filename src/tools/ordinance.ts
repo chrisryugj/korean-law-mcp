@@ -5,11 +5,13 @@
 import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 import { cleanHtml } from "../lib/article-parser.js"
+import { buildJO } from "../lib/law-parser.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError } from "../lib/errors.js"
 
 export const GetOrdinanceSchema = z.object({
   ordinSeq: z.string().describe("자치법규 일련번호"),
+  jo: z.string().optional().describe("조문 번호 (예: '제20조'). 지정 시 해당 조문 본문만 반환"),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달")
 })
 
@@ -20,7 +22,17 @@ export async function getOrdinance(
   input: GetOrdinanceInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const jsonText = await apiClient.getOrdinance(input.ordinSeq, input.apiKey)
+    // jo가 한글이면 JO 코드로 변환하여 API에 전달 (서버 필터링 시도)
+    let joCode: string | undefined
+    if (input.jo) {
+      try {
+        joCode = /제\d+조/.test(input.jo) ? buildJO(input.jo) : input.jo
+      } catch {
+        // JO 코드 변환 실패 시 클라이언트 필터링만 사용
+      }
+    }
+
+    const jsonText = await apiClient.getOrdinance(input.ordinSeq, joCode, input.apiKey)
     const json = JSON.parse(jsonText)
 
     const lawService = json?.LawService
@@ -29,7 +41,7 @@ export async function getOrdinance(
       return {
         content: [{
           type: "text",
-          text: "자치법규 데이터를 찾을 수 없습니다."
+          text: "[NOT_FOUND] 자치법규 데이터를 찾을 수 없습니다.\n⚠️ LLM은 조례 내용을 추측/생성하지 마세요. search_ordinance로 유효한 ordinSeq를 먼저 확인하세요."
         }],
         isError: true
       }
@@ -46,23 +58,44 @@ export async function getOrdinance(
       resultText += `소관부서: ${ordinance.담당부서명}\n`
     }
 
-    resultText += `\n━━━━━━━━━━━━━━━━━━━━━━\n\n`
+    resultText += `\n---\n\n`
 
     // 조문 내용 (단일 객체 → 배열 정규화)
     const rawArticles = lawService.조문?.조
     const articles = Array.isArray(rawArticles) ? rawArticles : rawArticles ? [rawArticles] : []
 
     if (articles.length > 0) {
-      // 대형 조례(20개 초과): TOC 반환 (law-text.ts 패턴)
-      if (articles.length > 20) {
+      // jo 파라미터가 있으면 해당 조문만 필터링
+      if (input.jo) {
+        const matched = articles.filter(a => {
+          // 조문번호 배열 또는 문자열 — JO 코드와 비교
+          const nums = Array.isArray(a.조문번호) ? a.조문번호 : [a.조문번호]
+          return joCode ? nums.some((n: string) => n === joCode) : false
+        })
+
+        if (matched.length === 0) {
+          resultText += `'${input.jo}' 조문을 찾을 수 없습니다.\n\n`
+          resultText += `목차 (총 ${articles.length}개 조문)\n\n`
+          const tocItems: string[] = []
+          for (const article of articles) {
+            if (article.조제목) tocItems.push(article.조제목)
+          }
+          resultText += tocItems.join("\n")
+        } else {
+          for (const article of matched) {
+            if (article.조제목) resultText += `${article.조제목}\n`
+            if (article.조내용) resultText += `${cleanHtml(String(article.조내용))}\n\n`
+          }
+        }
+      } else if (articles.length > 20) {
+        // 대형 조례(20개 초과): TOC 반환 (law-text.ts 패턴)
         const tocItems: string[] = []
         for (const article of articles) {
           if (article.조제목) tocItems.push(article.조제목)
         }
-        resultText += `📋 목차 (총 ${articles.length}개 조문)\n\n`
+        resultText += `목차 (총 ${articles.length}개 조문)\n\n`
         resultText += tocItems.join("\n")
-        resultText += `\n\n💡 전체 내용이 길어 목차만 표시합니다.`
-        resultText += `\n💡 특정 조문 조회: get_law_text(mst="${input.ordinSeq}", jo="제XX조")`
+        resultText += `\n\n특정 조문 조회: get_ordinance(ordinSeq="${input.ordinSeq}", jo="제XX조")`
       } else {
         for (const article of articles) {
           if (article.조제목) {
@@ -73,22 +106,6 @@ export async function getOrdinance(
           }
         }
       }
-    }
-
-    // 상위법령 동적 추천 (조례명 키워드 기반)
-    const name = (ordinance.자치법규명 || "").toLowerCase()
-    const parentLawHints: string[] = []
-    if (/휴직|병가|육아/.test(name)) parentLawHints.push('search_law(query="지방공무원법") → 제63조(휴직)')
-    if (/복무|근무/.test(name)) parentLawHints.push('search_law(query="지방공무원법") → 제48조(복무)')
-    if (/징계|파면|해임/.test(name)) parentLawHints.push('search_law(query="지방공무원법") → 제69조(징계)')
-    if (/수당|급여|보수/.test(name)) parentLawHints.push('search_law(query="지방공무원 보수규정")')
-    if (/임용|채용|승진|전보/.test(name)) parentLawHints.push('search_law(query="지방공무원 임용령")')
-
-    if (parentLawHints.length > 0) {
-      resultText += `\n💡 상위법령 참고:\n`
-      parentLawHints.forEach(h => { resultText += `   - ${h}\n` })
-    } else {
-      resultText += `\n💡 상위법령 확인: search_law 또는 get_related_laws 도구를 사용하세요.`
     }
 
     return {

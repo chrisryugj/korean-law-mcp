@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { LawApiClient } from "../lib/api-client.js";
 import { extractTag, parseSearchXML } from "../lib/xml-parser.js";
 import { truncateResponse } from "../lib/schemas.js";
-import { formatToolError } from "../lib/errors.js";
+import { formatToolError, noResultHint } from "../lib/errors.js";
 
 // ========================================
 // Common helpers
@@ -76,10 +76,7 @@ async function searchRules(
     const result = parseRuleXML(xmlText, target);
 
     if (result.totalCnt === 0) {
-      return {
-        content: [{ type: "text", text: `${cfg.label} 검색 결과가 없습니다. 다른 키워드를 시도하세요.` }],
-        isError: true,
-      };
+      return noResultHint(args.query || "", cfg.label)
     }
 
     let output = `${cfg.label} 검색 결과 (총 ${result.totalCnt}건, ${result.page}페이지):\n\n`;
@@ -93,7 +90,7 @@ async function searchRules(
     }
     output += `\n전문 조회: ${textToolName}(id="일련번호")`;
 
-    return { content: [{ type: "text", text: output }] };
+    return { content: [{ type: "text", text: truncateResponse(output) }] };
   } catch (error) {
     return formatToolError(error, `search_${target}_rules`);
   }

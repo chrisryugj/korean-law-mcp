@@ -12,6 +12,7 @@ primary_region = 'nrt'
 [env]
   NODE_ENV = 'production'
   PORT = '3000'
+  RATE_LIMIT_RPM = '300'
 
 [http_service]
   internal_port = 3000

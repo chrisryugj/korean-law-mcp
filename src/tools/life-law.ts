@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { LawApiClient } from "../lib/api-client.js";
 import { truncateResponse, formatDateDot } from "../lib/schemas.js";
 import { parseSearchXML, extractTag as sharedExtractTag } from "../lib/xml-parser.js";
-import { formatToolError } from "../lib/errors.js";
+import { formatToolError, noResultHint } from "../lib/errors.js";
 
 // AI-powered intelligent law search tool
 // 이름은 searchAiLaw가 더 정확하지만, 호환성을 위해 searchLifeLaw alias 유지
@@ -99,21 +99,7 @@ export async function searchAiLaw(
     }
 
     if (totalCount === 0 || items.length === 0) {
-      let errorMsg = "검색 결과가 없습니다.";
-      errorMsg += `\n\n💡 지능형 검색 팁:`;
-      errorMsg += `\n   - 일상적인 상황으로 질문: "음주운전 처벌"`;
-      errorMsg += `\n   - 구체적인 상황 설명: "교통사고 후 도주"`;
-      errorMsg += `\n   - 법률 용어 사용: "업무상과실치상"`;
-      errorMsg += `\n\n   일반 법령 검색:`;
-      errorMsg += `\n   search_law(query="${args.query}")`;
-
-      return {
-        content: [{
-          type: "text",
-          text: errorMsg
-        }],
-        isError: true
-      };
+      return noResultHint(args.query || "", "생활법령")
     }
 
     const searchTypeNames: Record<string, string> = {
@@ -126,12 +112,12 @@ export async function searchAiLaw(
 
     const displayCount = args.lawTypes ? items.length : totalCount;
     const filterNote = args.lawTypes ? ` [필터: ${args.lawTypes.join(', ')}]` : '';
-    let output = `🔍 지능형 법령검색 결과 (${searchTypeName}, ${displayCount}건${filterNote}):\n\n`;
+    let output = `지능형 법령검색 결과 (${searchTypeName}, ${displayCount}건${filterNote}):\n\n`;
 
     for (const item of items) {
       if (searchType === "0" || searchType === "2") {
         // 조문 검색 결과
-        output += `📜 ${item.법령명 || item.행정규칙명}\n`;
+        output += `${item.법령명 || item.행정규칙명}\n`;
         if (item.조문번호) {
           output += `   제${item.조문번호}조`;
           if (item.조문가지번호 && item.조문가지번호 !== "00") {
@@ -146,18 +132,17 @@ export async function searchAiLaw(
           const content = item.조문내용.replace(/<[^>]*>/g, "").substring(0, 200);
           output += `   ${content}${item.조문내용.length > 200 ? "..." : ""}\n`;
         }
-        output += `   📅 시행: ${formatDateDot(item.시행일자)} | ${item.소관부처명 || item.발령기관명 || ""}\n`;
+        output += `   시행: ${formatDateDot(item.시행일자)} | ${item.소관부처명 || item.발령기관명 || ""}\n`;
       } else {
         // 별표·서식 검색 결과
-        output += `📋 ${item.법령명 || item.행정규칙명}\n`;
+        output += `${item.법령명 || item.행정규칙명}\n`;
         output += `   [${item.별표서식구분명 || "별표/서식"}] ${item.별표서식제목 || ""}\n`;
-        output += `   📅 시행: ${formatDateDot(item.시행일자)}\n`;
+        output += `   시행: ${formatDateDot(item.시행일자)}\n`;
       }
       output += `\n`;
     }
 
-    output += `\n💡 법령 상세 조회: get_law_text(lawId="법령ID")`;
-    output += `\n💡 특정 조문 조회: get_article_text(lawId="법령ID", articleNumber="조문번호")`;
+    // 후속 도구 안내 제거 (LLM이 이미 도구 목록을 알고 있음)
 
     return {
       content: [{

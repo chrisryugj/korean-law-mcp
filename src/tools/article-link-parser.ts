@@ -50,7 +50,7 @@ export async function parseArticleLinks(
     const references = extractArticleReferences(articleText)
 
     // 3. 결과 포맷
-    let resultText = `🔗 조문 내 참조 링크 (${references.length}개)\n\n`
+    let resultText = `조문 내 참조 링크 (${references.length}개)\n\n`
 
     if (references.length === 0) {
       resultText += "이 조문에는 다른 조문을 참조하는 내용이 없습니다.\n"

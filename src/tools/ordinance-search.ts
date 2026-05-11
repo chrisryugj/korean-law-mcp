@@ -6,6 +6,7 @@ import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 import { normalizeLawSearchText, expandOrdinanceQuery } from "../lib/search-normalizer.js"
 import { parseSearchXML, extractTag } from "../lib/xml-parser.js"
+import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError } from "../lib/errors.js"
 
 export const SearchOrdinanceSchema = z.object({
@@ -84,15 +85,24 @@ export async function searchOrdinance(
       // 확장 검색도 실패한 경우, 시도한 쿼리들 안내
       const { expanded } = expandOrdinanceQuery(input.query)
       const triedQueries = [normalizedQuery, ...expanded].slice(0, 3).join("', '")
+      const keywords = input.query.trim().split(/\s+/)
+      const hint = [`[NOT_FOUND] '${input.query}' 자치법규 검색 결과가 없습니다.`, `시도한 검색어: '${triedQueries}'`, "", "⚠️ LLM은 조례 내용을 추측하지 마세요. 사용자에게 '검색 실패'를 보고하세요."]
+      if (keywords.length >= 2) {
+        hint.push("")
+        hint.push("힌트: 법제처 API는 공백 구분 키워드를 AND 조건으로 처리합니다. 키워드가 많을수록 결과가 줄어듭니다.")
+        hint.push(`재시도 제안: "${keywords[0]}" 또는 "${keywords.slice(0, 2).join(" ")}"`)
+      }
       return {
-        content: [{
-          type: "text",
-          text: `'${input.query}' 검색 결과가 없습니다.\n\n시도한 검색어: '${triedQueries}'\n\n💡 다른 키워드로 다시 검색해보세요.`
-        }]
+        content: [{ type: "text", text: hint.join("\n") }],
+        isError: true,
       }
     }
 
-    let output = `자치법규 검색 결과 (총 ${totalCount}건, ${currentPage}페이지):\n\n`
+    let output = `자치법규 검색 결과 (총 ${totalCount}건, ${currentPage}페이지`
+    if (usedQuery !== normalizedQuery) {
+      output += `, 확장쿼리: "${usedQuery}"`
+    }
+    output += `):\n\n`
 
     for (const ordin of ordinances) {
       output += `[${ordin.자치법규일련번호}] ${ordin.자치법규명}\n`
@@ -105,12 +115,15 @@ export async function searchOrdinance(
       output += `\n`
     }
 
-    output += `\n💡 전문을 조회하려면 get_ordinance Tool을 사용하세요.\n`
+    // 다음 단계 힌트 — 자치법규 ID로 본문 조회 유도
+    if (ordinances.length > 0 && ordinances[0].자치법규일련번호) {
+      output += `💡 다음: get_ordinance(id="${ordinances[0].자치법규일련번호}") 로 본문 조회. 원하는 규정 없으면 상위 법령 검색도 고려 (예: 휴직·복무·징계 → 지방공무원법).\n`
+    }
 
     return {
       content: [{
         type: "text",
-        text: output
+        text: truncateResponse(output)
       }]
     }
   } catch (error) {

@@ -44,7 +44,7 @@ export async function executeTool(
 
   try {
     const parsed = tool.schema.parse(params)
-    return await tool.handler(apiClient, parsed)
+    return await tool.handler(apiClient, parsed) as ToolResponse
   } catch (error) {
     // Zod 검증 실패 등 모든 예외를 ToolResponse로 감싸서 반환
     const msg = error instanceof z.ZodError

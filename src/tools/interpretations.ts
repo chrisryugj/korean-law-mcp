@@ -2,7 +2,7 @@ import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 import { parseInterpretationXML } from "../lib/xml-parser.js"
 import { truncateResponse } from "../lib/schemas.js"
-import { formatToolError } from "../lib/errors.js"
+import { formatToolError, noResultHint } from "../lib/errors.js"
 
 export const searchInterpretationsSchema = z.object({
   query: z.string().describe("Search keyword (e.g., '자동차', '근로기준법')"),
@@ -54,25 +54,7 @@ export async function searchInterpretations(
     const totalCount = (args.fromDate || args.toDate) ? expcs.length : result.totalCnt;
 
     if (totalCount === 0) {
-      let errorMsg = "검색 결과가 없습니다."
-      errorMsg += `\n\n💡 개선 방법:`
-      errorMsg += `\n   1. 단순 키워드 사용:`
-      const words = args.query.split(/\s+/)
-      if (words.length > 1) {
-        errorMsg += `\n      search_interpretations(query="${words[0]}")`
-      }
-      errorMsg += `\n\n   2. 판례 검색:`
-      errorMsg += `\n      search_precedents(query="${args.query}")`
-      errorMsg += `\n\n   3. 법령 검색으로 전환:`
-      errorMsg += `\n      search_law(query="${args.query}")`
-
-      return {
-        content: [{
-          type: "text",
-          text: errorMsg
-        }],
-        isError: true
-      };
+      return noResultHint(args.query || "", "해석례")
     }
 
     let output = `해석례 검색 결과 (총 ${totalCount}건, ${currentPage}페이지)`;
@@ -92,12 +74,12 @@ export async function searchInterpretations(
       output += `\n`;
     }
 
-    output += `\n💡 전문을 조회하려면 get_interpretation_text Tool을 사용하세요.\n`;
+    // 후속 도구 안내 제거 (LLM이 이미 도구 목록을 알고 있음)
 
     return {
       content: [{
         type: "text",
-        text: output
+        text: truncateResponse(output)
       }]
     };
   } catch (error) {
@@ -157,22 +139,22 @@ export async function getInterpretationText(
 
     let output = `=== ${basic.안건명 || "해석례"} ===\n\n`;
 
-    output += `📋 기본 정보:\n`;
+    output += `기본 정보:\n`;
     output += `  해석례번호: ${basic.법령해석례번호 || "N/A"}\n`;
     output += `  회신일자: ${basic.회신일자 || "N/A"}\n`;
     output += `  질의기관: ${basic.질의기관명 || "N/A"}\n`;
     output += `  해석기관: ${basic.해석기관명 || "N/A"}\n\n`;
 
     if (content.질의요지) {
-      output += `📌 질의요지:\n${content.질의요지}\n\n`;
+      output += `질의요지:\n${content.질의요지}\n\n`;
     }
 
     if (content.회신내용) {
-      output += `📝 회신내용:\n${content.회신내용}\n\n`;
+      output += `회신내용:\n${content.회신내용}\n\n`;
     }
 
     if (content.관계법령) {
-      output += `📖 관계법령:\n${content.관계법령}\n\n`;
+      output += `관계법령:\n${content.관계법령}\n\n`;
     }
 
     return {

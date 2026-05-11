@@ -37,28 +37,12 @@ export const dateSchema = z
 export const optionalDateSchema = dateSchema.optional()
 
 /**
- * API 키 스키마
- */
-export const apiKeySchema = z.string().optional().describe("API 키 (생략시 환경변수 사용)")
-
-/**
  * 페이지네이션 스키마
  */
 export const paginationSchema = z.object({
   display: z.number().min(1).max(100).default(20).describe("결과 수 (기본:20, 최대:100)"),
   page: z.number().min(1).default(1).describe("페이지 번호 (기본:1)"),
 })
-
-/**
- * 날짜 포맷터 (YYYYMMDD → "2024년 1월 1일")
- */
-export function formatDateKorean(dateStr: string | undefined | null): string {
-  if (!dateStr || dateStr.length < 8) return dateStr || "N/A"
-  const y = dateStr.substring(0, 4)
-  const m = parseInt(dateStr.substring(4, 6), 10)
-  const d = parseInt(dateStr.substring(6, 8), 10)
-  return `${y}년 ${m}월 ${d}일`
-}
 
 /**
  * 응답 크기 제한 (50KB)

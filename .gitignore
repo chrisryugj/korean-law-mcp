@@ -6,3 +6,13 @@ dist/
 .env
 .env.local
 test-*.js
+test-*.mjs
+test-scenarios.mjs
+test-scenario-results.md
+test-results-*.txt
+.mcp.json
+.claude/settings.local.json
+.claude/memory/
+.claude/plans/
+promo-video/
+*.tgz

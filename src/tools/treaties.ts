@@ -2,6 +2,7 @@ import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 import { parseTreatyXML } from "../lib/xml-parser.js"
 import { truncateResponse } from "../lib/schemas.js"
+import { formatToolError } from "../lib/errors.js"
 
 export const searchTreatiesSchema = z.object({
   query: z.string().optional().describe("검색 키워드 (예: '투자보장', '범죄인인도')"),
@@ -46,12 +47,17 @@ export async function searchTreaties(
 
     if (result.totalCnt === 0) {
       const kw = args.query || "관련 키워드"
-      const hint = [
-        "검색 결과가 없습니다.\n\n개선 방법:",
-        `  1. 단순 키워드: search_treaties(query="${kw.split(/\s+/)[0]}")`,
-        `  2. 법령 검색: search_law(query="${kw}")`,
-      ].join("\n")
-      return { content: [{ type: "text", text: hint }], isError: true }
+      const keywords = kw.trim().split(/\s+/)
+      const lines = [`[NOT_FOUND] '${kw}' 조약 검색 결과가 없습니다.`, "", "⚠️ LLM은 조약 내용을 추측하지 마세요."]
+      if (keywords.length >= 2) {
+        lines.push("")
+        lines.push("힌트: 법제처 API는 공백 구분 키워드를 AND 조건으로 처리합니다. 키워드가 많을수록 결과가 줄어듭니다.")
+        lines.push(`재시도 제안: "${keywords[0]}" 또는 "${keywords.slice(0, 2).join(" ")}"`)
+      }
+      lines.push("")
+      lines.push("대안:")
+      lines.push(`  1. 법령 검색: search_law(query="${kw}")`)
+      return { content: [{ type: "text", text: lines.join("\n") }], isError: true }
     }
 
     let output = `조약 검색 결과 (총 ${result.totalCnt}건, ${result.page}페이지):\n\n`
@@ -68,12 +74,11 @@ export async function searchTreaties(
       output += `\n`
     }
 
-    output += `\n전문을 조회하려면 get_treaty_text Tool을 사용하세요.\n`
+    output += `\n전문 조회: execute_tool(tool_name="get_treaty_text", params={treatySeq:"조약번호"})\n`
 
     return { content: [{ type: "text", text: truncateResponse(output) }] }
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error)
-    return { content: [{ type: "text", text: `Error: ${msg}` }], isError: true }
+    return formatToolError(error as Error, "treaties")
   }
 }
 
@@ -150,7 +155,6 @@ export async function getTreatyText(
       }]
     }
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error)
-    return { content: [{ type: "text", text: `Error: ${msg}` }], isError: true }
+    return formatToolError(error as Error, "treaties")
   }
 }

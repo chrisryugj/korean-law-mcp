@@ -46,12 +46,7 @@ export async function searchHistoricalLaw(
     const histories = parseHistoryHtml(html, args.lawName);
 
     if (histories.length === 0) {
-      let errorMsg = `'${args.lawName}'의 연혁을 찾을 수 없습니다.`;
-      errorMsg += `\n\n💡 법령 연혁 조회 팁:`;
-      errorMsg += `\n   - 정확한 법령명 사용: "관세법", "민법"`;
-      errorMsg += `\n   - 시행령은 별도 검색: "관세법 시행령"`;
-      errorMsg += `\n\n   현행 법령 검색:`;
-      errorMsg += `\n   search_law(query="${args.lawName}")`;
+      let errorMsg = `[NOT_FOUND] '${args.lawName}'의 연혁을 찾을 수 없습니다.\n⚠️ LLM은 연혁을 추측/생성하지 마세요. 법령명을 정확히 확인하거나 search_law로 먼저 검색하세요.`;
 
       return {
         content: [{
@@ -62,12 +57,12 @@ export async function searchHistoricalLaw(
       };
     }
 
-    let output = `📜 ${args.lawName} 연혁 (총 ${histories.length}개 버전):\n\n`;
+    let output = `${args.lawName} 연혁 (총 ${histories.length}개 버전):\n\n`;
 
     for (const h of histories) {
       const efDate = formatDateDot(h.efYd);
       const ancDate = formatDateDot(h.ancYd);
-      output += `📅 시행: ${efDate}`;
+      output += `시행: ${efDate}`;
       if (h.rrCls) output += ` | ${h.rrCls}`;
       output += `\n`;
       output += `   공포: ${ancDate}`;
@@ -77,8 +72,7 @@ export async function searchHistoricalLaw(
       output += `\n`;
     }
 
-    output += `\n💡 특정 시점 법령 조회: get_historical_law(mst="${histories[0]?.mst || 'MST번호'}")`;
-    output += `\n💡 법제처 연혁 페이지: https://www.law.go.kr/법령/${encodeURIComponent(args.lawName)}`;
+    // 후속 도구 안내 제거 (LLM이 이미 도구 목록을 알고 있음)
 
     return {
       content: [{
@@ -129,7 +123,7 @@ export async function getHistoricalLaw(
 
     let output = `=== ${basic.법령명한글 || basic.법령명 || "연혁법령"} ===\n\n`;
 
-    output += `📋 기본 정보:\n`;
+    output += `기본 정보:\n`;
     output += `  법령명: ${basic.법령명한글 || basic.법령명 || "N/A"}\n`;
     output += `  시행일자: ${basic.시행일자 || "N/A"}\n`;
     output += `  공포일자: ${basic.공포일자 || "N/A"}\n`;
@@ -150,11 +144,11 @@ export async function getHistoricalLaw(
         });
 
         if (article) {
-          output += `📄 ${args.jo}:\n`;
+          output += `${args.jo}:\n`;
           if (article.조문제목) output += `제목: ${article.조문제목}\n`;
           output += `${article.조문내용 || "내용 없음"}\n`;
         } else {
-          output += `⚠️ ${args.jo}를 찾을 수 없습니다.\n`;
+          output += `[NOT_FOUND] ${args.jo}를 찾을 수 없습니다.\n⚠️ LLM은 조문을 추측/생성하지 마세요.\n`;
           output += `\n조문 목록:\n`;
           for (const a of articles.slice(0, 20)) {
             output += `  - 제${a.조문번호 || a.조번호}조 ${a.조문제목 || ""}\n`;
@@ -162,7 +156,7 @@ export async function getHistoricalLaw(
         }
       } else {
         // Show all articles (limited)
-        output += `📄 조문 (총 ${articles.length}개):\n\n`;
+        output += `조문 (총 ${articles.length}개):\n\n`;
         for (const article of articles.slice(0, 30)) {
           const joNum = article.조문번호 || article.조번호 || "";
           const title = article.조문제목 || "";
@@ -184,7 +178,7 @@ export async function getHistoricalLaw(
       }
     }
 
-    output += `\n💡 현행 법령 조회: get_law_text(lawName="...")`;
+    // 후속 도구 안내 제거 (LLM이 이미 도구 목록을 알고 있음)
 
     return {
       content: [{

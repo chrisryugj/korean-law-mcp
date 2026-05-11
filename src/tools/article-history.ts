@@ -59,7 +59,7 @@ export async function getArticleHistory(
         return {
           content: [{
             type: "text",
-            text: `법령 '${input.lawName}'을(를) 찾을 수 없습니다. 법령명을 확인하거나 search_law로 먼저 검색해주세요.`
+            text: `[NOT_FOUND] 법령 '${input.lawName}'을(를) 찾을 수 없습니다.\n⚠️ LLM은 개정 이력을 추측하지 마세요. 법령명을 확인하거나 search_law로 먼저 검색하세요.`
           }],
           isError: true
         }
@@ -78,8 +78,9 @@ export async function getArticleHistory(
       return {
         content: [{
           type: "text",
-          text: "조문 개정 이력이 없습니다."
-        }]
+          text: "[NOT_FOUND] 조문 개정 이력이 없습니다.\n⚠️ 해당 법령은 개정 이력 데이터가 없거나, 법령ID/MST가 유효하지 않을 수 있습니다. LLM은 개정 이력을 추측/생성하지 마세요."
+        }],
+        isError: true
       }
     }
 
@@ -122,7 +123,13 @@ export async function getArticleHistory(
 
     // 조문이 하나도 없는 경우 (법령정보만 있는 경우)
     if (itemNum === 0) {
-      resultText = "조문 개정 이력이 없습니다."
+      return {
+        content: [{
+          type: "text",
+          text: "[NOT_FOUND] 조문 개정 이력이 없습니다.\n⚠️ 법령정보는 존재하나 조문별 개정 기록이 비어있습니다. LLM은 추측하지 마세요."
+        }],
+        isError: true
+      }
     }
 
     return {

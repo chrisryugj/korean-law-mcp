@@ -86,7 +86,7 @@ async function getRecentChanges(
   changes.sort((a, b) => b.date.localeCompare(a.date))
   const topChanges = changes.slice(0, limit)
 
-  let resultText = `📊 최근 ${days}일간 개정 법령 TOP ${limit}\n\n`
+  let resultText = `최근 ${days}일간 개정 법령 TOP ${limit}\n\n`
   topChanges.forEach((change, idx) => {
     const formattedDate = `${change.date.slice(0, 4)}-${change.date.slice(4, 6)}-${change.date.slice(6, 8)}`
     resultText += `${idx + 1}. ${change.lawName}\n`
@@ -94,7 +94,7 @@ async function getRecentChanges(
     resultText += `   - 개정구분: ${change.type}\n\n`
   })
 
-  resultText += `\n💡 총 ${changes.length}건의 법령이 개정되었습니다.`
+  resultText += `\n총 ${changes.length}건의 법령이 개정되었습니다.`
 
   return {
     content: [{

@@ -2,6 +2,13 @@ import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 import { parsePrecedentXML } from "../lib/xml-parser.js"
 import { truncateResponse } from "../lib/schemas.js"
+import { formatToolError } from "../lib/errors.js"
+import {
+  compactBody,
+  densifyLawRefs,
+  densifyPrecedentRefs,
+  stripRepeatedSummary,
+} from "../lib/decision-compact.js"
 
 export const searchPrecedentsSchema = z.object({
   query: z.string().optional().describe("검색 키워드 (예: '자동차', '담보권')"),
@@ -58,13 +65,18 @@ export async function searchPrecedents(
 
   if (totalCount === 0) {
     const kw = args.query || "관련 키워드"
-    const hint = [
-      "검색 결과가 없습니다.\n\n💡 개선 방법:",
-      `  1. 단순 키워드: search_precedents(query="${kw.split(/\s+/)[0]}")`,
-      `  2. 해석례 검색: search_interpretations(query="${kw}")`,
-      `  3. 법령 검색: search_law(query="${kw}")`,
-    ].join("\n")
-    return { content: [{ type: "text", text: hint }], isError: true };
+    const keywords = kw.trim().split(/\s+/)
+    const lines = [`[NOT_FOUND] '${kw}' 판례 검색 결과가 없습니다.`, "", "⚠️ LLM은 판례를 추측/생성하지 마세요. 사용자에게 '검색 실패'를 보고하세요."]
+    if (keywords.length >= 2) {
+      lines.push("")
+      lines.push("힌트: 법제처 API는 공백 구분 키워드를 AND 조건으로 처리합니다. 키워드가 많을수록 결과가 줄어듭니다.")
+      lines.push(`재시도 제안: "${keywords[0]}" 또는 "${keywords.slice(0, 2).join(" ")}"`)
+    }
+    lines.push("")
+    lines.push("대안:")
+    lines.push(`  1. 해석례 검색: search_interpretations(query="${kw}")`)
+    lines.push(`  2. 법령 검색: search_law(query="${kw}")`)
+    return { content: [{ type: "text", text: lines.join("\n") }], isError: true };
   }
 
   let output = `판례 검색 결과 (총 ${totalCount}건, ${currentPage}페이지)`;
@@ -85,23 +97,26 @@ export async function searchPrecedents(
     output += `\n`;
   }
 
-  output += `\n💡 전문을 조회하려면 get_precedent_text Tool을 사용하세요.\n`;
+  // 다음 단계 힌트
+  if (precs.length > 0 && precs[0].판례일련번호) {
+    output += `💡 다음: get_precedent_text(id="${precs[0].판례일련번호}") 로 판결문 전문. full=true 로 축약 해제. 유사판례 원하면 find_similar_precedents 사용.\n`
+  }
 
   return {
     content: [{
       type: "text",
-      text: output
+      text: truncateResponse(output)
     }]
   };
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error)
-    return { content: [{ type: "text", text: `Error: ${msg}` }], isError: true }
+    return formatToolError(error, "search_precedents")
   }
 }
 
 export const getPrecedentTextSchema = z.object({
   id: z.string().describe("판례일련번호 (search_precedents 결과에서 획득)"),
   caseName: z.string().optional().describe("사건명 (선택, 검증용)"),
+  full: z.boolean().optional().describe("true=전문 그대로. 미지정 시 '전문' 섹션을 계단식 축약 (판시/요지/참조는 항상 full)"),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달"),
 });
 
@@ -154,7 +169,7 @@ export async function getPrecedentText(
 
   let output = `=== ${basic.판례명 || "판례"} ===\n\n`;
 
-  output += `📋 기본 정보:\n`;
+  output += `기본 정보:\n`;
   output += `  사건번호: ${basic.사건번호 || "N/A"}\n`;
   output += `  법원: ${basic.법원명 || "N/A"}\n`;
   output += `  선고일: ${basic.선고일자 || "N/A"}\n`;
@@ -162,23 +177,25 @@ export async function getPrecedentText(
   output += `  판결유형: ${basic.판결유형 || "N/A"}\n\n`;
 
   if (content.판시사항) {
-    output += `📌 판시사항:\n${content.판시사항}\n\n`;
+    output += `판시사항:\n${content.판시사항}\n\n`;
   }
 
   if (content.판결요지) {
-    output += `📝 판결요지:\n${content.판결요지}\n\n`;
+    output += `판결요지:\n${content.판결요지}\n\n`;
   }
 
   if (content.참조조문) {
-    output += `📖 참조조문:\n${content.참조조문}\n\n`;
+    output += `참조조문:\n${densifyLawRefs(content.참조조문)}\n\n`;
   }
 
   if (content.참조판례) {
-    output += `⚖️ 참조판례:\n${content.참조판례}\n\n`;
+    output += `참조판례:\n${densifyPrecedentRefs(content.참조판례)}\n\n`;
   }
 
   if (content.전문) {
-    output += `📄 전문:\n${content.전문}\n`;
+    const deduped = stripRepeatedSummary(content.전문, [content.판시사항, content.판결요지]);
+    const compacted = compactBody(deduped, { full: args.full });
+    output += `전문:\n${compacted}\n`;
   }
 
   return {
@@ -188,8 +205,7 @@ export async function getPrecedentText(
     }]
   };
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error)
-    return { content: [{ type: "text", text: `Error: ${msg}` }], isError: true }
+    return formatToolError(error, "get_precedent_text")
   }
 }
 

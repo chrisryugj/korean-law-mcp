@@ -12,8 +12,8 @@ import { registerTools } from "./tool-registry.js"
 import { startHTTPServer } from "./server/http-server.js"
 import { VERSION } from "./version.js"
 
-// API 클라이언트 초기화
-const LAW_OC = process.env.LAW_OC || ""
+// API 클라이언트 초기화 (LAW_OC 또는 KOREAN_LAW_API_KEY 지원)
+const LAW_OC = process.env.LAW_OC || process.env.KOREAN_LAW_API_KEY || ""
 const apiClient = new LawApiClient({ apiKey: LAW_OC })
 
 // MCP 서버 팩토리 (HTTP 모드: 세션마다 새 인스턴스 필요)
@@ -29,6 +29,14 @@ function createServer(): Server {
 // 서버 시작
 async function main() {
   const args = process.argv.slice(2)
+
+  // setup 서브커맨드: npx korean-law-mcp setup
+  if (args[0] === "setup") {
+    const { runSetup } = await import("./setup.js")
+    await runSetup()
+    return
+  }
+
   const modeIndex = args.indexOf("--mode")
   const mode = modeIndex !== -1 ? args[modeIndex + 1] : "stdio"
   const portIndex = args.indexOf("--port")
@@ -37,7 +45,11 @@ async function main() {
   if (mode === "http" || mode === "sse") {
     await startHTTPServer(createServer, port)
   } else {
-    // STDIO 모드 (기본)
+    // STDIO 모드
+    // stdout 오염 방지: MCP JSON-RPC 프로토콜 보호
+    const stderrWrite = (...args: unknown[]) =>
+      process.stderr.write(args.map(String).join(" ") + "\n")
+    console.log = console.warn = console.info = console.debug = stderrWrite
     const server = createServer()
     const transport = new StdioServerTransport()
     await server.connect(transport)

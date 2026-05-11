@@ -147,7 +147,7 @@ function rankByKeywordSimilarity(searchResultText: string, keywords: string[], m
   precedents.sort((a, b) => b.score - a.score)
   const topResults = precedents.slice(0, maxResults)
 
-  let resultText = `🔍 유사 판례 (총 ${topResults.length}건, 유사도순 정렬)\n\n`
+  let resultText = `유사 판례 (총 ${topResults.length}건, 유사도순 정렬)\n\n`
   resultText += `검색 키워드: ${keywords.join(", ")}\n\n`
 
   topResults.forEach((p) => {

@@ -9,14 +9,14 @@
  */
 
 import { parse } from "kordoc"
-import type { ParseResult } from "kordoc"
+import type { ParseResult, FileType } from "kordoc"
 
 // ─── 기존 인터페이스 호환 ────────────────────────────
 
 export interface AnnexParseResult {
   success: boolean
   markdown?: string
-  fileType: "hwpx" | "hwp" | "pdf" | "unknown"
+  fileType: FileType
   /** 이미지 기반 PDF 여부 (텍스트 추출 불가) */
   isImageBased?: boolean
   /** PDF 페이지 수 */

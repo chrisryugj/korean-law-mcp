@@ -133,7 +133,7 @@ const patterns: TimePattern[] = [
     regex: /(지난달|저번달|이번\s*달)/,
     resolve: (m) => {
       const now = new Date()
-      if (m[1] === "이번 달" || m[1] === "이번달") {
+      if (/이번/.test(m[1])) {
         return { from: fmt(monthStart(now.getFullYear(), now.getMonth() + 1)), to: fmt(monthEnd(now.getFullYear(), now.getMonth() + 1)) }
       }
       const p = monthsAgo(1, now)
@@ -146,7 +146,7 @@ const patterns: TimePattern[] = [
     resolve: (m) => {
       const now = new Date()
       const day = now.getDay() // 0=Sun
-      if (m[1] === "이번 주" || m[1] === "이번주") {
+      if (/이번/.test(m[1])) {
         const mon = daysAgo(day === 0 ? 6 : day - 1, now)
         const sun = new Date(mon)
         sun.setDate(mon.getDate() + 6)

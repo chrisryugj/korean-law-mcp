@@ -32,7 +32,7 @@ export async function summarizePrecedent(
       return {
         content: [{
           type: "text",
-          text: "판례를 찾을 수 없습니다."
+          text: "[NOT_FOUND] 판례를 찾을 수 없습니다.\n⚠️ LLM은 판례 내용을 추측/생성하지 마세요."
         }],
         isError: true
       }
@@ -96,7 +96,7 @@ function extractPrecedentSummary(fullText: string, maxLength: number): string {
   }
 
   // 요약 생성
-  let result = "📋 판례 요약\n\n"
+  let result = "판례 요약\n\n"
 
   if (sections.caseNumber) {
     result += `${sections.caseNumber}\n`

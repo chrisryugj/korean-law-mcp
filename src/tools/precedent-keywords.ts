@@ -31,7 +31,7 @@ export async function extractPrecedentKeywords(
       return {
         content: [{
           type: "text",
-          text: "판례를 찾을 수 없습니다."
+          text: "[NOT_FOUND] 판례를 찾을 수 없습니다.\n⚠️ LLM은 판례 내용을 추측/생성하지 마세요."
         }],
         isError: true
       }
@@ -43,7 +43,7 @@ export async function extractPrecedentKeywords(
     const keywords = extractKeywords(fullText, input.maxKeywords)
 
     // 3. 결과 포맷
-    let resultText = "🔑 핵심 키워드\n\n"
+    let resultText = "핵심 키워드\n\n"
     keywords.forEach((kw, idx) => {
       resultText += `${idx + 1}. ${kw.word} (${kw.count}회)\n`
     })

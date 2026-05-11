@@ -1,46 +1,48 @@
 /**
- * Streamable HTTP 서버 - 리모트 배포용 (MCP 표준)
+ * Streamable HTTP 서버 - stateless 모드 (MCP 공식 패턴)
+ *
+ * 매 POST 요청마다 fresh Server + Transport 생성, 요청 종료 시 즉시 정리.
+ * 세션 Map/EventStore/idle cleanup 없음 → 재시작/스케일아웃/OOM 내성.
+ * 참고: @modelcontextprotocol/sdk/examples/server/simpleStatelessStreamableHttp.js
  */
 
 import express from "express"
-import { randomUUID } from "node:crypto"
 import type { Server } from "@modelcontextprotocol/sdk/server/index.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
-import { InMemoryEventStore } from "@modelcontextprotocol/sdk/examples/shared/inMemoryEventStore.js"
-import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js"
-import { sessionStore, setSessionApiKey, deleteSession } from "../lib/session-state.js"
+import { requestContext } from "../lib/session-state.js"
+import { maskSensitiveUrl } from "../lib/fetch-with-retry.js"
 import { VERSION } from "../version.js"
 
-// 세션 정보 (Transport + Server + 마지막 접근 시간)
-interface SessionInfo {
-  transport: StreamableHTTPServerTransport
-  server: Server
-  lastAccess: number
+/**
+ * 에러 메시지에서 민감 정보(API 키 포함 URL) scrub.
+ * MCP 응답/서버 로그 양쪽에 적용되어야 함.
+ */
+function scrubError(error: unknown): { message: string; stack?: string } {
+  if (error instanceof Error) {
+    return {
+      message: maskSensitiveUrl(error.message),
+      stack: error.stack ? maskSensitiveUrl(error.stack) : undefined,
+    }
+  }
+  return { message: maskSensitiveUrl(String(error)) }
 }
-
-// 세션 맵
-const sessions = new Map<string, SessionInfo>()
 
 export async function startHTTPServer(createServer: () => Server, port: number) {
   const app = express()
-  app.use(express.json({ limit: "100kb" }))
-
-  // 30분 idle 세션 자동 정리 (5분마다 체크)
-  const SESSION_MAX_IDLE = 30 * 60 * 1000 // 30분
-  setInterval(() => {
-    const now = Date.now()
-    for (const [sessionId, session] of sessions) {
-      if (now - session.lastAccess > SESSION_MAX_IDLE) {
-        console.error(`[Session Cleanup] Removing idle session: ${sessionId}`)
-        try {
-          session.transport.close()
-          session.server.close().catch(() => {})
-        } catch { /* ignore */ }
-        sessions.delete(sessionId)
-        deleteSession(sessionId)
-      }
-    }
-  }, 5 * 60 * 1000).unref()
+  // trust proxy: TRUST_PROXY 환경변수로 조정 (기본 '1' = 첫 프록시만 신뢰).
+  // 'true' 또는 'all'은 X-Forwarded-For 스푸핑으로 rate limit 우회 위험.
+  // Fly.io는 edge proxy 1단 → '1' 권장. 다단 프록시면 숫자 증가.
+  const trustProxyRaw = process.env.TRUST_PROXY ?? "1"
+  const trustProxy: number | boolean | string =
+    trustProxyRaw === "true" || trustProxyRaw === "all"
+      ? true
+      : trustProxyRaw === "false"
+      ? false
+      : /^\d+$/.test(trustProxyRaw)
+      ? parseInt(trustProxyRaw, 10)
+      : trustProxyRaw // CIDR/IP 리스트 패스스루
+  app.set("trust proxy", trustProxy)
+  app.use(express.json({ limit: process.env.MCP_BODY_LIMIT || "100kb" }))
 
   // Rate Limiting (RATE_LIMIT_RPM 환경변수, 기본: 60 req/min per IP)
   const rateLimitRpm = parseInt(process.env.RATE_LIMIT_RPM || "60", 10)
@@ -77,14 +79,15 @@ export async function startHTTPServer(createServer: () => Server, port: number) 
     }, 5 * 60 * 1000).unref()
   }
 
-  // CORS 및 보안 헤더 설정
+  // CORS 및 보안 헤더 설정 (CORS_ORIGIN 미설정 시 경고)
   const corsOrigin = process.env.CORS_ORIGIN || "*"
+  if (corsOrigin === "*") {
+    console.error("⚠️  CORS_ORIGIN 미설정 — 모든 도메인 허용 중. 프로덕션에서는 CORS_ORIGIN 환경변수를 설정하세요.")
+  }
   app.use((req, res, next) => {
-    // CORS
     res.header("Access-Control-Allow-Origin", corsOrigin)
     res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
     res.header("Access-Control-Allow-Headers", "Content-Type, mcp-session-id, last-event-id")
-    // Security headers
     res.header("X-Content-Type-Options", "nosniff")
     res.header("X-Frame-Options", "DENY")
     res.header("Referrer-Policy", "strict-origin-when-cross-origin")
@@ -100,11 +103,16 @@ export async function startHTTPServer(createServer: () => Server, port: number) 
       name: "Korean Law MCP Server",
       version: VERSION,
       status: "running",
-      transport: "streamable-http",
+      transport: "streamable-http (stateless)",
       endpoints: {
         mcp: "/mcp",
-        health: "/health"
-      }
+        health: "/health",
+      },
+      tools: {
+        exposed: 16,
+        total: 92,
+        description: "V3_EXPOSED 16개 직노출, 나머지 76개는 execute_tool 경유",
+      },
     })
   })
 
@@ -112,200 +120,86 @@ export async function startHTTPServer(createServer: () => Server, port: number) 
     res.json({ status: "ok", timestamp: new Date().toISOString() })
   })
 
-  // POST /mcp - 클라이언트 요청 처리
+  // POST /mcp - stateless 요청 처리
   app.post("/mcp", async (req, res) => {
-    console.error(`[POST /mcp] Received request`)
+    // Extract API key: URL query > header
+    const apiKeyFromQuery = req.query.oc as string | undefined
+    const apiKey =
+      apiKeyFromQuery ||
+      (req.headers["apikey"] as string | undefined) ||
+      (req.headers["law_oc"] as string | undefined) ||
+      (req.headers["law-oc"] as string | undefined) ||
+      (req.headers["x-api-key"] as string | undefined) ||
+      (req.headers["authorization"] as string | undefined)?.replace(/^Bearer\s+/i, "") ||
+      (req.headers["x-law-oc"] as string | undefined)
 
-    // Extract API key from various possible header locations
-    const apiKeyFromHeader =
-      req.headers["apikey"] ||
-      req.headers["law_oc"] ||
-      req.headers["law-oc"] ||
-      (req.headers["LAW_OC"] as string | undefined) ||
-      req.headers["x-api-key"] ||
-      req.headers["authorization"]?.replace(/^Bearer\s+/i, "") ||
-      req.headers["x-law-oc"]
+    let server: Server | undefined
+    let transport: StreamableHTTPServerTransport | undefined
 
     try {
-      const sessionId = req.headers["mcp-session-id"] as string | undefined
-      let transport: StreamableHTTPServerTransport
+      server = createServer()
+      transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: undefined,  // ← stateless 모드
+        enableJsonResponse: true,
+      })
 
-      const existingSession = sessionId ? sessions.get(sessionId) : undefined
+      // 요청 종료 시 리소스 정리
+      res.on("close", () => {
+        try { transport?.close() } catch { /* ignore */ }
+        server?.close().catch(() => {})
+      })
 
-      if (existingSession) {
-        // 기존 세션 재사용
-        console.error(`[POST /mcp] Reusing session: ${sessionId}`)
-        transport = existingSession.transport
-        existingSession.lastAccess = Date.now()
+      await server.connect(transport)
 
-        // API 키 업데이트 (헤더에서 제공된 경우)
-        if (apiKeyFromHeader) {
-          setSessionApiKey(sessionId!, apiKeyFromHeader as string)
-        }
-
-        // AsyncLocalStorage로 세션 ID 격리 (동시 요청 안전)
-        await sessionStore.run(sessionId, async () => {
-          await transport.handleRequest(req, res, req.body)
-        })
-        return
-      } else if (sessionId && !existingSession) {
-        // 세션 ID가 있지만 서버에 없음 (suspend 후 재시작 등)
-        // MCP 스펙: 404 반환 → 클라이언트가 새 세션으로 재초기화
-        console.error(`[POST /mcp] Unknown session ID: ${sessionId} (returning 404 for re-init)`)
-        res.status(404).json({
-          jsonrpc: "2.0",
-          error: {
-            code: -32001,
-            message: "Session not found. Please reinitialize."
-          },
-          id: null
-        })
-        return
-      } else if (!sessionId && isInitializeRequest(req.body)) {
-        // 새 세션 초기화
-        console.error(`[POST /mcp] New initialization request`)
-
-        const eventStore = new InMemoryEventStore()
-        const sessionServer = createServer()
-        transport = new StreamableHTTPServerTransport({
-          sessionIdGenerator: () => randomUUID(),
-          enableJsonResponse: true,
-          eventStore,
-          onsessioninitialized: (sid) => {
-            console.error(`[POST /mcp] Session initialized: ${sid}`)
-            sessions.set(sid, {
-              transport,
-              server: sessionServer,
-              lastAccess: Date.now()
-            })
-            if (apiKeyFromHeader) {
-              setSessionApiKey(sid, apiKeyFromHeader as string)
-            }
-          }
-        })
-
-        // Transport 종료 시 정리
-        transport.onclose = () => {
-          const sid = transport.sessionId
-          if (sid && sessions.has(sid)) {
-            console.error(`[POST /mcp] Transport closed for session ${sid}`)
-            sessions.delete(sid)
-            deleteSession(sid)
-          }
-        }
-
-        // 세션별 MCP 서버에 연결
-        await sessionServer.connect(transport)
-        await transport.handleRequest(req, res, req.body)
-        return
-      } else {
-        // 잘못된 요청
-        console.error(`[POST /mcp] Invalid request: No valid session ID or init request`)
-        res.status(400).json({
-          jsonrpc: "2.0",
-          error: {
-            code: -32000,
-            message: "Bad Request: No valid session ID provided"
-          },
-          id: null
-        })
-        return
-      }
+      // ALS로 요청 단위 API 키 격리 (동시 요청 안전)
+      await requestContext.run({ apiKey }, async () => {
+        await transport!.handleRequest(req, res, req.body)
+      })
     } catch (error) {
-      console.error("[POST /mcp] Error:", error)
+      const scrubbed = scrubError(error)
+      console.error("[POST /mcp] Error:", scrubbed.message)
+      if (scrubbed.stack && process.env.NODE_ENV !== "production") {
+        console.error(scrubbed.stack)
+      }
+      try { transport?.close() } catch { /* ignore */ }
+      server?.close().catch(() => {})
       if (!res.headersSent) {
         res.status(500).json({
           jsonrpc: "2.0",
-          error: {
-            code: -32603,
-            message: "Internal server error"
-          },
+          error: { code: -32603, message: "Internal server error" },
           id: null
         })
       }
     }
   })
 
-  // GET /mcp - SSE 스트림 (서버 알림용)
-  app.get("/mcp", async (req, res) => {
-    console.error(`[GET /mcp] SSE stream request`)
-
-    try {
-      const sessionId = req.headers["mcp-session-id"] as string | undefined
-      const session = sessionId ? sessions.get(sessionId) : undefined
-
-      if (!session) {
-        // MCP 스펙: 모르는 세션 → 404 (클라이언트 재초기화 유도)
-        console.error(`[GET /mcp] Unknown session ID: ${sessionId} (returning 404)`)
-        res.status(404).send("Session not found. Please reinitialize.")
-        return
-      }
-
-      session.lastAccess = Date.now()
-
-      res.on("close", () => {
-        console.error(`[GET /mcp] SSE connection closed for session ${sessionId}`)
-      })
-
-      await session.transport.handleRequest(req, res)
-    } catch (error) {
-      console.error("[GET /mcp] Error:", error)
-      if (!res.headersSent) {
-        res.status(500).send("Internal server error")
-      }
-    }
+  // GET/DELETE /mcp - stateless 모드에서는 불허 (MCP 공식 예제와 동일)
+  app.get("/mcp", (req, res) => {
+    res.status(405).json({
+      jsonrpc: "2.0",
+      error: { code: -32000, message: "Method not allowed. Server runs in stateless mode." },
+      id: null
+    })
   })
 
-  // DELETE /mcp - 세션 종료
-  app.delete("/mcp", async (req, res) => {
-    console.error(`[DELETE /mcp] Session termination request`)
-
-    try {
-      const sessionId = req.headers["mcp-session-id"] as string | undefined
-      const session = sessionId ? sessions.get(sessionId) : undefined
-
-      if (!session) {
-        // 이미 없는 세션 → 404 (idempotent하게 처리)
-        console.error(`[DELETE /mcp] Unknown session ID: ${sessionId} (returning 404)`)
-        res.status(404).send("Session not found")
-        return
-      }
-
-      await session.transport.handleRequest(req, res)
-      sessions.delete(sessionId!)
-      deleteSession(sessionId!)
-      console.error(`[DELETE /mcp] Session removed: ${sessionId}`)
-    } catch (error) {
-      console.error("[DELETE /mcp] Error:", error)
-      if (!res.headersSent) {
-        res.status(500).send("Error processing session termination")
-      }
-    }
+  app.delete("/mcp", (req, res) => {
+    res.status(405).json({
+      jsonrpc: "2.0",
+      error: { code: -32000, message: "Method not allowed. Server runs in stateless mode." },
+      id: null
+    })
   })
 
   // 서버 시작 (0.0.0.0으로 바인딩하여 외부 접속 허용)
   const expressServer = app.listen(port, "0.0.0.0", () => {
-    console.error(`✓ Korean Law MCP server (HTTP mode) listening on port ${port}`)
+    console.error(`✓ Korean Law MCP server (HTTP stateless) listening on port ${port}`)
     console.error(`✓ MCP endpoint: http://0.0.0.0:${port}/mcp`)
     console.error(`✓ Health check: http://0.0.0.0:${port}/health`)
-    console.error(`✓ Transport: Streamable HTTP`)
   })
 
   // 종료 처리
   async function gracefulShutdown(signal: string) {
     console.error(`${signal} received, shutting down server...`)
-
-    for (const [sessionId, session] of sessions) {
-      try {
-        await session.transport.close()
-        await session.server.close()
-        sessions.delete(sessionId)
-        deleteSession(sessionId)
-      } catch (error) {
-        console.error(`Error closing transport for session ${sessionId}:`, error)
-      }
-    }
-
     expressServer.close()
     console.error("Server shutdown complete")
     process.exit(0)

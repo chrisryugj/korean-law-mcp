@@ -111,12 +111,11 @@ function formatJoNum(jo: string): string {
  * 위임조문 3단비교 JSON 파싱 (knd=2)
  */
 export function parseThreeTierDelegation(jsonData: any): ThreeTierData {
-  try {
-    const service = jsonData.LspttnThdCmpLawXService
+  const service = jsonData.LspttnThdCmpLawXService
 
-    if (!service) {
-      throw new Error("LspttnThdCmpLawXService 데이터가 없습니다")
-    }
+  if (!service) {
+    throw new Error("LspttnThdCmpLawXService 데이터가 없습니다")
+  }
 
     const basicInfo = service.기본정보 || {}
     const meta: ThreeTierMeta = {
@@ -245,7 +244,4 @@ export function parseThreeTierDelegation(jsonData: any): ThreeTierData {
       articles,
       kndType: "위임조문",
     }
-  } catch (error) {
-    throw error
-  }
 }

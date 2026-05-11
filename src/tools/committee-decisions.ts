@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { LawApiClient } from "../lib/api-client.js";
 import { truncateResponse } from "../lib/schemas.js";
 import { parseSearchXML, extractTag } from "../lib/xml-parser.js";
-import { formatToolError } from "../lib/errors.js";
+import { formatToolError, noResultHint } from "../lib/errors.js";
 
 // Common schema for committee decision search (query optional)
 const baseSearchSchemaOptionalQuery = {
@@ -186,19 +186,7 @@ async function searchCommitteeDecisions(
     const totalCount = totalCnt;
 
     if (totalCount === 0) {
-      let errorMsg = `검색 결과가 없습니다.`;
-      errorMsg += `\n\n💡 ${committeeName} 검색 팁:`;
-      errorMsg += `\n   1. 단순 키워드 사용`;
-      errorMsg += `\n   2. 판례 검색: search_precedents(query="${args.query || '키워드'}")`;
-      errorMsg += `\n   3. 법령해석례 검색: search_interpretations(query="${args.query || '키워드'}")`;
-
-      return {
-        content: [{
-          type: "text",
-          text: errorMsg
-        }],
-        isError: true
-      };
+      return noResultHint(args.query || "", committeeName)
     }
 
     let output = `${committeeName} 검색 결과 (총 ${totalCount}건, ${currentPage}페이지):\n\n`;
@@ -214,12 +202,12 @@ async function searchCommitteeDecisions(
       output += `\n`;
     }
 
-    output += `\n💡 전문을 조회하려면 ${textToolName}(id="결정일련번호")를 사용하세요.`;
+    // 후속 도구 안내 제거 (LLM이 이미 도구 목록을 알고 있음)
 
     return {
       content: [{
         type: "text",
-        text: output
+        text: truncateResponse(output)
       }]
     };
   } catch (error) {
@@ -258,7 +246,7 @@ async function getCommitteeDecisionText(
 
     let output = `=== ${decision.사건명 || committeeName} ===\n\n`;
 
-    output += `📋 기본 정보:\n`;
+    output += `기본 정보:\n`;
     output += `  사건번호: ${decision.사건번호 || "N/A"}\n`;
     output += `  결정일자: ${decision.결정일자 || "N/A"}\n`;
     output += `  결정유형: ${decision.결정유형 || "N/A"}\n`;
@@ -267,23 +255,23 @@ async function getCommitteeDecisionText(
     output += `\n`;
 
     if (decision.주문) {
-      output += `📌 주문:\n${decision.주문}\n\n`;
+      output += `주문:\n${decision.주문}\n\n`;
     }
 
     if (decision.결정요지 || decision.요지) {
-      output += `📝 결정요지:\n${decision.결정요지 || decision.요지}\n\n`;
+      output += `결정요지:\n${decision.결정요지 || decision.요지}\n\n`;
     }
 
     if (decision.이유) {
-      output += `📄 이유:\n${decision.이유}\n\n`;
+      output += `이유:\n${decision.이유}\n\n`;
     }
 
     if (decision.참조조문) {
-      output += `📖 참조조문:\n${decision.참조조문}\n\n`;
+      output += `참조조문:\n${decision.참조조문}\n\n`;
     }
 
     if (decision.결정내용 || decision.전문) {
-      output += `📄 전문:\n${decision.결정내용 || decision.전문}\n`;
+      output += `전문:\n${decision.결정내용 || decision.전문}\n`;
     }
 
     return {

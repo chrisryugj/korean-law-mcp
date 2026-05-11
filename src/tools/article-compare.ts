@@ -6,6 +6,7 @@
 import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 import { getLawText } from "./law-text.js"
+import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError } from "../lib/errors.js"
 
 export const CompareArticlesSchema = z.object({
@@ -62,20 +63,15 @@ export async function compareArticles(
     const lawName2 = text2.split('\n')[0] || "두 번째 법령"
 
     let output = `=== 조문 비교 ===\n\n`
-    output += `📋 ${lawName1}\n`
-    output += `${"-".repeat(60)}\n`
+    output += `[1] ${lawName1}\n`
     output += `${text1}\n\n`
-    output += `${"-".repeat(60)}\n\n`
-    output += `📋 ${lawName2}\n`
-    output += `${"-".repeat(60)}\n`
-    output += `${text2}\n\n`
-    output += `${"-".repeat(60)}\n\n`
-    output += `💡 두 조문의 내용을 비교하여 차이점을 확인하세요.`
+    output += `[2] ${lawName2}\n`
+    output += `${text2}\n`
 
     return {
       content: [{
         type: "text",
-        text: output
+        text: truncateResponse(output)
       }]
     }
   } catch (error) {

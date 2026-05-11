@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { LawApiClient } from "../lib/api-client.js";
 import { parseTaxTribunalXML } from "../lib/xml-parser.js";
 import { truncateResponse } from "../lib/schemas.js";
-import { formatToolError } from "../lib/errors.js";
+import { formatToolError, noResultHint } from "../lib/errors.js";
 
 // Tax tribunal decision search tool - Search for special administrative appeals decisions
 export const searchTaxTribunalDecisionsSchema = z.object({
@@ -50,12 +50,7 @@ export async function searchTaxTribunalDecisions(
     const deccs = result.items;
 
     if (totalCount === 0) {
-      return {
-        content: [{
-          type: "text",
-          text: "검색 결과가 없습니다."
-        }]
-      };
+      return noResultHint(args.query || "", "조세심판원 재결례")
     }
 
     let output = `조세심판원 재결례 검색 결과 (총 ${totalCount}건, ${currentPage}페이지):\n\n`;
@@ -73,12 +68,12 @@ export async function searchTaxTribunalDecisions(
       output += `\n`;
     }
 
-    output += `\n💡 전문을 조회하려면 get_tax_tribunal_decision_text Tool을 사용하세요.\n`;
+    // 후속 도구 안내 제거 (LLM이 이미 도구 목록을 알고 있음)
 
     return {
       content: [{
         type: "text",
-        text: output
+        text: truncateResponse(output)
       }]
     };
   } catch (error) {
@@ -146,7 +141,7 @@ export async function getTaxTribunalDecisionText(
 
     let output = `=== ${basic.사건명 || "Tax Tribunal Decision"} ===\n\n`;
 
-    output += `📋 기본 정보:\n`;
+    output += `기본 정보:\n`;
     output += `  사건번호: ${basic.사건번호 || "N/A"}\n`;
     output += `  청구번호: ${basic.청구번호 || "N/A"}\n`;
     output += `  처분일자: ${basic.처분일자 || "N/A"}\n`;
@@ -157,31 +152,31 @@ export async function getTaxTribunalDecisionText(
     output += `  세목: ${basic.세목 || "N/A"}\n\n`;
 
     if (content.재결요지) {
-      output += `📌 재결요지:\n${content.재결요지}\n\n`;
+      output += `재결요지:\n${content.재결요지}\n\n`;
     }
 
     if (content.주문) {
-      output += `⚖️ 주문:\n${content.주문}\n\n`;
+      output += `주문:\n${content.주문}\n\n`;
     }
 
     if (content.청구취지) {
-      output += `📝 청구취지:\n${content.청구취지}\n\n`;
+      output += `청구취지:\n${content.청구취지}\n\n`;
     }
 
     if (content.이유) {
-      output += `📄 이유:\n${content.이유}\n\n`;
+      output += `이유:\n${content.이유}\n\n`;
     }
 
     if (content.따른결정) {
-      output += `🔗 따른결정:\n${content.따른결정}\n\n`;
+      output += `따른결정:\n${content.따른결정}\n\n`;
     }
 
     if (content.참조결정) {
-      output += `📖 참조결정:\n${content.참조결정}\n\n`;
+      output += `참조결정:\n${content.참조결정}\n\n`;
     }
 
     if (content.관련법령) {
-      output += `📚 관련법령:\n${content.관련법령}\n`;
+      output += `관련법령:\n${content.관련법령}\n`;
     }
 
     return {
