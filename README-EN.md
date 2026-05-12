@@ -111,7 +111,7 @@ Include your API key in the URL:
 {
   "mcpServers": {
     "korean-law": {
-      "url": "https://korean-law-mcp.fly.dev/mcp?oc=your-api-key"
+      "url": "https://korean-law-mcp-gejyn14.fly.dev/mcp?oc=your-api-key"
     }
   }
 }
@@ -348,7 +348,7 @@ User: "산업안전보건법 별표1 내용"
 - **Annex Extraction** — Downloads HWPX/HWP/PDF/XLSX/DOCX annexes and converts to Markdown ([kordoc](https://github.com/chrisryugj/kordoc) engine)
 - **8 Chain Tools** — Composite research workflows in a single call (e.g. `chain_full_research`: AI search → statutes → precedents → interpretations)
 - **Caching** — 1-hour search cache, 24-hour article cache
-- **Remote Endpoint** — Use without installation via `https://korean-law-mcp.fly.dev/mcp`
+- **Remote Endpoint** — Use without installation via `https://korean-law-mcp-gejyn14.fly.dev/mcp`
 
 ---
 

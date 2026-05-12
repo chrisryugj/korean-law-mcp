@@ -37,4 +37,4 @@
 - 플랫폼: Fly.io (앱: korean-law-mcp)
 - 리전: nrt (도쿄)
 - Dockerfile: node:20-alpine, SSE 모드
-- URL: https://korean-law-mcp.fly.dev/
+- URL: https://korean-law-mcp-gejyn14.fly.dev/

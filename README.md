@@ -113,7 +113,7 @@ MCP 도구 설계에서 **도구 수 ≠ 기능 수**입니다.
    - **URL**: 아래 주소를 붙여넣으세요. `honggildong` 부분을 **0단계에서 발급받은 본인 인증키**로 바꾸세요:
 
 ```
-https://korean-law-mcp.fly.dev/mcp?oc=honggildong
+https://korean-law-mcp-gejyn14.fly.dev/mcp?oc=honggildong
 ```
 
 7. **추가** 버튼을 누르면 등록 완료!
@@ -153,7 +153,7 @@ Claude Desktop, Cursor, Windsurf 같은 **데스크톱 앱**을 쓰고 있다면
 {
   "mcpServers": {
     "korean-law": {
-      "url": "https://korean-law-mcp.fly.dev/mcp?oc=honggildong"
+      "url": "https://korean-law-mcp-gejyn14.fly.dev/mcp?oc=honggildong"
     }
   }
 }
@@ -284,7 +284,7 @@ v3는 14개 도구만 노출합니다. 나머지 전문 도구는 `discover_tool
 - **8개 체인 도구** — 복합 리서치를 한 번의 호출로 (예: `chain_full_research`: AI검색→법령→판례→해석)
 - **17개 도메인 통합 검색** — `search_decisions` 하나로 판례·헌재·조세심판·공정위·노동위 등 즉시 접근
 - **캐시** — 검색 1시간, 조문 24시간 TTL
-- **원격 엔드포인트** — 설치 없이 `https://korean-law-mcp.fly.dev/mcp`로 바로 사용
+- **원격 엔드포인트** — 설치 없이 `https://korean-law-mcp-gejyn14.fly.dev/mcp`로 바로 사용
 
 ---
 
