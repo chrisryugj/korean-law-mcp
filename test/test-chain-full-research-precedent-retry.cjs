@@ -59,7 +59,7 @@ function privacyAiLawXml() {
     "<법령명>정보통신망 이용촉진 및 정보보호 등에 관한 법률</법령명>",
     "<법령종류명>법률</법령종류명>",
     "<조문번호>0044</조문번호>",
-    "<조문제목>정보통신망에서의 권리보호</조문제목>",
+    "<조문제목>사생활 침해</조문제목>",
     "<조문내용>이용자는 사생활 침해 또는 명예훼손 등 타인의 권리를 침해하는 정보를 정보통신망에 유통시켜서는 아니 된다.</조문내용>",
     "<시행일자>20251001</시행일자>",
     "</법령조문>",
@@ -78,9 +78,14 @@ function privacyAiLawXml() {
 function manyAiLawXml() {
   return [
     "<aiSearch>",
-    "<검색결과개수>4</검색결과개수>",
+    "<검색결과개수>6</검색결과개수>",
     "<page>1</page>",
-    "<법령조문><법령명>민법</법령명><조문제목>불법행위의 내용</조문제목><조문내용>손해배상 위자료 과실 책임 하자담보 청약철회 사생활 침해 명예훼손 개인정보</조문내용><시행일자>20260101</시행일자></법령조문>",
+    "<법령조문><법령명>민법</법령명><조문번호>0750</조문번호><조문제목>불법행위의 내용</조문제목><조문내용>테스트</조문내용><시행일자>20260101</시행일자></법령조문>",
+    "<법령조문><법령명>민법</법령명><조문번호>0398</조문번호><조문제목>배상액의 예정</조문제목><조문내용>테스트</조문내용><시행일자>20260101</시행일자></법령조문>",
+    "<법령조문><법령명>민법</법령명><조문번호>0543</조문번호><조문제목>해지 해제</조문제목><조문내용>테스트</조문내용><시행일자>20260101</시행일자></법령조문>",
+    "<법령조문><법령명>근로기준법</법령명><조문번호>0023</조문번호><조문제목>해고 등의 제한</조문제목><조문내용>테스트</조문내용><시행일자>20260101</시행일자></법령조문>",
+    "<법령조문><법령명>전자상거래 등에서의 소비자보호에 관한 법률</법령명><조문번호>0017</조문번호><조문제목>청약철회등</조문제목><조문내용>테스트</조문내용><시행일자>20260101</시행일자></법령조문>",
+    "<법령조문><법령명>질서위반행위규제법</법령명><조문번호>0016</조문번호><조문제목>사전통지 및 의견 제출</조문제목><조문내용>테스트</조문내용><시행일자>20260101</시행일자></법령조문>",
     "</aiSearch>",
   ].join("")
 }
@@ -114,6 +119,23 @@ function genericContractAiLawXml() {
     "<조문제목>청약철회등</조문제목>",
     "<조문내용>통신판매업자와 재화등의 구매에 관한 계약을 체결한 소비자는 기간 이내에 해당 계약에 관한 청약철회등을 할 수 있다.</조문내용>",
     "<시행일자>20260120</시행일자>",
+    "</법령조문>",
+    "</aiSearch>",
+  ].join("")
+}
+
+function extendedIssueAiLawXml() {
+  return [
+    "<aiSearch>",
+    "<검색결과개수>1</검색결과개수>",
+    "<page>1</page>",
+    "<법령조문>",
+    "<법령명>고용정책 기본법</법령명>",
+    "<법령종류명>법률</법령종류명>",
+    "<조문번호>0007</조문번호>",
+    "<조문제목>취업기회의 균등한 보장</조문제목>",
+    "<조문내용>사업주는 모집과 채용에서 고용 차별이 발생하지 않도록 하여야 한다.</조문내용>",
+    "<시행일자>20260101</시행일자>",
     "</법령조문>",
     "</aiSearch>",
   ].join("")
@@ -225,6 +247,25 @@ async function testIgnoresGenericContractPhrase(chainFullResearch) {
   assert.ok(text.includes("판례 1차 검색 실패 후 재검색어 \"청약철회\""), text)
 }
 
+async function testUsesAiLawArticleTitleCandidate(chainFullResearch) {
+  const apiClient = makeApiClient({
+    succeedOnQuery: "취업기회의 균등한 보장",
+    aiLawXml: extendedIssueAiLawXml(),
+  })
+
+  const result = await chainFullResearch(apiClient, {
+    query: "채용 과정에서 불합리한 대우를 받았습니다",
+    apiKey: "test",
+  })
+  const text = result.content?.[0]?.text || ""
+
+  assert.deepStrictEqual(apiClient.precedentQueries.slice(0, 2), [
+    "채용 과정에서 불합리한 대우를 받았습니다",
+    "취업기회의 균등한 보장",
+  ])
+  assert.ok(text.includes("판례 1차 검색 실패 후 재검색어 \"취업기회의 균등한 보장\""), text)
+}
+
 async function testSkipsLowConfidenceLawText(chainFullResearch) {
   const apiClient = makeApiClient({
     succeedOnQuery: "청약철회",
@@ -282,6 +323,7 @@ async function main() {
   await testRetriesSuggestedKeywordAfterRawPrecedentFailure(chainFullResearch)
   await testIgnoresQuotedLawNameFragments(chainFullResearch)
   await testIgnoresGenericContractPhrase(chainFullResearch)
+  await testUsesAiLawArticleTitleCandidate(chainFullResearch)
   await testSkipsLowConfidenceLawText(chainFullResearch)
   await testKeepsExplicitLawText(chainFullResearch)
   await testLimitsPrecedentRetriesToFive(chainFullResearch)

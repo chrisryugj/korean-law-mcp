@@ -38,6 +38,7 @@ import { getLawText } from "./law-text.js"
 import { searchTaxTribunalDecisions } from "./tax-tribunal-decisions.js"
 import { searchNlrcDecisions, searchPipcDecisions } from "./committee-decisions.js"
 import { fetchSearchDetailChain, fetchCombinedSearchDetailChain } from "./search-detail-chain.js"
+import { buildCompactLegalQueries } from "./compact-query-planner.js"
 
 // ========================================
 // Types
@@ -57,8 +58,6 @@ type ExpansionType = "annex_fee" | "annex_form" | "annex_table" | "precedent" | 
 // ========================================
 
 const PRECEDENT_RETRY_LIMIT = 5
-const LEGAL_ISSUE_SUFFIX_RE =
-  /([가-힣]{2,12})\s*(침해|훼손|보호|배상|책임|의무|권리|청구|반환|철회|취소|해제|해지|담보|계약|행위|위자료|처분|해고|징계|과태료|보증금|임금)/g
 
 async function callTool(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -142,92 +141,6 @@ function isSearchFailure(result: CallResult): boolean {
   return result.isError || /\[NOT_FOUND\]|\[FAILED\]|검색 결과가 없습니다|조회 실패/.test(result.text)
 }
 
-function uniqueNonEmpty(values: string[]): string[] {
-  const seen = new Set<string>()
-  const unique: string[] = []
-  for (const value of values) {
-    const normalized = value.trim().replace(/\s+/g, " ")
-    if (!normalized || seen.has(normalized)) continue
-    seen.add(normalized)
-    unique.push(normalized)
-  }
-  return unique
-}
-
-function extractRetrySuggestions(text: string): string[] {
-  const suggestions: string[] = []
-  for (const line of text.split("\n")) {
-    if (!line.includes("재시도 제안")) continue
-    const matches = line.matchAll(/"([^"]+)"/g)
-    for (const match of matches) {
-      suggestions.push(match[1])
-    }
-  }
-  return uniqueNonEmpty(suggestions)
-}
-
-function isUsefulPrecedentCandidate(candidate: string, originalQuery: string): boolean {
-  const normalized = candidate.trim().replace(/\s+/g, " ")
-  if (!normalized || normalized === originalQuery) return false
-  if (normalized.length < 2) return false
-
-  const tokens = normalized.split(/\s+/)
-  if (/^(관한|대한|위한|따른|해당|관련)\s/.test(normalized)) return false
-  if (/(의|에)$/.test(tokens[0])) return false
-  if (tokens.some(token => /(에서|에게|으로|로서|로써|부터|까지)$/.test(token))) return false
-  return true
-}
-
-function extractRouteQueryCandidates(query: string): string[] {
-  const candidates: string[] = []
-  const route = routeQuery(query)
-
-  const addParamCandidate = (value: unknown): void => {
-    if (typeof value === "string") candidates.push(value)
-  }
-
-  addParamCandidate(route.params.query)
-  addParamCandidate(route.params.lawName)
-  for (const step of route.pipeline || []) {
-    addParamCandidate(step.params.query)
-    addParamCandidate(step.params.lawName)
-  }
-
-  return uniqueNonEmpty(candidates)
-}
-
-function extractAiLawPrecedentCandidates(text: string): string[] {
-  const issueCandidates: string[] = []
-  const titleCandidates: string[] = []
-  const lawNameCandidates: string[] = []
-
-  for (const line of text.split("\n")) {
-    const titleMatch = line.match(/제\d+조(?:의\d+)?\s*\(([^)]+)\)/)
-    if (titleMatch) {
-      const title = titleMatch[1]
-        .replace(/등(?:의)?\s*(효과|제한|기준)?/g, "")
-        .replace(/의\s*(내용|효과|기준|범위)$/g, "")
-        .trim()
-      if (title) titleCandidates.push(title)
-    }
-
-    if (/^\s+/.test(line) && !titleMatch) {
-      const issueLine = line.replace(/「[^」]+」/g, " ")
-      const matches = issueLine.matchAll(LEGAL_ISSUE_SUFFIX_RE)
-      for (const match of matches) {
-        issueCandidates.push(match[0].trim().replace(/\s+/g, " "))
-      }
-    }
-
-    const trimmed = line.trim()
-    if (/^[가-힣\s]+(법|법률|시행령|시행규칙)$/.test(trimmed)) {
-      lawNameCandidates.push(trimmed)
-    }
-  }
-
-  return uniqueNonEmpty([...issueCandidates, ...titleCandidates, ...lawNameCandidates])
-}
-
 function filterReliableLawResults(laws: LawInfo[], query: string): LawInfo[] {
   const queryWords = query.replace(NON_LAW_NAME_RE, " ")
     .trim()
@@ -245,13 +158,14 @@ async function retryPrecedentsIfNeeded(
 ): Promise<CallResult> {
   if (!isSearchFailure(precedentResult)) return precedentResult
 
-  const candidates = uniqueNonEmpty([
-    ...extractAiLawPrecedentCandidates(aiLawResult?.text || ""),
-    ...extractRouteQueryCandidates(input.query),
-    ...extractRetrySuggestions(precedentResult.text),
-  ])
-    .filter(candidate => isUsefulPrecedentCandidate(candidate, input.query))
-    .slice(0, PRECEDENT_RETRY_LIMIT)
+  const route = routeQuery(input.query)
+  const candidates = buildCompactLegalQueries({
+    originalQuery: input.query,
+    aiLawText: aiLawResult?.text,
+    route,
+    failedSearchText: precedentResult.text,
+    max: PRECEDENT_RETRY_LIMIT,
+  }).map(candidate => candidate.query)
 
   if (candidates.length === 0) return precedentResult
 
