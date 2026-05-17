@@ -175,10 +175,6 @@ function isUsefulPrecedentCandidate(candidate: string, originalQuery: string): b
   if (/^(관한|대한|위한|따른|해당|관련)\s/.test(normalized)) return false
   if (/(의|에)$/.test(tokens[0])) return false
   if (tokens.some(token => /(에서|에게|으로|로서|로써|부터|까지)$/.test(token))) return false
-  if (/^(타인|타인의|해당|관련|위|아래|다음|일반|필요|경우|사항|정보|법률|법령|시행)$/.test(normalized)) return false
-  if (tokens.length <= 2 && tokens.every(token => /^(공원|풍경|사진|구석|사람|얼굴|허락|SNS)$/i.test(token))) {
-    return false
-  }
   return true
 }
 
