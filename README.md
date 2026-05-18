@@ -565,6 +565,41 @@ korean-law help search_law                 # 도구별 도움말
 | 환경변수 | `LAW_OC=내키` | 로컬 설치(방법 3, 4) |
 | 도구 파라미터 | `apiKey: "내키"` | 특정 요청만 다른 키 쓸 때 |
 
+### 법제처 API 프로토콜 설정
+
+법제처 API 호출은 기본적으로 HTTPS를 사용합니다. 사내망·폐쇄망 등 인증서 검증이 어려운 환경에서는 `LAW_API_PROTOCOL=http`를 설정해 HTTP로 호출할 수 있습니다.
+
+MCP 클라이언트 설정의 `env` 블록에 함께 넣는 방식이 가장 명확합니다:
+
+```json
+{
+  "mcpServers": {
+    "korean-law": {
+      "command": "korean-law-mcp",
+      "env": {
+        "LAW_OC": "honggildong",
+        "LAW_API_PROTOCOL": "http"
+      }
+    }
+  }
+}
+```
+
+터미널에서 직접 실행하거나 `.env` 파일을 사용할 수도 있습니다:
+
+```bash
+export LAW_API_PROTOCOL=http        # Mac/Linux
+set LAW_API_PROTOCOL=http           # Windows CMD
+$env:LAW_API_PROTOCOL="http"       # Windows PowerShell
+```
+
+```env
+LAW_OC=honggildong
+LAW_API_PROTOCOL=http
+```
+
+허용값은 `http`, `https`입니다. 설정하지 않거나 다른 값을 넣으면 `https`가 사용됩니다.
+
 ---
 
 ## 사용 예시
