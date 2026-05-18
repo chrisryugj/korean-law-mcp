@@ -9,14 +9,11 @@ import type { LawApiClient } from "../lib/api-client.js"
 import type { ToolResponse, LooseToolResponse } from "../lib/types.js"
 import {
   findLaws,
-  stripNonLawKeywords as _unused1,
   NON_LAW_NAME_RE,
   scoreLawRelevance,
   type LawInfo,
 } from "../lib/law-search.js"
 import { routeQuery } from "../lib/query-router.js"
-// chains.ts 내부 헬퍼가 참조하던 NON_LAW_NAME_RE만 유지 (stripNonLawKeywords는 findLaws 내부에서 사용)
-void _unused1
 import { runScenario, detectScenario, formatSections, formatSuggestedActions } from "./scenarios/index.js"
 import type { ScenarioType, ScenarioContext } from "./scenarios/index.js"
 
@@ -148,6 +145,14 @@ function filterReliableLawResults(laws: LawInfo[], query: string): LawInfo[] {
     .filter(word => word.length > 0)
 
   return laws.filter(law => scoreLawRelevance(law.lawName, query, queryWords) > 5)
+}
+
+function selectLawTextSource(laws: LawInfo[], query: string): { reliableLaws: LawInfo[], textLaw?: LawInfo, lowConfidence: boolean } {
+  const reliableLaws = filterReliableLawResults(laws, query)
+  if (reliableLaws.length > 0) {
+    return { reliableLaws, textLaw: reliableLaws[0], lowConfidence: false }
+  }
+  return { reliableLaws, textLaw: laws[0], lowConfidence: laws.length > 0 }
 }
 
 async function retryPrecedentsIfNeeded(
@@ -586,16 +591,16 @@ export async function chainFullResearch(
       callTool(searchPrecedents, apiClient, { query: input.query, display: 5, apiKey: input.apiKey }),
       callTool(searchInterpretations, apiClient, { query: input.query, display: 5, apiKey: input.apiKey }),
     ])
-    const lawsResult = filterReliableLawResults(rawLawsResult, input.query)
+    const { reliableLaws: lawsResult, textLaw, lowConfidence } = selectLawTextSource(rawLawsResult, input.query)
     const finalPrecResult = await retryPrecedentsIfNeeded(apiClient, input, precResult, aiResult)
 
     parts.push(secOrSkip("AI 법령검색 결과", aiResult))
 
     // 법령 본문 (첫 번째 결과)
-    if (lawsResult.length > 0) {
-      const p = lawsResult[0]
-      const lawText = await callTool(getLawText, apiClient, { mst: p.mst, apiKey: input.apiKey })
-      parts.push(secOrSkip(`${p.lawName} 본문`, lawText))
+    if (textLaw) {
+      const lawText = await callTool(getLawText, apiClient, { mst: textLaw.mst, apiKey: input.apiKey })
+      const confidenceSuffix = lowConfidence ? " (관련도 낮음)" : ""
+      parts.push(secOrSkip(`${textLaw.lawName} 본문${confidenceSuffix}`, lawText))
     }
 
     parts.push(secOrSkip("관련 판례", finalPrecResult))

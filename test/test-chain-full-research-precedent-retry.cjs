@@ -266,7 +266,7 @@ async function testUsesAiLawArticleTitleCandidate(chainFullResearch) {
   assert.ok(text.includes("판례 1차 검색 실패 후 재검색어 \"취업기회의 균등한 보장\""), text)
 }
 
-async function testSkipsLowConfidenceLawText(chainFullResearch) {
+async function testUsesLowConfidenceLawTextFallback(chainFullResearch) {
   const apiClient = makeApiClient({
     succeedOnQuery: "청약철회",
     aiLawXml: genericContractAiLawXml(),
@@ -279,8 +279,8 @@ async function testSkipsLowConfidenceLawText(chainFullResearch) {
   })
   const text = result.content?.[0]?.text || ""
 
-  assert.strictEqual(apiClient.lawTextRequests.length, 0)
-  assert.ok(!text.includes("가축전염병 예방법 본문"), text)
+  assert.strictEqual(apiClient.lawTextRequests.length, 1)
+  assert.ok(text.includes("▶ 가축전염병 예방법 본문 (관련도 낮음)"), text)
 }
 
 async function testKeepsExplicitLawText(chainFullResearch) {
@@ -324,7 +324,7 @@ async function main() {
   await testIgnoresQuotedLawNameFragments(chainFullResearch)
   await testIgnoresGenericContractPhrase(chainFullResearch)
   await testUsesAiLawArticleTitleCandidate(chainFullResearch)
-  await testSkipsLowConfidenceLawText(chainFullResearch)
+  await testUsesLowConfidenceLawTextFallback(chainFullResearch)
   await testKeepsExplicitLawText(chainFullResearch)
   await testLimitsPrecedentRetriesToFive(chainFullResearch)
   console.log("chain_full_research precedent retry tests passed")

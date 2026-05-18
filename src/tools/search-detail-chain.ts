@@ -127,11 +127,16 @@ export async function fetchSearchDetailChain(
   if (ids.length === 0) return null
 
   const blocks: string[] = [header(searchTool, ids.length)]
-  let failures = 0
 
-  for (const id of ids) {
-    const detail = await callDetailTool(apiClient, searchTool, id, options)
-    if (detail.isError) failures += 1
+  const details = await Promise.all(
+    ids.map(async id => ({
+      id,
+      detail: await callDetailTool(apiClient, searchTool, id, options),
+    }))
+  )
+
+  const failures = details.filter(({ detail }) => detail.isError).length
+  for (const { id, detail } of details) {
     blocks.push(`[${id}]\n${detail.text || "상세조회 결과가 비어 있습니다."}`)
   }
 
