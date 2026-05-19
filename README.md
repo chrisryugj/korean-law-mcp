@@ -473,7 +473,28 @@ Claude Desktop, Cursor, Windsurf 같은 **데스크톱 앱**을 쓰고 있다면
 | Cursor | 프로젝트 폴더 안 `.cursor/mcp.json` | 프로젝트 폴더 안 `.cursor/mcp.json` |
 | Windsurf | 프로젝트 폴더 안 `.windsurf/mcp.json` | 프로젝트 폴더 안 `.windsurf/mcp.json` |
 
-**설정 파일에 추가할 내용** (`honggildong`을 본인 인증키로 바꾸세요):
+#### Claude Desktop
+
+Claude Desktop은 원격 HTTP MCP 서버를 직접 연결하지 못하므로 `mcp-remote` 어댑터를 통해 연결합니다. [Node.js](https://nodejs.org) 18 이상이 필요합니다 (`npx` 사용을 위해).
+
+```json
+{
+  "mcpServers": {
+    "korean-law": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://korean-law-mcp.fly.dev/mcp?oc=honggildong"
+      ]
+    }
+  }
+}
+```
+
+> `honggildong`을 본인 인증키로 바꾸세요. Node.js를 설치하기 싫다면 [방법 4](#방법-4-내-컴퓨터에-직접-설치-오프라인-가능)의 로컬 설치를 사용하세요.
+
+#### Cursor, Windsurf 등 (원격 HTTP 지원 클라이언트)
 
 ```json
 {
