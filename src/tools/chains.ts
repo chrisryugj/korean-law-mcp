@@ -9,12 +9,11 @@ import type { LawApiClient } from "../lib/api-client.js"
 import type { ToolResponse, LooseToolResponse } from "../lib/types.js"
 import {
   findLaws,
-  stripNonLawKeywords as _unused1,
   NON_LAW_NAME_RE,
+  scoreLawRelevance,
   type LawInfo,
 } from "../lib/law-search.js"
-// chains.ts 내부 헬퍼가 참조하던 NON_LAW_NAME_RE만 유지 (stripNonLawKeywords는 findLaws 내부에서 사용)
-void _unused1
+import { routeQuery } from "../lib/query-router.js"
 import { runScenario, detectScenario, formatSections, formatSuggestedActions } from "./scenarios/index.js"
 import type { ScenarioType, ScenarioContext } from "./scenarios/index.js"
 
@@ -35,6 +34,8 @@ import { searchAiLaw } from "./life-law.js"
 import { getLawText } from "./law-text.js"
 import { searchTaxTribunalDecisions } from "./tax-tribunal-decisions.js"
 import { searchNlrcDecisions, searchPipcDecisions } from "./committee-decisions.js"
+import { fetchSearchDetailChain, fetchCombinedSearchDetailChain } from "./search-detail-chain.js"
+import { buildCompactLegalQueries } from "./compact-query-planner.js"
 
 // ========================================
 // Types
@@ -52,6 +53,8 @@ type ExpansionType = "annex_fee" | "annex_form" | "annex_table" | "precedent" | 
 // ========================================
 // Helpers
 // ========================================
+
+const PRECEDENT_RETRY_LIMIT = 5
 
 async function callTool(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -127,6 +130,71 @@ function noResult(query: string): ToolResponse {
   }
   return {
     content: [{ type: "text", text: lines.join("\n") }],
+    isError: true,
+  }
+}
+
+function isSearchFailure(result: CallResult): boolean {
+  return result.isError || /\[NOT_FOUND\]|\[FAILED\]|검색 결과가 없습니다|조회 실패/.test(result.text)
+}
+
+function filterReliableLawResults(laws: LawInfo[], query: string): LawInfo[] {
+  const queryWords = query.replace(NON_LAW_NAME_RE, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(word => word.length > 0)
+
+  return laws.filter(law => scoreLawRelevance(law.lawName, query, queryWords) > 5)
+}
+
+function selectLawTextSource(laws: LawInfo[], query: string): { reliableLaws: LawInfo[], textLaw?: LawInfo, lowConfidence: boolean } {
+  const reliableLaws = filterReliableLawResults(laws, query)
+  if (reliableLaws.length > 0) {
+    return { reliableLaws, textLaw: reliableLaws[0], lowConfidence: false }
+  }
+  return { reliableLaws, textLaw: laws[0], lowConfidence: laws.length > 0 }
+}
+
+async function retryPrecedentsIfNeeded(
+  apiClient: LawApiClient,
+  input: { query: string; apiKey?: string },
+  precedentResult: CallResult,
+  aiLawResult?: CallResult
+): Promise<CallResult> {
+  if (!isSearchFailure(precedentResult)) return precedentResult
+
+  const route = routeQuery(input.query)
+  const candidates = buildCompactLegalQueries({
+    originalQuery: input.query,
+    aiLawText: aiLawResult?.text,
+    route,
+    failedSearchText: precedentResult.text,
+    max: PRECEDENT_RETRY_LIMIT,
+  }).map(candidate => candidate.query)
+
+  if (candidates.length === 0) return precedentResult
+
+  for (const query of candidates) {
+    const retried = await callTool(searchPrecedents, apiClient, {
+      query,
+      display: 5,
+      apiKey: input.apiKey,
+    })
+    if (!isSearchFailure(retried) && retried.text.trim()) {
+      return {
+        text: `판례 1차 검색 실패 후 재검색어 "${query}"로 조회했습니다.\n\n${retried.text}`,
+        isError: false,
+      }
+    }
+  }
+
+  return {
+    text: [
+      precedentResult.text,
+      "",
+      `재검색 시도(최대 ${PRECEDENT_RETRY_LIMIT}회): ${candidates.map(query => `"${query}"`).join(", ")}`,
+      "모든 재검색에서 판례 검색 결과가 없습니다.",
+    ].join("\n"),
     isError: true,
   }
 }
@@ -244,6 +312,15 @@ export async function chainActionBasis(
     parts.push(secOrSkip("관련 판례", precR))
     parts.push(secOrSkip("행정심판례", appealR))
 
+    const [interpDetail, precDetail, appealDetail] = await Promise.all([
+      fetchSearchDetailChain(apiClient, "search_interpretations", interpR, { apiKey: input.apiKey }),
+      fetchSearchDetailChain(apiClient, "search_precedents", precR, { apiKey: input.apiKey }),
+      fetchSearchDetailChain(apiClient, "search_admin_appeals", appealR, { apiKey: input.apiKey }),
+    ])
+    if (interpDetail) parts.push(secOrSkip("법령 해석례 상세", interpDetail))
+    if (precDetail) parts.push(secOrSkip("관련 판례 상세", precDetail))
+    if (appealDetail) parts.push(secOrSkip("행정심판례 상세", appealDetail))
+
     // 키워드 확장
     const exp = detectExpansions(input.query)
     if (exp.includes("annex_fee") || exp.includes("annex_table")) {
@@ -304,6 +381,14 @@ export async function chainDisputePrep(
 
     parts.push(secOrSkip("대법원 판례", results[0]))
     parts.push(secOrSkip("행정심판례", results[1]))
+
+    const [precDetail, appealDetail] = await Promise.all([
+      fetchSearchDetailChain(apiClient, "search_precedents", results[0], { apiKey: input.apiKey }),
+      fetchSearchDetailChain(apiClient, "search_admin_appeals", results[1], { apiKey: input.apiKey }),
+    ])
+    if (precDetail) parts.push(secOrSkip("대법원 판례 상세", precDetail))
+    if (appealDetail) parts.push(secOrSkip("행정심판례 상세", appealDetail))
+
     if (results[2]) {
       const domainNames: Record<string, string> = {
         tax: "조세심판원 결정",
@@ -311,6 +396,17 @@ export async function chainDisputePrep(
         privacy: "개인정보위 결정",
       }
       parts.push(secOrSkip(domainNames[domain] || "전문 결정례", results[2]))
+
+      const domainSearchTools: Record<string, string> = {
+        tax: "search_tax_tribunal_decisions",
+        labor: "search_nlrc_decisions",
+        privacy: "search_pipc_decisions",
+      }
+      const domainSearchTool = domainSearchTools[domain]
+      if (domainSearchTool) {
+        const domainDetail = await fetchSearchDetailChain(apiClient, domainSearchTool, results[2], { apiKey: input.apiKey })
+        if (domainDetail) parts.push(secOrSkip(`${domainNames[domain] || "전문 결정례"} 상세`, domainDetail))
+      }
     }
 
     // 해석례 (키워드 확장)
@@ -318,6 +414,8 @@ export async function chainDisputePrep(
     if (exp.includes("interpretation")) {
       const interp = await callTool(searchInterpretations, apiClient, { query: input.query, display: 5, apiKey: input.apiKey })
       parts.push(secOrSkip("법령 해석례", interp))
+      const interpDetail = await fetchSearchDetailChain(apiClient, "search_interpretations", interp, { apiKey: input.apiKey })
+      if (interpDetail) parts.push(secOrSkip("법령 해석례 상세", interpDetail))
     }
 
     return wrapResult(parts.join("\n"))
@@ -487,24 +585,33 @@ export async function chainFullResearch(
       try { return await findLaws(apiClient, input.query, input.apiKey, 2) }
       catch { return [] }
     }
-    const [aiResult, lawsResult, precResult, interpResult] = await Promise.all([
+    const [aiResult, rawLawsResult, precResult, interpResult] = await Promise.all([
       callTool(searchAiLaw, apiClient, { query: input.query, display: 10, apiKey: input.apiKey }),
       safeFindLaws(),
       callTool(searchPrecedents, apiClient, { query: input.query, display: 5, apiKey: input.apiKey }),
       callTool(searchInterpretations, apiClient, { query: input.query, display: 5, apiKey: input.apiKey }),
     ])
+    const { reliableLaws: lawsResult, textLaw, lowConfidence } = selectLawTextSource(rawLawsResult, input.query)
+    const finalPrecResult = await retryPrecedentsIfNeeded(apiClient, input, precResult, aiResult)
 
     parts.push(secOrSkip("AI 법령검색 결과", aiResult))
 
     // 법령 본문 (첫 번째 결과)
-    if (lawsResult.length > 0) {
-      const p = lawsResult[0]
-      const lawText = await callTool(getLawText, apiClient, { mst: p.mst, apiKey: input.apiKey })
-      parts.push(secOrSkip(`${p.lawName} 본문`, lawText))
+    if (textLaw) {
+      const lawText = await callTool(getLawText, apiClient, { mst: textLaw.mst, apiKey: input.apiKey })
+      const confidenceSuffix = lowConfidence ? " (관련도 낮음)" : ""
+      parts.push(secOrSkip(`${textLaw.lawName} 본문${confidenceSuffix}`, lawText))
     }
 
-    parts.push(secOrSkip("관련 판례", precResult))
+    parts.push(secOrSkip("관련 판례", finalPrecResult))
     parts.push(secOrSkip("법령 해석례", interpResult))
+
+    const [precDetail, interpDetail] = await Promise.all([
+      fetchSearchDetailChain(apiClient, "search_precedents", finalPrecResult, { apiKey: input.apiKey }),
+      fetchSearchDetailChain(apiClient, "search_interpretations", interpResult, { apiKey: input.apiKey }),
+    ])
+    if (precDetail) parts.push(secOrSkip("관련 판례 상세", precDetail))
+    if (interpDetail) parts.push(secOrSkip("법령 해석례 상세", interpDetail))
 
     // 키워드 확장
     const exp = detectExpansions(input.query)
@@ -667,6 +774,16 @@ export async function chainDocumentReview(
     }
     if (precTexts.length > 0) {
       parts.push(sec("관련 판례", precTexts.join("\n\n")))
+    }
+
+    const precedentDetail = await fetchCombinedSearchDetailChain(
+      apiClient,
+      "search_precedents",
+      searchResults.slice(0, uniqueHints.length),
+      { apiKey: input.apiKey }
+    )
+    if (precedentDetail) {
+      parts.push(secOrSkip("관련 판례 상세", precedentDetail))
     }
 
     // 법령 결과 합산

@@ -1,5 +1,26 @@
 # Changelog
 
+## [4.0.4] - 2026-05-19
+
+### Added — 약어 부분 매칭 (`extractEmbeddedAliases`)
+
+기존 `resolveLawAlias`는 query 전체가 등록된 약어와 **정확 일치**할 때만 canonical로 변환. "화관법" 단독은 매핑되지만 "화관법 시행령"/"화관법 제5조"/"산안법 위반 사례" 같이 약어가 다른 토큰과 **결합된 query**는 매핑 실패하여 `search_law`가 0건으로 떨어지던 문제 수정.
+
+- **`extractEmbeddedAliases(query)` 신규** ([src/lib/search-normalizer.ts](src/lib/search-normalizer.ts)) — 정규화된 query에 포함된 약어를 길이 우선 탐색하여 풀네임 치환 변형 query 반환. 길이 2자 미만 alias 제외(오탐 방지), 동일 canonical 중복 제거
+- **`expandLawQuery` / `expandOrdinanceQuery` 통합** — 정확 매칭에 더해 부분 매칭 결과를 expanded 배열에 추가. `search_law`의 기존 0건 fallback 흐름이 그대로 혜택
+- 차용 출처: korean-stats-mcp의 `extractKeyword` 긴 키 우선 부분 매칭 패턴
+
+### 검증 (6 케이스 통과 / 회귀 0)
+- "화관법 시행령" → "화학물질관리법 시행령"
+- "화관법 제5조" → "화학물질관리법 제5조"
+- "산안법 시행규칙" → "산업안전보건법 시행규칙"
+- "중처법 제4조 책임자" → "중대재해 처벌 등에 관한 법률 제4조 책임자"
+- "국기법 제15조" → "국세기본법 제15조"
+- "도정법 제17조" → "도시 및 주거환경정비법 제17조"
+- 약어 미포함 query("경상남도 광역시" 등)는 빈 expanded 반환 — 회귀 0건
+
+LexDiff 룰 영향 최소화: 신규 함수 추가 + 기존 `expand*` 함수에 매칭 결과 push. 기존 `resolveLawAlias` 본체 수정 없음.
+
 ## [4.0.3] - 2026-05-11
 
 ### Fixed (사용자 제보: time_travel "임의시점 비교"에서 [NOT_FOUND]")

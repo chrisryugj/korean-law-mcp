@@ -365,6 +365,82 @@ export function resolveLawAlias(lawName: string): LawAliasResolution {
 }
 
 /**
+ * Query 안에 약어가 부분 문자열로 끼어 있는 경우, 풀네임으로 치환된 변형을 반환.
+ *
+ * 예:
+ *   "화관법 제5조"     → ["화학물질관리법 제5조"]
+ *   "화관법 시행령"    → ["화학물질관리법 시행령"]
+ *   "산안법 위반 사례" → ["산업안전보건법 위반 사례"]
+ *   "중처법 제4조 책임" → ["중대재해 처벌 등에 관한 법률 제4조 책임"]
+ *
+ * 매칭 원칙 (stats-mcp의 extractKeyword 패턴 차용):
+ *   - 긴 alias 우선 매칭 (충돌 방지)
+ *   - alias 길이 2자 이상만 부분 매칭 (오탐 방지)
+ *   - 동일 canonical 중복 방지
+ *   - matchedAlias가 query의 전체와 같으면 (정확 매칭은 resolveLawAlias가 처리하므로) 제외
+ */
+export interface EmbeddedAliasMatch {
+  alias: string
+  canonical: string
+  alternatives: string[]
+  expandedQuery: string
+}
+
+export function extractEmbeddedAliases(query: string): EmbeddedAliasMatch[] {
+  const normalizedQuery = normalizeLawSearchText(query)
+  const normalizedQueryKey = normalizeAliasKey(normalizedQuery)
+  const results: EmbeddedAliasMatch[] = []
+  const seenCanonicals = new Set<string>()
+
+  type Candidate = { alias: string; canonical: string; alternatives: string[]; key: string }
+  const candidates: Candidate[] = []
+  for (const entry of LAW_ALIAS_ENTRIES) {
+    for (const alias of entry.aliases) {
+      const key = normalizeAliasKey(alias)
+      if (key.length < 2) continue
+      candidates.push({
+        alias,
+        canonical: entry.canonical,
+        alternatives: entry.alternatives ?? [],
+        key,
+      })
+    }
+  }
+  candidates.sort((a, b) => b.key.length - a.key.length)
+
+  for (const c of candidates) {
+    if (seenCanonicals.has(c.canonical)) continue
+    if (normalizedQueryKey === c.key) continue
+    if (!normalizedQueryKey.includes(c.key)) continue
+
+    const escapedAlias = c.alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    const aliasRegex = new RegExp(escapedAlias, "g")
+    let expandedQuery = normalizedQuery.replace(aliasRegex, c.canonical)
+
+    if (expandedQuery === normalizedQuery) {
+      const aliasParts = c.alias.split(/\s+/u).filter(Boolean).map((p) =>
+        p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      )
+      if (aliasParts.length >= 2) {
+        const flexible = new RegExp(aliasParts.join("\\s*"), "g")
+        expandedQuery = normalizedQuery.replace(flexible, c.canonical)
+      }
+    }
+    if (expandedQuery === normalizedQuery) continue
+
+    seenCanonicals.add(c.canonical)
+    results.push({
+      alias: c.alias,
+      canonical: c.canonical,
+      alternatives: c.alternatives,
+      expandedQuery,
+    })
+  }
+
+  return results
+}
+
+/**
  * 검색어 확장 (Fuzzy Search)
  * 검색 실패 시 대안 검색어 생성
  */
@@ -467,6 +543,13 @@ export function expandOrdinanceQuery(query: string): ExpandedQueries {
     expanded.push(normalized.replace("조례", "규칙"))
   }
 
+  // 5. 약칭 부분 매칭 (자치법규에도 약어가 인용될 수 있음)
+  for (const match of extractEmbeddedAliases(normalized)) {
+    if (!expanded.includes(match.expandedQuery)) {
+      expanded.push(match.expandedQuery)
+    }
+  }
+
   return {
     original: normalized,
     expanded: expanded.slice(0, 5) // 최대 5개
@@ -480,7 +563,25 @@ export function expandLawQuery(query: string): ExpandedQueries {
   const normalized = normalizeLawSearchText(query)
   const expanded: string[] = []
 
-  // 키워드 확장
+  // 1. 약칭 정확 매칭 (전체 query == alias)
+  const aliasResolution = resolveLawAlias(normalized)
+  if (aliasResolution.canonical !== normalized) {
+    expanded.push(aliasResolution.canonical)
+  }
+  expanded.push(...aliasResolution.alternatives)
+
+  // 2. 약칭 부분 매칭 — query 안에 약어가 끼어 있으면 풀네임으로 치환된 변형 추가
+  // ("화관법 제5조" → "화학물질관리법 제5조", "산안법 시행령" → "산업안전보건법 시행령")
+  for (const match of extractEmbeddedAliases(normalized)) {
+    if (!expanded.includes(match.expandedQuery)) {
+      expanded.push(match.expandedQuery)
+    }
+    for (const alt of match.alternatives) {
+      if (!expanded.includes(alt)) expanded.push(alt)
+    }
+  }
+
+  // 3. 키워드 확장
   for (const [keyword, alternatives] of Object.entries(KEYWORD_EXPANSIONS)) {
     if (normalized.toLowerCase().includes(keyword.toLowerCase())) {
       for (const alt of alternatives) {
@@ -491,13 +592,6 @@ export function expandLawQuery(query: string): ExpandedQueries {
       }
     }
   }
-
-  // 약칭 해결
-  const aliasResolution = resolveLawAlias(normalized)
-  if (aliasResolution.canonical !== normalized) {
-    expanded.unshift(aliasResolution.canonical)
-  }
-  expanded.push(...aliasResolution.alternatives)
 
   return {
     original: normalized,

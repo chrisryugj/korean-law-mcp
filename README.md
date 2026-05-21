@@ -49,6 +49,19 @@ graph LR
 
 → STEP 1 상황진단(주택임대차보호법 자동 식별) → STEP 2 권리/구제수단(판례) → STEP 3 신청기관/기한(행정규칙+해석) → STEP 4 필요서류/양식(별표) → STEP 5 함정/주의(시효·법률구조공단). 시민 자연어 → 실행 가능한 단계로 변환.
 
+### + v4.0.4 — 약어 부분 매칭
+
+기존 약어 처리는 query 전체가 등록 약어와 정확 일치할 때만 동작 ("화관법" → "화학물질관리법"). v4.0.4는 약어가 다른 토큰과 **결합된** query도 풀네임 변형으로 자동 확장.
+
+```
+"화관법 시행령"      → "화학물질관리법 시행령"
+"화관법 제5조"       → "화학물질관리법 제5조"
+"산안법 시행규칙"    → "산업안전보건법 시행규칙"
+"중처법 제4조 책임자" → "중대재해 처벌 등에 관한 법률 제4조 책임자"
+```
+
+`extractEmbeddedAliases` 신규 + `expandLawQuery`/`expandOrdinanceQuery` 통합. 회귀 0건.
+
 ---
 
 ## v3.5 — AI 법률 답변의 환각을 잡아내다
@@ -473,7 +486,28 @@ Claude Desktop, Cursor, Windsurf 같은 **데스크톱 앱**을 쓰고 있다면
 | Cursor | 프로젝트 폴더 안 `.cursor/mcp.json` | 프로젝트 폴더 안 `.cursor/mcp.json` |
 | Windsurf | 프로젝트 폴더 안 `.windsurf/mcp.json` | 프로젝트 폴더 안 `.windsurf/mcp.json` |
 
-**설정 파일에 추가할 내용** (`honggildong`을 본인 인증키로 바꾸세요):
+#### Claude Desktop
+
+Claude Desktop은 원격 HTTP MCP 서버를 직접 연결하지 못하므로 `mcp-remote` 어댑터를 통해 연결합니다. [Node.js](https://nodejs.org) 18 이상이 필요합니다 (`npx` 사용을 위해).
+
+```json
+{
+  "mcpServers": {
+    "korean-law": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://korean-law-mcp.fly.dev/mcp?oc=honggildong"
+      ]
+    }
+  }
+}
+```
+
+> `honggildong`을 본인 인증키로 바꾸세요. Node.js를 설치하기 싫다면 [방법 4](#방법-4-내-컴퓨터에-직접-설치-오프라인-가능)의 로컬 설치를 사용하세요.
+
+#### Cursor, Windsurf 등 (원격 HTTP 지원 클라이언트)
 
 ```json
 {

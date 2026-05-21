@@ -196,7 +196,24 @@ Get your free API key at [법제처 Open API](https://open.law.go.kr/LSO/openApi
 
 ### Option 2: Remote (No Install)
 
-Include your API key in the URL:
+**Claude Desktop** does not support remote HTTP MCP servers directly. Use the `mcp-remote` adapter (requires [Node.js](https://nodejs.org) 18+ for `npx`):
+
+```json
+{
+  "mcpServers": {
+    "korean-law": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://korean-law-mcp.fly.dev/mcp?oc=your-api-key"
+      ]
+    }
+  }
+}
+```
+
+**Cursor, Windsurf, and other clients with native remote HTTP support** — use the URL directly:
 
 ```json
 {
