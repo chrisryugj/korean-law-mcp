@@ -16,6 +16,23 @@ const AI_LAW_TEXT = [
   "   시행: 2026.01.01 | 고용노동부",
 ].join("\n")
 
+const AI_LAW_ARTICLES = [
+  {
+    lawName: "콘텐츠산업 진흥법",
+    articleNo: "0002",
+    articleTitle: "정의",
+    articleContent: "이 법에서 사용하는 용어의 뜻은 다음과 같다.",
+    sourceIndex: 0,
+  },
+  {
+    lawName: "전자상거래 등에서의 소비자보호에 관한 법률",
+    articleNo: "0017",
+    articleTitle: "청약철회등",
+    articleContent: "제17조(청약철회등) 소비자는 통신판매업자와 재화등의 구매에 관한 계약을 체결한 경우 청약철회등을 할 수 있다.",
+    sourceIndex: 1,
+  },
+]
+
 async function testUsesStructuredAiLawSignals() {
   const { buildCompactLegalQueries } = await import("../build/tools/compact-query-planner.js")
 
@@ -31,6 +48,55 @@ async function testUsesStructuredAiLawSignals() {
   assert.ok(candidates.includes("고용정책 기본법 취업기회의 균등한 보장"), candidates.join(", "))
 }
 
+async function testUsesRawAiLawArticleSignalsBeforeFormattedText() {
+  const { buildCompactLegalQueries } = await import("../build/tools/compact-query-planner.js")
+
+  const candidates = buildCompactLegalQueries({
+    originalQuery: "중고거래로 옷을 팔았는데 환불해달라고 합니다",
+    aiLawArticles: AI_LAW_ARTICLES,
+    max: 10,
+  })
+  const queries = candidates.map((candidate) => candidate.query)
+
+  assert.ok(queries.includes("청약철회등"), queries.join(", "))
+  assert.ok(queries.includes("청약철회"), queries.join(", "))
+  assert.ok(queries.includes("청약철회 등"), queries.join(", "))
+  assert.ok(queries.includes("전자상거래 등에서의 소비자보호에 관한 법률 청약철회"), queries.join(", "))
+  assert.ok(!queries.includes("정의"), queries.join(", "))
+
+  const rawTitle = candidates.find((candidate) => candidate.query === "청약철회등")
+  const titleSearch = candidates.find((candidate) => candidate.query === "청약철회")
+  const bodySearch = candidates.find((candidate) => candidate.query === "청약철회 등")
+
+  assert.strictEqual(rawTitle.semanticAnchor, "청약철회등")
+  assert.strictEqual(rawTitle.variantKind, "raw")
+  assert.strictEqual(titleSearch.search, 1)
+  assert.strictEqual(titleSearch.variantKind, "terminal_function_word_removed")
+  assert.strictEqual(titleSearch.requiresResultValidation, true)
+  assert.strictEqual(bodySearch.search, 2)
+  assert.strictEqual(bodySearch.variantKind, "terminal_function_word_spaced")
+  assert.strictEqual(bodySearch.requiresResultValidation, true)
+}
+
+async function testDoesNotDestructivelyStripEqualityTitle() {
+  const { buildCompactLegalQueries } = await import("../build/tools/compact-query-planner.js")
+
+  const candidates = buildCompactLegalQueries({
+    originalQuery: "직장에서 성평등 침해를 받았습니다",
+    aiLawArticles: [{
+      lawName: "양성평등기본법",
+      articleNo: "0003",
+      articleTitle: "성평등",
+      articleContent: "성평등은 정치ㆍ경제ㆍ사회ㆍ문화의 모든 영역에서 평등한 책임과 권리를 공유하는 것을 말한다.",
+      sourceIndex: 0,
+    }],
+    max: 10,
+  }).map((candidate) => candidate.query)
+
+  assert.ok(candidates.includes("성평등"), candidates.join(", "))
+  assert.ok(!candidates.includes("성평"), candidates.join(", "))
+}
+
 async function testDoesNotExtractBodySuffixKeywords() {
   const { buildCompactLegalQueries } = await import("../build/tools/compact-query-planner.js")
 
@@ -41,6 +107,25 @@ async function testDoesNotExtractBodySuffixKeywords() {
   }).map((candidate) => candidate.query)
 
   assert.ok(!candidates.includes("고용 차별"), candidates.join(", "))
+}
+
+async function testDoesNotCreateCandidatesFromArticleContentReferences() {
+  const { buildCompactLegalQueries } = await import("../build/tools/compact-query-planner.js")
+
+  const candidates = buildCompactLegalQueries({
+    originalQuery: "소비자가 환불을 요구합니다",
+    aiLawArticles: [{
+      lawName: "콘텐츠산업 진흥법",
+      articleNo: "0027",
+      articleTitle: "표시의무",
+      articleContent: "콘텐츠제작자는 「전자상거래 등에서의 소비자보호에 관한 법률」 제17조(청약철회등)에 따라 표시하여야 한다.",
+      sourceIndex: 0,
+    }],
+    max: 10,
+  }).map((candidate) => candidate.query)
+
+  assert.ok(candidates.includes("표시의무"), candidates.join(", "))
+  assert.ok(!candidates.includes("청약철회"), candidates.join(", "))
 }
 
 async function testUsesRetrySuggestionsAndRouterCandidates() {
@@ -79,7 +164,10 @@ async function testFiltersWeakCandidates() {
 
 async function main() {
   await testUsesStructuredAiLawSignals()
+  await testUsesRawAiLawArticleSignalsBeforeFormattedText()
+  await testDoesNotDestructivelyStripEqualityTitle()
   await testDoesNotExtractBodySuffixKeywords()
+  await testDoesNotCreateCandidatesFromArticleContentReferences()
   await testUsesRetrySuggestionsAndRouterCandidates()
   await testFiltersWeakCandidates()
   console.log("compact query planner tests passed")

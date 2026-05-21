@@ -12,6 +12,8 @@ import {
 
 export const searchPrecedentsSchema = z.object({
   query: z.string().optional().describe("검색 키워드 (예: '자동차', '담보권')"),
+  search: z.number().int().min(1).max(2).optional()
+    .describe("검색범위: 1=판례명 검색(기본), 2=본문검색"),
   court: z.string().optional().describe("법원명 필터 (예: '대법원', '서울고등법원')"),
   caseNumber: z.string().optional().describe("사건번호 (예: '2009느합133')"),
   display: z.number().min(1).max(100).default(20).describe("결과 수 (기본:20, 최대:100)"),
@@ -35,6 +37,7 @@ export async function searchPrecedents(
       page: (args.page || 1).toString(),
     };
     if (args.query) extraParams.query = args.query;
+    if (args.search) extraParams.search = args.search.toString();
     if (args.court) extraParams.curt = args.court;
     if (args.caseNumber) extraParams.nb = args.caseNumber;
     if (args.sort) extraParams.sort = args.sort;

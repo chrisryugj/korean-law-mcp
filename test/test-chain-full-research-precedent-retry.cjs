@@ -124,6 +124,31 @@ function genericContractAiLawXml() {
   ].join("")
 }
 
+function definitionFirstAiLawXml() {
+  return [
+    "<aiSearch>",
+    "<검색결과개수>2</검색결과개수>",
+    "<page>1</page>",
+    "<법령조문>",
+    "<법령명>콘텐츠산업 진흥법</법령명>",
+    "<법령종류명>법률</법령종류명>",
+    "<조문번호>0002</조문번호>",
+    "<조문제목>정의</조문제목>",
+    "<조문내용>제2조(정의) 이 법에서 사용하는 용어의 뜻은 다음과 같다.</조문내용>",
+    "<시행일자>20251001</시행일자>",
+    "</법령조문>",
+    "<법령조문>",
+    "<법령명>전자상거래 등에서의 소비자보호에 관한 법률</법령명>",
+    "<법령종류명>법률</법령종류명>",
+    "<조문번호>0017</조문번호>",
+    "<조문제목>청약철회등</조문제목>",
+    "<조문내용>통신판매업자와 재화등의 구매에 관한 계약을 체결한 소비자는 기간 이내에 청약철회등을 할 수 있다.</조문내용>",
+    "<시행일자>20260120</시행일자>",
+    "</법령조문>",
+    "</aiSearch>",
+  ].join("")
+}
+
 function extendedIssueAiLawXml() {
   return [
     "<aiSearch>",
@@ -149,14 +174,14 @@ function noPrecedentXml() {
   return "<PrecSearch><totalCnt>0</totalCnt><page>1</page></PrecSearch>"
 }
 
-function precedentXml() {
+function precedentXml(caseName = "중고거래 물품대금 반환 사건", id = "12345") {
   return [
     "<PrecSearch>",
     "<totalCnt>1</totalCnt>",
     "<page>1</page>",
     "<prec>",
-    "<판례일련번호>12345</판례일련번호>",
-    "<사건명>중고거래 물품대금 반환 사건</사건명>",
+    `<판례일련번호>${id}</판례일련번호>`,
+    `<사건명>${caseName}</사건명>`,
     "<사건번호>2024가단12345</사건번호>",
     "<법원명>서울중앙지방법원</법원명>",
     "<선고일자>20240101</선고일자>",
@@ -167,11 +192,45 @@ function precedentXml() {
   ].join("")
 }
 
-function makeApiClient({ succeedOnQuery, aiLawXml = noAiLawXml(), lawXml = noLawXml() }) {
+function precedentDetailJson({
+  caseName = "판례",
+  issue = "테스트 판시사항",
+  summary = "테스트 판결요지",
+  body = "테스트 판례 내용",
+} = {}) {
+  return JSON.stringify({
+    PrecService: {
+      사건명: caseName,
+      사건번호: "2024가단12345",
+      법원명: "서울중앙지방법원",
+      선고일자: "20240101",
+      판결유형: "판결",
+      판시사항: issue,
+      판결요지: summary,
+      참조조문: "",
+      참조판례: "",
+      판례내용: body,
+    },
+  })
+}
+
+function makeApiClient({
+  succeedOnQuery,
+  succeedOnRequest,
+  precedentResponseForRequest,
+  precedentDetailCaseName,
+  precedentDetailIssue,
+  precedentDetailSummary,
+  precedentDetailBody,
+  aiLawXml = noAiLawXml(),
+  lawXml = noLawXml(),
+}) {
   const precedentQueries = []
+  const precedentRequests = []
   const lawTextRequests = []
   return {
     precedentQueries,
+    precedentRequests,
     lawTextRequests,
     async searchLaw() {
       return lawXml
@@ -183,10 +242,26 @@ function makeApiClient({ succeedOnQuery, aiLawXml = noAiLawXml(), lawXml = noLaw
     async fetchApi(request) {
       if (request.target === "aiSearch") return aiLawXml
       if (request.target === "expc") return noInterpretationXml()
+      if (request.endpoint === "lawService.do" && request.target === "prec") {
+        return precedentDetailJson({
+          caseName: precedentDetailCaseName || "청약철회 관련 사건",
+          issue: precedentDetailIssue,
+          summary: precedentDetailSummary,
+          body: precedentDetailBody || "전자상거래 청약철회등과 환불 의무에 관한 판례 내용",
+        })
+      }
       if (request.target === "prec") {
         const query = String(request.extraParams?.query || "")
+        const search = String(request.extraParams?.search || "1")
         precedentQueries.push(query)
-        return query === succeedOnQuery ? precedentXml() : noPrecedentXml()
+        precedentRequests.push({ query, search })
+        if (precedentResponseForRequest) {
+          return precedentResponseForRequest({ query, search })
+        }
+        const matched = succeedOnRequest
+          ? succeedOnRequest({ query, search })
+          : query === succeedOnQuery
+        return matched ? precedentXml(`${query} 중고거래 물품대금 반환 사건`) : noPrecedentXml()
       }
       throw new Error(`unexpected target: ${request.target}`)
     },
@@ -245,6 +320,80 @@ async function testIgnoresGenericContractPhrase(chainFullResearch) {
   assert.deepStrictEqual(apiClient.precedentQueries.slice(0, 2), [QUERY, "청약철회"])
   assert.ok(!apiClient.precedentQueries.includes("관한 계약"), apiClient.precedentQueries.join(", "))
   assert.ok(text.includes("판례 1차 검색 실패 후 재검색어 \"청약철회\""), text)
+}
+
+async function testDoesNotRetryGenericDefinitionBeforeSpecificTitle(chainFullResearch) {
+  const apiClient = makeApiClient({
+    succeedOnQuery: "청약철회",
+    aiLawXml: definitionFirstAiLawXml(),
+  })
+
+  const result = await chainFullResearch(apiClient, { query: QUERY, apiKey: "test" })
+  const text = result.content?.[0]?.text || ""
+
+  assert.deepStrictEqual(apiClient.precedentQueries.slice(0, 2), [QUERY, "청약철회"])
+  assert.ok(!apiClient.precedentQueries.includes("정의"), apiClient.precedentQueries.join(", "))
+  assert.ok(text.includes("판례 1차 검색 실패 후 재검색어 \"청약철회\""), text)
+}
+
+async function testUsesBodySearchForSpacedTerminalVariant(chainFullResearch) {
+  const apiClient = makeApiClient({
+    aiLawXml: definitionFirstAiLawXml(),
+    succeedOnRequest: ({ query, search }) => query === "청약철회 등" && search === "2",
+  })
+
+  const result = await chainFullResearch(apiClient, { query: QUERY, apiKey: "test" })
+  const text = result.content?.[0]?.text || ""
+
+  assert.ok(
+    apiClient.precedentRequests.some((request) => request.query === "청약철회 등" && request.search === "2"),
+    JSON.stringify(apiClient.precedentRequests)
+  )
+  assert.ok(text.includes("판례 1차 검색 실패 후 재검색어 \"청약철회 등\""), text)
+}
+
+async function testBodySearchValidationUsesFullDetailText(chainFullResearch) {
+  const middleOnlyBody = `${"가".repeat(900)} 청약철회등 ${"나".repeat(1000)}`
+  const apiClient = makeApiClient({
+    aiLawXml: definitionFirstAiLawXml(),
+    precedentDetailCaseName: "온라인 거래 환불 사건",
+    precedentDetailIssue: "온라인 거래 관련 쟁점",
+    precedentDetailSummary: "소비자 환불 관련 판단",
+    precedentDetailBody: middleOnlyBody,
+    precedentResponseForRequest: ({ query, search }) => {
+      if (query === QUERY) return noPrecedentXml()
+      if (query === "청약철회 등" && search === "2") return precedentXml("온라인 거래 환불 사건")
+      return noPrecedentXml()
+    },
+  })
+
+  const result = await chainFullResearch(apiClient, { query: QUERY, apiKey: "test" })
+  const text = result.content?.[0]?.text || ""
+
+  assert.ok(
+    apiClient.precedentRequests.some((request) => request.query === "청약철회 등" && request.search === "2"),
+    JSON.stringify(apiClient.precedentRequests)
+  )
+  assert.ok(text.includes("판례 1차 검색 실패 후 재검색어 \"청약철회 등\""), text)
+}
+
+async function testRejectsUnrelatedNonEmptyRetryResult(chainFullResearch) {
+  const apiClient = makeApiClient({
+    aiLawXml: genericContractAiLawXml(),
+    precedentDetailCaseName: "자동차 보험금 사건",
+    precedentDetailBody: "자동차 보험금 지급 기준에 관한 판례 내용",
+    precedentResponseForRequest: ({ query }) => {
+      if (query === QUERY) return noPrecedentXml()
+      return precedentXml("자동차 보험금 사건")
+    },
+  })
+
+  const result = await chainFullResearch(apiClient, { query: QUERY, apiKey: "test" })
+  const text = result.content?.[0]?.text || ""
+
+  assert.ok(apiClient.precedentQueries.length > 2, apiClient.precedentQueries.join(", "))
+  assert.ok(!text.includes("판례 1차 검색 실패 후 재검색어"), text)
+  assert.ok(!text.includes("자동차 보험금 사건"), text)
 }
 
 async function testUsesAiLawArticleTitleCandidate(chainFullResearch) {
@@ -323,6 +472,10 @@ async function main() {
   await testRetriesSuggestedKeywordAfterRawPrecedentFailure(chainFullResearch)
   await testIgnoresQuotedLawNameFragments(chainFullResearch)
   await testIgnoresGenericContractPhrase(chainFullResearch)
+  await testDoesNotRetryGenericDefinitionBeforeSpecificTitle(chainFullResearch)
+  await testUsesBodySearchForSpacedTerminalVariant(chainFullResearch)
+  await testBodySearchValidationUsesFullDetailText(chainFullResearch)
+  await testRejectsUnrelatedNonEmptyRetryResult(chainFullResearch)
   await testUsesAiLawArticleTitleCandidate(chainFullResearch)
   await testUsesLowConfidenceLawTextFallback(chainFullResearch)
   await testKeepsExplicitLawText(chainFullResearch)

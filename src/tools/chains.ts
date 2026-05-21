@@ -21,7 +21,7 @@ import type { ScenarioType, ScenarioContext } from "./scenarios/index.js"
 import { analyzeDocument } from "./document-analysis.js"
 import { getThreeTier } from "./three-tier.js"
 import { getBatchArticles } from "./batch-articles.js"
-import { searchPrecedents } from "./precedents.js"
+import { getPrecedentText, searchPrecedents } from "./precedents.js"
 import { summarizePrecedent } from "./precedent-summary.js"
 import { searchInterpretations } from "./interpretations.js"
 import { searchAdminAppeals } from "./admin-appeals.js"
@@ -30,12 +30,12 @@ import { getArticleHistory } from "./article-history.js"
 import { searchOrdinance } from "./ordinance-search.js"
 import { getOrdinance } from "./ordinance.js"
 import { getAnnexes } from "./annex.js"
-import { searchAiLaw } from "./life-law.js"
+import { searchAiLaw, searchAiLawStructured, type AiLawArticleSignal, type SearchAiLawInput } from "./life-law.js"
 import { getLawText } from "./law-text.js"
 import { searchTaxTribunalDecisions } from "./tax-tribunal-decisions.js"
 import { searchNlrcDecisions, searchPipcDecisions } from "./committee-decisions.js"
 import { fetchSearchDetailChain, fetchCombinedSearchDetailChain } from "./search-detail-chain.js"
-import { buildCompactLegalQueries } from "./compact-query-planner.js"
+import { buildCompactLegalQueries, type CompactQueryCandidate } from "./compact-query-planner.js"
 
 // ========================================
 // Types
@@ -44,6 +44,7 @@ import { buildCompactLegalQueries } from "./compact-query-planner.js"
 interface CallResult {
   text: string
   isError: boolean
+  aiLawArticles?: AiLawArticleSignal[]
 }
 
 type DomainType = "customs" | "tax" | "labor" | "privacy" | "competition"
@@ -65,6 +66,22 @@ async function callTool(
   try {
     const result = await handler(apiClient, input)
     return { text: result.content?.[0]?.text || "", isError: !!result.isError }
+  } catch (e) {
+    return { text: `오류: ${e instanceof Error ? e.message : String(e)}`, isError: true }
+  }
+}
+
+async function callAiLaw(
+  apiClient: LawApiClient,
+  input: SearchAiLawInput
+): Promise<CallResult> {
+  try {
+    const result = await searchAiLawStructured(apiClient, input)
+    return {
+      text: result.response.content?.[0]?.text || "",
+      isError: !!result.response.isError,
+      aiLawArticles: result.articleSignals,
+    }
   } catch (e) {
     return { text: `오류: ${e instanceof Error ? e.message : String(e)}`, isError: true }
   }
@@ -155,6 +172,70 @@ function selectLawTextSource(laws: LawInfo[], query: string): { reliableLaws: La
   return { reliableLaws, textLaw: laws[0], lowConfidence: laws.length > 0 }
 }
 
+function normalizeRelevanceText(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[^\p{L}\p{N}]+/gu, "")
+}
+
+function candidateRelevanceTerms(candidate: CompactQueryCandidate): string[] {
+  return Array.from(new Set([candidate.query, candidate.semanticAnchor]
+    .filter((term): term is string => typeof term === "string" && normalizeRelevanceText(term).length >= 2)))
+}
+
+function textContainsCandidateTerm(text: string, candidate: CompactQueryCandidate): boolean {
+  const haystack = normalizeRelevanceText(text)
+  return candidateRelevanceTerms(candidate)
+    .some(term => haystack.includes(normalizeRelevanceText(term)))
+}
+
+function extractPrecedentCaseLines(searchText: string): string[] {
+  return searchText
+    .split("\n")
+    .filter(line => /^\[\d+\]\s+/.test(line.trim()))
+}
+
+function extractFirstPrecedentId(searchText: string): string | undefined {
+  for (const line of searchText.split("\n")) {
+    const match = line.trim().match(/^\[(\d+)\]\s+/)
+    if (match?.[1]) return match[1]
+  }
+  return undefined
+}
+
+async function validateRetryPrecedentResult(
+  apiClient: LawApiClient,
+  candidate: CompactQueryCandidate,
+  result: CallResult,
+  apiKey?: string
+): Promise<boolean> {
+  const caseLines = extractPrecedentCaseLines(result.text)
+  if (caseLines.some(line => textContainsCandidateTerm(line, candidate))) {
+    return true
+  }
+
+  if (candidate.search !== 2 && !candidate.requiresResultValidation) {
+    return false
+  }
+
+  const id = extractFirstPrecedentId(result.text)
+  if (!id) return false
+
+  const detail = await callTool(getPrecedentText, apiClient, {
+    id,
+    full: candidate.search === 2,
+    apiKey,
+  })
+  if (isSearchFailure(detail) || !detail.text.trim()) return false
+
+  return textContainsCandidateTerm(detail.text, candidate)
+}
+
+function formatRetryCandidate(candidate: CompactQueryCandidate): string {
+  return candidate.search === 2 ? `"${candidate.query}"(본문검색)` : `"${candidate.query}"`
+}
+
 async function retryPrecedentsIfNeeded(
   apiClient: LawApiClient,
   input: { query: string; apiKey?: string },
@@ -166,23 +247,25 @@ async function retryPrecedentsIfNeeded(
   const route = routeQuery(input.query)
   const candidates = buildCompactLegalQueries({
     originalQuery: input.query,
+    aiLawArticles: aiLawResult?.aiLawArticles,
     aiLawText: aiLawResult?.text,
     route,
     failedSearchText: precedentResult.text,
     max: PRECEDENT_RETRY_LIMIT,
-  }).map(candidate => candidate.query)
+  })
 
   if (candidates.length === 0) return precedentResult
 
-  for (const query of candidates) {
+  for (const candidate of candidates) {
     const retried = await callTool(searchPrecedents, apiClient, {
-      query,
+      query: candidate.query,
+      search: candidate.search,
       display: 5,
       apiKey: input.apiKey,
     })
-    if (!isSearchFailure(retried) && retried.text.trim()) {
+    if (!isSearchFailure(retried) && retried.text.trim() && await validateRetryPrecedentResult(apiClient, candidate, retried, input.apiKey)) {
       return {
-        text: `판례 1차 검색 실패 후 재검색어 "${query}"로 조회했습니다.\n\n${retried.text}`,
+        text: `판례 1차 검색 실패 후 재검색어 "${candidate.query}"로 조회했습니다.\n\n${retried.text}`,
         isError: false,
       }
     }
@@ -192,7 +275,7 @@ async function retryPrecedentsIfNeeded(
     text: [
       precedentResult.text,
       "",
-      `재검색 시도(최대 ${PRECEDENT_RETRY_LIMIT}회): ${candidates.map(query => `"${query}"`).join(", ")}`,
+      `재검색 시도(최대 ${PRECEDENT_RETRY_LIMIT}회): ${candidates.map(formatRetryCandidate).join(", ")}`,
       "모든 재검색에서 판례 검색 결과가 없습니다.",
     ].join("\n"),
     isError: true,
@@ -586,7 +669,7 @@ export async function chainFullResearch(
       catch { return [] }
     }
     const [aiResult, rawLawsResult, precResult, interpResult] = await Promise.all([
-      callTool(searchAiLaw, apiClient, { query: input.query, display: 10, apiKey: input.apiKey }),
+      callAiLaw(apiClient, { query: input.query, search: "0", display: 10, page: 1, apiKey: input.apiKey }),
       safeFindLaws(),
       callTool(searchPrecedents, apiClient, { query: input.query, display: 5, apiKey: input.apiKey }),
       callTool(searchInterpretations, apiClient, { query: input.query, display: 5, apiKey: input.apiKey }),
