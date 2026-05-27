@@ -201,6 +201,37 @@ function normalizeHtmlText(html: string): string {
     .trim()
 }
 
+function hasSubstantiveTaxlawBody(text: string): boolean {
+  const compact = text.replace(/\s+/g, "")
+  if (compact.length < 20) return false
+  return !/(내용없음|본문없음|조회된내용이없습니다|자료가없습니다)/.test(compact)
+}
+
+function normalizeTaxlawBodyCandidate(value: unknown): string {
+  if (typeof value !== "string") return ""
+  const body = normalizeHtmlText(value)
+  return hasSubstantiveTaxlawBody(body) ? body : ""
+}
+
+function extractTaxlawEditorBody(actionData: any): string {
+  const editorList = Array.isArray(actionData.dcmHwpEditorDVOList)
+    ? actionData.dcmHwpEditorDVOList
+    : []
+
+  for (const item of editorList) {
+    const value = typeof item?.dcmFleByte === "string" ? item.dcmFleByte : ""
+    if (!value.includes("<html") && !value.includes("<body") && value.length <= 100) continue
+    const body = normalizeTaxlawBodyCandidate(value)
+    if (body) return body
+  }
+
+  return ""
+}
+
+function extractTaxlawBody(actionData: any, dcm: any): string {
+  return extractTaxlawEditorBody(actionData) || normalizeTaxlawBodyCandidate(dcm?.ntstDcmCntn)
+}
+
 function extractIframeSrc(html: string): string {
   return html.match(/<iframe\b[^>]*\bsrc\s*=\s*["']?\s*([^"'>\s]+)\s*["']?/i)?.[1] || ""
 }
@@ -258,6 +289,29 @@ async function fetchTaxlawAction(ntstDcmId: string, referer: string): Promise<an
   return JSON.parse(text)
 }
 
+async function resolveTaxlawDetailUrl(iframeUrl: string): Promise<string> {
+  let currentUrl = iframeUrl
+  for (let redirectCount = 0; redirectCount < 3; redirectCount++) {
+    const iframeResponse = await fetchWithRetry(currentUrl, { redirect: "manual" })
+    const location = iframeResponse.headers.get("location")
+    if (!location) {
+      throw new Error(`precedent iframe did not include taxlaw redirect location (HTTP ${iframeResponse.status})`)
+    }
+
+    const nextUrl = normalizeUrl(location, currentUrl)
+    const parsedNextUrl = new URL(nextUrl)
+    if (parsedNextUrl.searchParams.get("ntstDcmId")) {
+      return nextUrl
+    }
+    if (parsedNextUrl.hostname === "taxlaw.nts.go.kr") {
+      throw new Error("HTML fallback response did not expose ntstDcmId")
+    }
+    currentUrl = nextUrl
+  }
+
+  throw new Error("HTML fallback response did not expose ntstDcmId")
+}
+
 async function fetchHtmlFallbackPrecedent(
   apiClient: LawApiClient,
   args: GetPrecedentTextInput,
@@ -281,29 +335,20 @@ async function fetchHtmlFallbackPrecedent(
     throw new Error("HTML fallback response did not include a precedent iframe URL")
   }
 
-  const iframeResponse = await fetchWithRetry(iframeUrl)
-  await fetchText(iframeResponse, "precedent iframe")
-
-  const finalUrl = iframeResponse.url || iframeUrl
-  const ntstDcmId = new URL(finalUrl).searchParams.get("ntstDcmId")
+  const taxlawDetailUrl = await resolveTaxlawDetailUrl(iframeUrl)
+  const ntstDcmId = new URL(taxlawDetailUrl).searchParams.get("ntstDcmId")
   if (!ntstDcmId) {
     throw new Error("HTML fallback response did not expose ntstDcmId")
   }
 
-  const actionJson = await fetchTaxlawAction(ntstDcmId, finalUrl)
+  const actionJson = await fetchTaxlawAction(ntstDcmId, taxlawDetailUrl)
   const actionData = actionJson?.data?.ASIQTB002PR01
   const dcm = actionData?.dcmDVO
   if (!dcm) {
     throw new Error("HTML fallback taxlaw response did not include dcmDVO")
   }
 
-  const editorList = Array.isArray(actionData.dcmHwpEditorDVOList)
-    ? actionData.dcmHwpEditorDVOList
-    : []
-  const bodyHtml = editorList
-    .map((item: any) => typeof item?.dcmFleByte === "string" ? item.dcmFleByte : "")
-    .find((value: string) => value.includes("<html") || value.includes("<body") || value.length > 100)
-  const body = bodyHtml ? normalizeHtmlText(bodyHtml) : ""
+  const body = extractTaxlawBody(actionData, dcm)
   if (!body) {
     throw new Error("HTML fallback taxlaw response did not include precedent body")
   }

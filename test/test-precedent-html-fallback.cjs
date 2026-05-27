@@ -78,6 +78,15 @@ function response(text, url = "https://example.test/") {
   return res
 }
 
+function redirectResponse(location, url = "https://www.law.go.kr/LSW/precInfoP.do") {
+  const res = new Response("", {
+    status: 302,
+    headers: { location },
+  })
+  Object.defineProperty(res, "url", { value: url })
+  return res
+}
+
 function makeApiClient(mode) {
   const requests = []
   return {
@@ -140,11 +149,14 @@ async function testHtmlFallbackExtractsTaxlawBody(getPrecedentText) {
     const urlString = String(url)
     fetchCalls.push({ url: urlString, options })
 
-    if (urlString.includes("/LSW/precInfoP.do?precSeq=777&mode=0")) {
-      return response(
-        "<html><body>taxlaw shell</body></html>",
-        "https://taxlaw.nts.go.kr/qt/USEQTA002P.do?ntstDcmId=200000000000020476"
-      )
+    if (urlString === "http://www.law.go.kr/LSW/precInfoP.do?precSeq=777&mode=0") {
+      assert.strictEqual(options.redirect, "manual")
+      return redirectResponse("https://www.law.go.kr/LSW/precInfoP.do?precSeq=777&mode=0", urlString)
+    }
+
+    if (urlString === "https://www.law.go.kr/LSW/precInfoP.do?precSeq=777&mode=0") {
+      assert.strictEqual(options.redirect, "manual")
+      return redirectResponse("https://taxlaw.nts.go.kr/qt/USEQTA002P.do?ntstDcmId=200000000000020476", urlString)
     }
 
     if (urlString === "https://taxlaw.nts.go.kr/action.do") {
@@ -163,7 +175,8 @@ async function testHtmlFallbackExtractsTaxlawBody(getPrecedentText) {
 
     assert.strictEqual(result.isError, undefined, text)
     assert.deepStrictEqual(apiClient.requests.map((r) => r.type), ["JSON", "HTML"])
-    assert.strictEqual(fetchCalls.length, 2)
+    assert.strictEqual(fetchCalls.length, 3)
+    assert.ok(!fetchCalls.some((call) => call.url.includes("/qt/USEQTA002P.do")), JSON.stringify(fetchCalls))
     assert.ok(text.includes("매매 사실이 등기에 의하여 추정되는 이상 양도소득세"), text)
     assert.ok(text.includes("전문:"), text)
     assert.ok(text.includes("양도소득세 부과처분은 적법하다"), text)
@@ -171,6 +184,32 @@ async function testHtmlFallbackExtractsTaxlawBody(getPrecedentText) {
     assert.ok(!text.includes("<iframe"), text)
     assert.ok(!text.includes("dcmFleByte"), text)
     assert.ok(!text.includes("action.do"), text)
+  } finally {
+    global.fetch = originalFetch
+  }
+}
+
+async function testHtmlFallbackRejectsIframeWithoutTaxlawLocation(getPrecedentText) {
+  const apiClient = makeApiClient("fallback-ok")
+  const originalFetch = global.fetch
+
+  global.fetch = async (url, options = {}) => {
+    const urlString = String(url)
+
+    if (urlString.includes("/LSW/precInfoP.do?precSeq=778&mode=0")) {
+      assert.strictEqual(options.redirect, "manual")
+      return redirectResponse("https://taxlaw.nts.go.kr/qt/USEQTA002P.do")
+    }
+
+    throw new Error(`unexpected fetch: ${urlString} ${JSON.stringify(options)}`)
+  }
+
+  try {
+    const result = await getPrecedentText(apiClient, { id: "778", apiKey: "test" })
+    const text = result.content?.[0]?.text || ""
+
+    assert.strictEqual(result.isError, true)
+    assert.ok(text.includes("HTML fallback response did not expose ntstDcmId"), text)
   } finally {
     global.fetch = originalFetch
   }
@@ -199,11 +238,14 @@ async function testHtmlFallbackRunsAfterJsonParseError(getPrecedentText) {
   const originalFetch = global.fetch
   global.fetch = async (url, options = {}) => {
     const urlString = String(url)
-    if (urlString.includes("/LSW/precInfoP.do?precSeq=888&mode=0")) {
-      return response(
-        "<html><body>taxlaw shell</body></html>",
-        "https://taxlaw.nts.go.kr/qt/USEQTA002P.do?ntstDcmId=200000000000020476"
-      )
+    if (urlString === "http://www.law.go.kr/LSW/precInfoP.do?precSeq=888&mode=0") {
+      assert.strictEqual(options.redirect, "manual")
+      return redirectResponse("https://www.law.go.kr/LSW/precInfoP.do?precSeq=888&mode=0", urlString)
+    }
+
+    if (urlString === "https://www.law.go.kr/LSW/precInfoP.do?precSeq=888&mode=0") {
+      assert.strictEqual(options.redirect, "manual")
+      return redirectResponse("https://taxlaw.nts.go.kr/qt/USEQTA002P.do?ntstDcmId=200000000000020476", urlString)
     }
     if (urlString === "https://taxlaw.nts.go.kr/action.do") {
       return response(taxlawActionJson("200000000000020476"), urlString)
@@ -226,6 +268,7 @@ async function main() {
   const { getPrecedentText } = await import("../build/tools/precedents.js")
   await testJsonPathDoesNotCallHtmlFallback(getPrecedentText)
   await testHtmlFallbackExtractsTaxlawBody(getPrecedentText)
+  await testHtmlFallbackRejectsIframeWithoutTaxlawLocation(getPrecedentText)
   await testHtmlFallbackRejectsUnmatchedHtml(getPrecedentText)
   await testHtmlFallbackRunsAfterJsonParseError(getPrecedentText)
   console.log("precedent html fallback tests passed")
