@@ -5,7 +5,11 @@ import { parsePrecedentXML } from "../lib/xml-parser.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError } from "../lib/errors.js"
 import { fetchWithRetry } from "../lib/fetch-with-retry.js"
-import { getExternalHttpsProxyConfig, requestExternalHttps } from "../lib/external-https-proxy.js"
+import {
+  type ExternalHttpsProxyConfig,
+  getExternalHttpsProxyConfig,
+  requestExternalHttps,
+} from "../lib/external-https-proxy.js"
 import {
   compactBody,
   densifyLawRefs,
@@ -304,11 +308,45 @@ async function fetchTaxlawAction(ntstDcmId: string, referer: string): Promise<an
   return JSON.parse(text)
 }
 
+function getResponseHeader(
+  headers: Record<string, string | string[] | undefined>,
+  name: string
+): string | null {
+  const value = headers[name.toLowerCase()] ?? headers[name]
+  if (Array.isArray(value)) return value[0] || null
+  return value || null
+}
+
+async function fetchManualRedirect(
+  url: string,
+  proxyConfig: ExternalHttpsProxyConfig | null
+): Promise<{ status: number; location: string | null }> {
+  if (proxyConfig && new URL(url).protocol === "https:") {
+    const response = await requestExternalHttps(url, {
+      method: "GET",
+      headers: {
+        accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+    }, proxyConfig)
+    return {
+      status: response.status,
+      location: getResponseHeader(response.headers, "location"),
+    }
+  }
+
+  const response = await fetchWithRetry(url, { redirect: "manual" })
+  return {
+    status: response.status,
+    location: response.headers.get("location"),
+  }
+}
+
 async function resolveTaxlawDetailUrl(iframeUrl: string): Promise<string> {
   let currentUrl = iframeUrl
+  const proxyConfig = getExternalHttpsProxyConfig()
   for (let redirectCount = 0; redirectCount < 3; redirectCount++) {
-    const iframeResponse = await fetchWithRetry(currentUrl, { redirect: "manual" })
-    const location = iframeResponse.headers.get("location")
+    const iframeResponse = await fetchManualRedirect(currentUrl, proxyConfig)
+    const location = iframeResponse.location
     if (!location) {
       throw new Error(`precedent iframe did not include taxlaw redirect location (HTTP ${iframeResponse.status})`)
     }

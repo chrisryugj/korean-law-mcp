@@ -1,6 +1,21 @@
 #!/usr/bin/env node
 
 const assert = require("assert")
+const net = require("net")
+
+async function listen(server) {
+  await new Promise((resolve, reject) => {
+    server.once("error", reject)
+    server.listen(0, "127.0.0.1", resolve)
+  })
+  return server.address().port
+}
+
+async function close(server) {
+  await new Promise((resolve, reject) => {
+    server.close((error) => error ? reject(error) : resolve())
+  })
+}
 
 function precedentDetailJson(id) {
   return JSON.stringify({
@@ -224,6 +239,47 @@ async function testHtmlFallbackUsesExternalProxyConfigForTaxlawAction(getPrecede
   }
 }
 
+async function testHtmlFallbackUsesExternalProxyForHttpsRedirectResolution(getPrecedentText) {
+  const server = net.createServer((socket) => {
+    socket.once("data", () => {
+      socket.end("HTTP/1.1 407 Proxy Authentication Required\r\nContent-Length: 0\r\n\r\n")
+    })
+  })
+  const port = await listen(server)
+  const apiClient = makeApiClient("fallback-ok")
+  const originalFetch = global.fetch
+  const originalProxy = process.env.LAW_EXTERNAL_HTTPS_PROXY
+  const originalTls = process.env.LAW_EXTERNAL_TLS_REJECT_UNAUTHORIZED
+
+  process.env.LAW_EXTERNAL_HTTPS_PROXY = `http://127.0.0.1:${port}`
+  process.env.LAW_EXTERNAL_TLS_REJECT_UNAUTHORIZED = "0"
+  global.fetch = async (url, options = {}) => {
+    const urlString = String(url)
+
+    if (urlString === "http://www.law.go.kr/LSW/precInfoP.do?precSeq=780&mode=0") {
+      assert.strictEqual(options.redirect, "manual")
+      return redirectResponse("https://www.law.go.kr/LSW/precInfoP.do?precSeq=780&mode=0", urlString)
+    }
+
+    throw new Error(`unexpected direct fetch: ${urlString} ${JSON.stringify(options)}`)
+  }
+
+  try {
+    const result = await getPrecedentText(apiClient, { id: "780", apiKey: "test" })
+    const text = result.content?.[0]?.text || ""
+
+    assert.strictEqual(result.isError, true)
+    assert.ok(text.includes("External HTTPS proxy CONNECT failed with HTTP 407"), text)
+  } finally {
+    global.fetch = originalFetch
+    if (originalProxy === undefined) delete process.env.LAW_EXTERNAL_HTTPS_PROXY
+    else process.env.LAW_EXTERNAL_HTTPS_PROXY = originalProxy
+    if (originalTls === undefined) delete process.env.LAW_EXTERNAL_TLS_REJECT_UNAUTHORIZED
+    else process.env.LAW_EXTERNAL_TLS_REJECT_UNAUTHORIZED = originalTls
+    await close(server)
+  }
+}
+
 async function testHtmlFallbackRejectsIframeWithoutTaxlawLocation(getPrecedentText) {
   const apiClient = makeApiClient("fallback-ok")
   const originalFetch = global.fetch
@@ -304,6 +360,7 @@ async function main() {
   await testJsonPathDoesNotCallHtmlFallback(getPrecedentText)
   await testHtmlFallbackExtractsTaxlawBody(getPrecedentText)
   await testHtmlFallbackUsesExternalProxyConfigForTaxlawAction(getPrecedentText)
+  await testHtmlFallbackUsesExternalProxyForHttpsRedirectResolution(getPrecedentText)
   await testHtmlFallbackRejectsIframeWithoutTaxlawLocation(getPrecedentText)
   await testHtmlFallbackRejectsUnmatchedHtml(getPrecedentText)
   await testHtmlFallbackRunsAfterJsonParseError(getPrecedentText)
