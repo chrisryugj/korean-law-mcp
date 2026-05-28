@@ -638,7 +638,7 @@ LAW_API_PROTOCOL=http
 
 허용값은 `http`, `https`입니다. 설정하지 않거나 다른 값을 넣으면 `https`가 사용됩니다.
 
-### 국세청 판례 서버 TLS/프록시 진단
+### 국세청 판례 서버 TLS/프록시 설정
 
 국세청 출처 판례 본문은 법제처 JSON 응답만으로 제공되지 않는 경우가 있어, 내부적으로 `taxlaw.nts.go.kr`의 국세청 판례 서버를 추가 조회합니다. 이 서버는 HTTP로 접근해도 HTTPS로 리다이렉트되므로, `LAW_API_PROTOCOL=http` 설정과 별개로 Node.js 런타임이 `https://taxlaw.nts.go.kr` 인증서를 신뢰해야 합니다.
 
@@ -650,36 +650,28 @@ LAW_API_PROTOCOL=http
 node -e "fetch('https://taxlaw.nts.go.kr/qt/USEQTA002P.do?ntstDcmId=200000000000019303').then(r=>console.log(r.status,r.url)).catch(e=>console.error(e.name,e.message,e.cause))"
 ```
 
-권장 해결 방법은 운영환경의 신뢰 저장소를 올바르게 구성하는 것입니다:
+운영망에서 직접 연결이 끊기고 별도 웹 프록시를 거쳐야 한다면 실제 프록시 서버 주소를 설정하세요. 현재 이 설정은 국세청 판례 본문 fallback의 외부 HTTPS 연결에 적용됩니다:
 
-```bash
-# 사내 Root CA가 있는 경우 Node.js에 명시
-NODE_EXTRA_CA_CERTS=/path/to/corp-root-ca.pem
-
-# 프록시를 반드시 타야 하는 환경
-HTTPS_PROXY=http://proxy-host:proxy-port
-HTTP_PROXY=http://proxy-host:proxy-port
-NO_PROXY=localhost,127.0.0.1
+```env
+LAW_EXTERNAL_HTTPS_PROXY=http://proxy-host:8080
 ```
 
-Windows에서 시스템 환경변수로 등록해야 하는 경우 관리자 권한 터미널에서 설정합니다:
+Windows에서 시스템 환경변수로 등록해야 하는 경우 관리자 권한 터미널에서 설정합니다. 적용 후 Windows 또는 Node.js 프로세스를 재시작하세요:
 
 ```cmd
-setx NODE_EXTRA_CA_CERTS C:\path\corp-root-ca.pem /M
-setx HTTPS_PROXY http://proxy-host:proxy-port /M
-setx HTTP_PROXY http://proxy-host:proxy-port /M
+setx LAW_EXTERNAL_HTTPS_PROXY http://proxy-host:8080 /M
 ```
 
-원인 확인용으로만 TLS 인증서 검증을 임시 비활성화할 수 있습니다. 이 설정은 해당 Node.js 프로세스의 모든 HTTPS 인증서 검증을 끄므로 운영 상시 설정으로 사용하지 마세요:
+프록시 경로에서도 사내 인증서 검증 문제가 남는 경우, 원인 확인용으로만 이 프로젝트의 외부 HTTPS 프록시 경로에 한해 TLS 인증서 검증을 임시 비활성화할 수 있습니다. 운영 상시 설정으로 사용하지 마세요:
 
 ```cmd
-setx NODE_TLS_REJECT_UNAUTHORIZED 0 /M
+setx LAW_EXTERNAL_TLS_REJECT_UNAUTHORIZED 0 /M
 ```
 
 진단 후 제거:
 
 ```cmd
-reg delete "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v NODE_TLS_REJECT_UNAUTHORIZED /f
+reg delete "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v LAW_EXTERNAL_TLS_REJECT_UNAUTHORIZED /f
 ```
 
 ---

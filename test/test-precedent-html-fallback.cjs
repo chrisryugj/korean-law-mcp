@@ -189,6 +189,41 @@ async function testHtmlFallbackExtractsTaxlawBody(getPrecedentText) {
   }
 }
 
+async function testHtmlFallbackUsesExternalProxyConfigForTaxlawAction(getPrecedentText) {
+  const apiClient = makeApiClient("fallback-ok")
+  const originalFetch = global.fetch
+  const originalProxy = process.env.LAW_EXTERNAL_HTTPS_PROXY
+
+  process.env.LAW_EXTERNAL_HTTPS_PROXY = "https://proxy.example.test:8080"
+  global.fetch = async (url, options = {}) => {
+    const urlString = String(url)
+
+    if (urlString === "http://www.law.go.kr/LSW/precInfoP.do?precSeq=779&mode=0") {
+      assert.strictEqual(options.redirect, "manual")
+      return redirectResponse("https://www.law.go.kr/LSW/precInfoP.do?precSeq=779&mode=0", urlString)
+    }
+
+    if (urlString === "https://www.law.go.kr/LSW/precInfoP.do?precSeq=779&mode=0") {
+      assert.strictEqual(options.redirect, "manual")
+      return redirectResponse("https://taxlaw.nts.go.kr/qt/USEQTA002P.do?ntstDcmId=200000000000020476", urlString)
+    }
+
+    throw new Error(`unexpected fetch: ${urlString} ${JSON.stringify(options)}`)
+  }
+
+  try {
+    const result = await getPrecedentText(apiClient, { id: "779", apiKey: "test" })
+    const text = result.content?.[0]?.text || ""
+
+    assert.strictEqual(result.isError, true)
+    assert.ok(text.includes("LAW_EXTERNAL_HTTPS_PROXY must be an http:// proxy URL"), text)
+  } finally {
+    global.fetch = originalFetch
+    if (originalProxy === undefined) delete process.env.LAW_EXTERNAL_HTTPS_PROXY
+    else process.env.LAW_EXTERNAL_HTTPS_PROXY = originalProxy
+  }
+}
+
 async function testHtmlFallbackRejectsIframeWithoutTaxlawLocation(getPrecedentText) {
   const apiClient = makeApiClient("fallback-ok")
   const originalFetch = global.fetch
@@ -268,6 +303,7 @@ async function main() {
   const { getPrecedentText } = await import("../build/tools/precedents.js")
   await testJsonPathDoesNotCallHtmlFallback(getPrecedentText)
   await testHtmlFallbackExtractsTaxlawBody(getPrecedentText)
+  await testHtmlFallbackUsesExternalProxyConfigForTaxlawAction(getPrecedentText)
   await testHtmlFallbackRejectsIframeWithoutTaxlawLocation(getPrecedentText)
   await testHtmlFallbackRejectsUnmatchedHtml(getPrecedentText)
   await testHtmlFallbackRunsAfterJsonParseError(getPrecedentText)

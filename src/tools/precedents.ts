@@ -5,6 +5,7 @@ import { parsePrecedentXML } from "../lib/xml-parser.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError } from "../lib/errors.js"
 import { fetchWithRetry } from "../lib/fetch-with-retry.js"
+import { getExternalHttpsProxyConfig, requestExternalHttps } from "../lib/external-https-proxy.js"
 import {
   compactBody,
   densifyLawRefs,
@@ -273,15 +274,29 @@ async function fetchTaxlawAction(ntstDcmId: string, referer: string): Promise<an
     actionId: "ASIQTB002PR01",
     paramData: JSON.stringify({ dcmDVO: { ntstDcmId } }),
   })
+  const headers = {
+    "content-type": "application/x-www-form-urlencoded",
+    "origin": "https://taxlaw.nts.go.kr",
+    "referer": referer,
+    "x-requested-with": "XMLHttpRequest",
+  }
+
+  const proxyConfig = getExternalHttpsProxyConfig()
+  if (proxyConfig) {
+    const response = await requestExternalHttps("https://taxlaw.nts.go.kr/action.do", {
+      method: "POST",
+      headers,
+      body: body.toString(),
+    }, proxyConfig)
+    if (!response.ok) {
+      throw new Error(`taxlaw action.do failed with HTTP ${response.status}`)
+    }
+    return JSON.parse(response.text)
+  }
 
   const response = await fetchWithRetry("https://taxlaw.nts.go.kr/action.do", {
     method: "POST",
-    headers: {
-      "content-type": "application/x-www-form-urlencoded",
-      "origin": "https://taxlaw.nts.go.kr",
-      "referer": referer,
-      "x-requested-with": "XMLHttpRequest",
-    },
+    headers,
     body: body.toString(),
   })
 
