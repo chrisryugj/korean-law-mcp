@@ -260,9 +260,7 @@ function iframeMatchesPrecedentId(iframeUrl: string, id: string): boolean {
 function isMissingPrecedentJson(data: unknown): boolean {
   if (!data || typeof data !== "object") return true
   const obj = data as Record<string, unknown>
-  if (obj.PrecService) return false
-  const lawMessage = typeof obj.Law === "string" ? obj.Law : ""
-  return lawMessage.includes("일치하는 판례가 없습니다") || !obj.PrecService
+  return !obj.PrecService
 }
 
 async function fetchText(response: Response, context: string): Promise<string> {
