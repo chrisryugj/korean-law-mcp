@@ -47,6 +47,21 @@ const DEFAULT_USER_AGENT =
   process.env.LAW_USER_AGENT ||
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
+// 법제처 OPEN API는 Referer 헤더가 없으면 OC 키가 유효해도
+// "사용자 정보 검증에 실패하였습니다 (정확한 서버장비의 IP주소 및 도메인주소를 등록해 주세요)"
+// XML을 반환한다. 메시지는 IP/도메인 등록 문제로 오인되기 쉬우나 실제 원인은 Referer 누락이다.
+// (브라우저 UA만으로는 통과하지 못하고 Referer가 결정적). LAW_REFERER 환경변수로 override 가능.
+const DEFAULT_REFERER = process.env.LAW_REFERER || "https://www.law.go.kr/"
+
+// Referer를 붙일 법제처 계열 호스트 판별 (그 외 호스트엔 주입하지 않음).
+function isLawGoKrHost(targetUrl: string): boolean {
+  try {
+    return /(^|\.)law\.go\.kr$/i.test(new URL(targetUrl).hostname)
+  } catch {
+    return false
+  }
+}
+
 /**
  * Fetch with automatic retry and timeout
  */
@@ -70,6 +85,7 @@ export async function fetchWithRetry(
 
     const headers = new Headers(fetchOptions.headers)
     if (!headers.has("user-agent")) headers.set("user-agent", DEFAULT_USER_AGENT)
+    if (!headers.has("referer") && isLawGoKrHost(url)) headers.set("referer", DEFAULT_REFERER)
 
     try {
       const response = await fetch(url, {
