@@ -19,7 +19,8 @@ import type { LawApiClient } from "../lib/api-client.js"
 import { findLaws } from "../lib/law-search.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError } from "../lib/errors.js"
-import { searchPrecedents } from "./precedents.js"
+import { renderPrecedentSearchResult } from "./precedents.js"
+import { searchPrecedentsStructured } from "./precedent-search-core.js"
 import { searchInterpretations } from "./interpretations.js"
 import { searchAdminAppeals } from "./admin-appeals.js"
 import { searchOrdinance } from "./ordinance-search.js"
@@ -52,6 +53,23 @@ async function safeCall(
     return { text: r.content?.[0]?.text || "", isError: !!r.isError }
   } catch (e) {
     return { text: e instanceof Error ? e.message : String(e), isError: true }
+  }
+}
+
+async function searchPrecedentsWithoutFallback(
+  apiClient: LawApiClient,
+  input: { query: string; display?: number; page?: number; apiKey?: string }
+): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
+  const result = await searchPrecedentsStructured(apiClient, {
+    ...input,
+    display: input.display ?? 10,
+    page: input.page ?? 1,
+  }, {
+    fallbackPolicy: "none",
+  })
+  return {
+    content: [{ type: "text", text: renderPrecedentSearchResult(result) }],
+    isError: result.hits.length === 0 || undefined,
   }
 }
 
@@ -151,7 +169,7 @@ export async function impactMap(
     // 2. 병렬 탐색
     const [articleR, precR, interpR, appealR, constR, ordinanceR] = await Promise.all([
       safeCall(getArticleDetail, apiClient, { mst: law.mst, jo: joDisplay, apiKey: input.apiKey }),
-      safeCall(searchPrecedents, apiClient, { query: searchQuery, display: 10, apiKey: input.apiKey }),
+      safeCall(searchPrecedentsWithoutFallback, apiClient, { query: searchQuery, display: 10, apiKey: input.apiKey }),
       safeCall(searchInterpretations, apiClient, { query: searchQuery, display: 10, apiKey: input.apiKey }),
       safeCall(searchAdminAppeals, apiClient, { query: searchQuery, display: 5, apiKey: input.apiKey }),
       safeCall(searchConstitutionalDecisions, apiClient, { query: searchQuery, display: 5, apiKey: input.apiKey }),

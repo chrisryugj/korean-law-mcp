@@ -80,6 +80,22 @@ function makeApiClient() {
   }
 }
 
+function makePrecedentFailureApiClient() {
+  return {
+    async searchLaw() {
+      return noLawXml()
+    },
+    async fetchApi(request) {
+      if (request.target === "aiSearch") return noAiLawXml()
+      if (request.target === "expc") return noInterpretationXml()
+      if (request.target === "prec" && request.endpoint === "lawSearch.do") {
+        throw new Error("precedent API down")
+      }
+      throw new Error(`unexpected API request: ${JSON.stringify(request)}`)
+    },
+  }
+}
+
 async function testChainFullResearchFetchesTopTwoPrecedentDetails(chainFullResearch) {
   const apiClient = makeApiClient()
 
@@ -95,6 +111,22 @@ async function testChainFullResearchFetchesTopTwoPrecedentDetails(chainFullResea
   assert.ok(text.includes("상세 판례 111"), text)
   assert.ok(text.includes("상세 판례 222"), text)
   assert.ok(!text.includes("상세 판례 333"), text)
+}
+
+async function testChainFullResearchSurvivesPrecedentSearchFailure(chainFullResearch) {
+  const apiClient = makePrecedentFailureApiClient()
+
+  const result = await chainFullResearch(apiClient, {
+    query: "청약철회 청구",
+    apiKey: "test",
+  })
+  const text = result.content?.[0]?.text || ""
+
+  assert.ok(!result.isError, text)
+  assert.ok(text.includes("═══ 종합 리서치: 청약철회 청구 ═══"), text)
+  assert.ok(text.includes("▶ 관련 판례 [NOT_FOUND / FAILED]"), text)
+  assert.ok(text.includes("precedent API down"), text)
+  assert.ok(text.includes("▶ 법령 해석례"), text)
 }
 
 async function testDocumentReviewFetchesTopTwoPrecedentDetailsTotal(chainDocumentReview) {
@@ -113,10 +145,27 @@ async function testDocumentReviewFetchesTopTwoPrecedentDetailsTotal(chainDocumen
   assert.ok(!text.includes("상세 판례 333"), text)
 }
 
+async function testDocumentReviewSurvivesPrecedentSearchFailure(chainDocumentReview) {
+  const apiClient = makePrecedentFailureApiClient()
+
+  const result = await chainDocumentReview(apiClient, {
+    text: "제1조 환불은 어떠한 경우에도 불가하다.",
+    apiKey: "test",
+  })
+  const text = result.content?.[0]?.text || ""
+
+  assert.ok(!result.isError, text)
+  assert.ok(text.includes("▶ 문서 리스크 분석"), text)
+  assert.ok(text.includes("▶ 판례 검색 실패"), text)
+  assert.ok(text.includes("precedent API down"), text)
+}
+
 async function main() {
   const { chainFullResearch, chainDocumentReview } = await import("../build/tools/chains.js")
   await testChainFullResearchFetchesTopTwoPrecedentDetails(chainFullResearch)
+  await testChainFullResearchSurvivesPrecedentSearchFailure(chainFullResearch)
   await testDocumentReviewFetchesTopTwoPrecedentDetailsTotal(chainDocumentReview)
+  await testDocumentReviewSurvivesPrecedentSearchFailure(chainDocumentReview)
   console.log("chain search detail integration tests passed")
 }
 

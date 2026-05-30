@@ -1,7 +1,6 @@
 import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 import { cleanHtml } from "../lib/article-parser.js"
-import { parsePrecedentXML } from "../lib/xml-parser.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError } from "../lib/errors.js"
 import { fetchWithRetry } from "../lib/fetch-with-retry.js"
@@ -16,6 +15,7 @@ import {
   densifyPrecedentRefs,
   stripRepeatedSummary,
 } from "../lib/decision-compact.js"
+import { searchPrecedentsStructured, type StructuredPrecedentSearchResult } from "./precedent-search-core.js"
 
 export const searchPrecedentsSchema = z.object({
   query: z.string().optional().describe("검색 키워드 (예: '자동차', '담보권')"),
@@ -34,90 +34,87 @@ export const searchPrecedentsSchema = z.object({
 
 export type SearchPrecedentsInput = z.infer<typeof searchPrecedentsSchema>;
 
+function renderNoPrecedentResult(result: StructuredPrecedentSearchResult): string {
+  const kw = result.originalArgs.query || result.originalArgs.caseNumber || "관련 키워드"
+  const keywords = kw.trim().split(/\s+/)
+  const lines = [`[NOT_FOUND] '${kw}' 판례 검색 결과가 없습니다.`, "", "⚠️ LLM은 판례를 추측/생성하지 마세요. 사용자에게 '검색 실패'를 보고하세요."]
+  if (keywords.length >= 2) {
+    lines.push("")
+    lines.push("힌트: 법제처 API는 공백 구분 키워드를 AND 조건으로 처리합니다. 키워드가 많을수록 결과가 줄어듭니다.")
+    lines.push(`재시도 제안: "${keywords[0]}" 또는 "${keywords.slice(0, 2).join(" ")}"`)
+  }
+  if (result.attempts.length > 1) {
+    lines.push("")
+    lines.push(`검색 보정 시도: ${result.attempts.map(attempt => {
+      const label = attempt.caseNumber || attempt.query || "(빈 검색어)"
+      const scope = attempt.search === 2 ? ", 본문검색" : ""
+      return `${label}${scope}`
+    }).join(" → ")}`)
+  }
+  lines.push("")
+  lines.push("대안:")
+  lines.push(`  1. 해석례 검색: search_interpretations(query="${kw}")`)
+  lines.push(`  2. 법령 검색: search_law(query="${kw}")`)
+  return lines.join("\n")
+}
+
+export function renderPrecedentSearchResult(result: StructuredPrecedentSearchResult): string {
+  const args = result.originalArgs
+  if (result.hits.length === 0) return renderNoPrecedentResult(result)
+
+  let output = `판례 검색 결과 (총 ${result.totalCount}건, ${result.page}페이지)`
+  if (args.fromDate || args.toDate) {
+    output += ` [기간: ${args.fromDate || "시작"} ~ ${args.toDate || "종료"}]`
+  }
+  output += `:\n\n`
+
+  for (const hit of result.hits) {
+    output += `[${hit.id}] ${hit.title}\n`
+    output += `  사건번호: ${hit.caseNumber || "N/A"}\n`
+    output += `  법원: ${hit.court || "N/A"}\n`
+    output += `  선고일: ${hit.date || "N/A"}\n`
+    output += `  판결유형: ${hit.decisionType || "N/A"}\n`
+    if (hit.outOfRequestedDateRange) {
+      output += `  범위: 요청 기간 밖 fallback 결과\n`
+    }
+    if (hit.link) {
+      output += `  링크: ${hit.link}\n`
+    }
+    output += `\n`
+  }
+
+  if (result.fallbackUsed && result.successfulAttempt) {
+    const attempt = result.successfulAttempt
+    const label = attempt.caseNumber || attempt.query || "(빈 검색어)"
+    const scope = attempt.search === 2 ? "본문검색" : "제목검색"
+    const dateNote = attempt.outOfRequestedDateRange ? ", 요청 기간 밖 결과 포함" : ""
+    output += `검색 보정: ${attempt.reason}="${label}" (${scope}${dateNote})\n\n`
+  }
+
+  if (result.hits[0]?.id) {
+    output += `💡 다음: get_precedent_text(id="${result.hits[0].id}") 로 판결문 전문. full=true 로 축약 해제. 유사판례 원하면 find_similar_precedents 사용.\n`
+  }
+
+  return output
+}
+
 export async function searchPrecedents(
   apiClient: LawApiClient,
   args: SearchPrecedentsInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const extraParams: Record<string, string> = {
-      display: (args.display || 20).toString(),
-      page: (args.page || 1).toString(),
-    };
-    if (args.query) extraParams.query = args.query;
-    if (args.search) extraParams.search = args.search.toString();
-    if (args.court) extraParams.curt = args.court;
-    if (args.caseNumber) extraParams.nb = args.caseNumber;
-    if (args.sort) extraParams.sort = args.sort;
-
-    const xmlText = await apiClient.fetchApi({
-      endpoint: "lawSearch.do",
-      target: "prec",
-      extraParams,
-      apiKey: args.apiKey,
-    });
-
-  // 공통 파서 사용
-  const result = parsePrecedentXML(xmlText);
-  const currentPage = result.page;
-  let precs = result.items;
-
-  // 날짜 범위 필터링 (클라이언트 사이드)
-  if (args.fromDate || args.toDate) {
-    precs = precs.filter(p => {
-      const d = (p.선고일자 || "").replace(/[.\-\s]/g, "")
-      if (!d) return true
-      if (args.fromDate && d < args.fromDate) return false
-      if (args.toDate && d > args.toDate) return false
-      return true
+    const { validatePrecedentSearchResult } = await import("./precedent-evidence.js")
+    const result = await searchPrecedentsStructured(apiClient, args, {
+      validateResult: validation => validatePrecedentSearchResult(apiClient, validation, { apiKey: args.apiKey }),
     })
-  }
-  const totalCount = (args.fromDate || args.toDate) ? precs.length : result.totalCnt;
-
-  if (totalCount === 0) {
-    const kw = args.query || "관련 키워드"
-    const keywords = kw.trim().split(/\s+/)
-    const lines = [`[NOT_FOUND] '${kw}' 판례 검색 결과가 없습니다.`, "", "⚠️ LLM은 판례를 추측/생성하지 마세요. 사용자에게 '검색 실패'를 보고하세요."]
-    if (keywords.length >= 2) {
-      lines.push("")
-      lines.push("힌트: 법제처 API는 공백 구분 키워드를 AND 조건으로 처리합니다. 키워드가 많을수록 결과가 줄어듭니다.")
-      lines.push(`재시도 제안: "${keywords[0]}" 또는 "${keywords.slice(0, 2).join(" ")}"`)
-    }
-    lines.push("")
-    lines.push("대안:")
-    lines.push(`  1. 해석례 검색: search_interpretations(query="${kw}")`)
-    lines.push(`  2. 법령 검색: search_law(query="${kw}")`)
-    return { content: [{ type: "text", text: lines.join("\n") }], isError: true };
-  }
-
-  let output = `판례 검색 결과 (총 ${totalCount}건, ${currentPage}페이지)`;
-  if (args.fromDate || args.toDate) {
-    output += ` [기간: ${args.fromDate || "시작"} ~ ${args.toDate || "종료"}]`
-  }
-  output += `:\n\n`;
-
-  for (const prec of precs) {
-    output += `[${prec.판례일련번호}] ${prec.판례명}\n`;
-    output += `  사건번호: ${prec.사건번호 || "N/A"}\n`;
-    output += `  법원: ${prec.법원명 || "N/A"}\n`;
-    output += `  선고일: ${prec.선고일자 || "N/A"}\n`;
-    output += `  판결유형: ${prec.판결유형 || "N/A"}\n`;
-    if (prec.판례상세링크) {
-      output += `  링크: ${prec.판례상세링크}\n`;
-    }
-    output += `\n`;
-  }
-
-  // 다음 단계 힌트
-  if (precs.length > 0 && precs[0].판례일련번호) {
-    output += `💡 다음: get_precedent_text(id="${precs[0].판례일련번호}") 로 판결문 전문. full=true 로 축약 해제. 유사판례 원하면 find_similar_precedents 사용.\n`
-  }
-
-  return {
-    content: [{
-      type: "text",
-      text: truncateResponse(output)
-    }]
-  };
+    const output = renderPrecedentSearchResult(result)
+    return {
+      content: [{
+        type: "text",
+        text: truncateResponse(output)
+      }],
+      isError: result.hits.length === 0 || undefined,
+    };
   } catch (error) {
     return formatToolError(error, "search_precedents")
   }

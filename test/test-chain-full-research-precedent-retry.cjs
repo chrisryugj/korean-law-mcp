@@ -277,20 +277,27 @@ async function testUsesAiLawIssueBeforeRawFirstWord(chainFullResearch) {
   const result = await chainFullResearch(apiClient, { query: PHOTO_QUERY, apiKey: "test" })
   const text = result.content?.[0]?.text || ""
 
-  assert.deepStrictEqual(apiClient.precedentQueries.slice(0, 2), [PHOTO_QUERY, "사생활 침해"])
+  assert.strictEqual(apiClient.precedentRequests[0].query, PHOTO_QUERY)
+  assert.strictEqual(apiClient.precedentRequests[0].search, "1")
+  assert.ok(apiClient.precedentRequests.some((request) => request.query === PHOTO_QUERY && request.search === "2"))
+  assert.ok(apiClient.precedentQueries.includes("사생활 침해"), apiClient.precedentQueries.join(", "))
   assert.ok(!apiClient.precedentQueries.includes("공원에서"), apiClient.precedentQueries.join(", "))
-  assert.ok(text.includes('재검색어 "사생활 침해"'), text)
+  assert.ok(text.includes('검색 보정: ai_law_article_title="사생활 침해"'), text)
   assert.ok(text.includes("중고거래 물품대금 반환 사건"), text)
 }
 
 async function testRetriesSuggestedKeywordAfterRawPrecedentFailure(chainFullResearch) {
-  const apiClient = makeApiClient({ succeedOnQuery: "중고거래" })
+  const apiClient = makeApiClient({ succeedOnQuery: "중고거래 구매자 단순" })
 
   const result = await chainFullResearch(apiClient, { query: QUERY, apiKey: "test" })
   const text = result.content?.[0]?.text || ""
 
-  assert.deepStrictEqual(apiClient.precedentQueries.slice(0, 2), [QUERY, "중고거래"])
-  assert.ok(text.includes("판례 1차 검색 실패 후 재검색어 \"중고거래\""), text)
+  assert.strictEqual(apiClient.precedentRequests[0].query, QUERY)
+  assert.strictEqual(apiClient.precedentRequests[0].search, "1")
+  assert.ok(apiClient.precedentRequests.some((request) => request.query === QUERY && request.search === "2"))
+  assert.ok(apiClient.precedentQueries.includes("중고거래 구매자 단순"), apiClient.precedentQueries.join(", "))
+  assert.ok(!apiClient.precedentQueries.includes("중고거래"), apiClient.precedentQueries.join(", "))
+  assert.ok(text.includes('검색 보정: original_keyword="중고거래 구매자 단순"'), text)
   assert.ok(text.includes("중고거래 물품대금 반환 사건"), text)
 }
 
@@ -303,9 +310,10 @@ async function testIgnoresQuotedLawNameFragments(chainFullResearch) {
   const result = await chainFullResearch(apiClient, { query: QUERY, apiKey: "test" })
   const text = result.content?.[0]?.text || ""
 
-  assert.deepStrictEqual(apiClient.precedentQueries.slice(0, 2), [QUERY, "청약철회"])
+  assert.strictEqual(apiClient.precedentQueries[0], QUERY)
+  assert.ok(apiClient.precedentQueries.includes("청약철회"), apiClient.precedentQueries.join(", "))
   assert.ok(!apiClient.precedentQueries.includes("소비자보호"), apiClient.precedentQueries.join(", "))
-  assert.ok(text.includes("판례 1차 검색 실패 후 재검색어 \"청약철회\""), text)
+  assert.ok(text.includes('검색 보정: ai_law_article_title="청약철회"'), text)
 }
 
 async function testIgnoresGenericContractPhrase(chainFullResearch) {
@@ -317,9 +325,10 @@ async function testIgnoresGenericContractPhrase(chainFullResearch) {
   const result = await chainFullResearch(apiClient, { query: QUERY, apiKey: "test" })
   const text = result.content?.[0]?.text || ""
 
-  assert.deepStrictEqual(apiClient.precedentQueries.slice(0, 2), [QUERY, "청약철회"])
+  assert.strictEqual(apiClient.precedentQueries[0], QUERY)
+  assert.ok(apiClient.precedentQueries.includes("청약철회"), apiClient.precedentQueries.join(", "))
   assert.ok(!apiClient.precedentQueries.includes("관한 계약"), apiClient.precedentQueries.join(", "))
-  assert.ok(text.includes("판례 1차 검색 실패 후 재검색어 \"청약철회\""), text)
+  assert.ok(text.includes('검색 보정: ai_law_article_title="청약철회"'), text)
 }
 
 async function testDoesNotRetryGenericDefinitionBeforeSpecificTitle(chainFullResearch) {
@@ -331,9 +340,10 @@ async function testDoesNotRetryGenericDefinitionBeforeSpecificTitle(chainFullRes
   const result = await chainFullResearch(apiClient, { query: QUERY, apiKey: "test" })
   const text = result.content?.[0]?.text || ""
 
-  assert.deepStrictEqual(apiClient.precedentQueries.slice(0, 2), [QUERY, "청약철회"])
+  assert.strictEqual(apiClient.precedentQueries[0], QUERY)
+  assert.ok(apiClient.precedentQueries.includes("청약철회"), apiClient.precedentQueries.join(", "))
   assert.ok(!apiClient.precedentQueries.includes("정의"), apiClient.precedentQueries.join(", "))
-  assert.ok(text.includes("판례 1차 검색 실패 후 재검색어 \"청약철회\""), text)
+  assert.ok(text.includes('검색 보정: ai_law_article_title="청약철회"'), text)
 }
 
 async function testUsesBodySearchForSpacedTerminalVariant(chainFullResearch) {
@@ -349,7 +359,7 @@ async function testUsesBodySearchForSpacedTerminalVariant(chainFullResearch) {
     apiClient.precedentRequests.some((request) => request.query === "청약철회 등" && request.search === "2"),
     JSON.stringify(apiClient.precedentRequests)
   )
-  assert.ok(text.includes("판례 1차 검색 실패 후 재검색어 \"청약철회 등\""), text)
+  assert.ok(text.includes('검색 보정: ai_law_article_title="청약철회 등" (본문검색)'), text)
 }
 
 async function testBodySearchValidationUsesFullDetailText(chainFullResearch) {
@@ -374,7 +384,7 @@ async function testBodySearchValidationUsesFullDetailText(chainFullResearch) {
     apiClient.precedentRequests.some((request) => request.query === "청약철회 등" && request.search === "2"),
     JSON.stringify(apiClient.precedentRequests)
   )
-  assert.ok(text.includes("판례 1차 검색 실패 후 재검색어 \"청약철회 등\""), text)
+  assert.ok(text.includes('검색 보정: ai_law_article_title="청약철회 등" (본문검색)'), text)
 }
 
 async function testRejectsUnrelatedNonEmptyRetryResult(chainFullResearch) {
@@ -392,7 +402,7 @@ async function testRejectsUnrelatedNonEmptyRetryResult(chainFullResearch) {
   const text = result.content?.[0]?.text || ""
 
   assert.ok(apiClient.precedentQueries.length > 2, apiClient.precedentQueries.join(", "))
-  assert.ok(!text.includes("판례 1차 검색 실패 후 재검색어"), text)
+  assert.ok(!text.includes("검색 보정:"), text)
   assert.ok(!text.includes("자동차 보험금 사건"), text)
 }
 
@@ -408,11 +418,9 @@ async function testUsesAiLawArticleTitleCandidate(chainFullResearch) {
   })
   const text = result.content?.[0]?.text || ""
 
-  assert.deepStrictEqual(apiClient.precedentQueries.slice(0, 2), [
-    "채용 과정에서 불합리한 대우를 받았습니다",
-    "취업기회의 균등한 보장",
-  ])
-  assert.ok(text.includes("판례 1차 검색 실패 후 재검색어 \"취업기회의 균등한 보장\""), text)
+  assert.strictEqual(apiClient.precedentQueries[0], "채용 과정에서 불합리한 대우를 받았습니다")
+  assert.ok(apiClient.precedentQueries.includes("취업기회의 균등한 보장"), apiClient.precedentQueries.join(", "))
+  assert.ok(text.includes('검색 보정: ai_law_article_title="취업기회의 균등한 보장"'), text)
 }
 
 async function testUsesLowConfidenceLawTextFallback(chainFullResearch) {
@@ -459,10 +467,13 @@ async function testLimitsPrecedentRetriesToFive(chainFullResearch) {
     apiKey: "test",
   })
 
-  assert.strictEqual(
-    apiClient.precedentQueries.length,
-    6,
-    `expected raw precedent search plus five retries, got ${apiClient.precedentQueries.length}: ${apiClient.precedentQueries.join(", ")}`
+  assert.ok(
+    apiClient.precedentQueries.length <= 7,
+    `expected no more than raw precedent search, body search, and five fallback attempts, got ${apiClient.precedentQueries.length}: ${apiClient.precedentQueries.join(", ")}`
+  )
+  assert.ok(
+    apiClient.precedentQueries.length >= 3,
+    `expected fallback attempts after raw search, got ${apiClient.precedentQueries.length}: ${apiClient.precedentQueries.join(", ")}`
   )
 }
 

@@ -21,7 +21,7 @@ import type { ScenarioType, ScenarioContext } from "./scenarios/index.js"
 import { analyzeDocument } from "./document-analysis.js"
 import { getThreeTier } from "./three-tier.js"
 import { getBatchArticles } from "./batch-articles.js"
-import { getPrecedentText, searchPrecedents } from "./precedents.js"
+import { renderPrecedentSearchResult, searchPrecedents, type SearchPrecedentsInput } from "./precedents.js"
 import { summarizePrecedent } from "./precedent-summary.js"
 import { searchInterpretations } from "./interpretations.js"
 import { searchAdminAppeals } from "./admin-appeals.js"
@@ -34,8 +34,13 @@ import { searchAiLaw, searchAiLawStructured, type AiLawArticleSignal, type Searc
 import { getLawText } from "./law-text.js"
 import { searchTaxTribunalDecisions } from "./tax-tribunal-decisions.js"
 import { searchNlrcDecisions, searchPipcDecisions } from "./committee-decisions.js"
-import { fetchSearchDetailChain, fetchCombinedSearchDetailChain } from "./search-detail-chain.js"
-import { buildCompactLegalQueries, type CompactQueryCandidate } from "./compact-query-planner.js"
+import { fetchSearchDetailChain } from "./search-detail-chain.js"
+import {
+  searchPrecedentsStructured,
+  type PrecedentSearchContext,
+  type StructuredPrecedentSearchResult,
+} from "./precedent-search-core.js"
+import { fetchPrecedentEvidence, validatePrecedentSearchResult } from "./precedent-evidence.js"
 
 // ========================================
 // Types
@@ -55,7 +60,43 @@ type ExpansionType = "annex_fee" | "annex_form" | "annex_table" | "precedent" | 
 // Helpers
 // ========================================
 
-const PRECEDENT_RETRY_LIMIT = 5
+const PRECEDENT_FALLBACK_LIMIT = 5
+
+function emptyStructuredPrecedentResult(args: SearchPrecedentsInput): StructuredPrecedentSearchResult {
+  return {
+    originalArgs: args,
+    totalCount: 0,
+    page: args.page || 1,
+    hits: [],
+    attempts: [],
+    fallbackUsed: false,
+  }
+}
+
+function errorCallResult(error: unknown, toolName: string): CallResult {
+  const response = formatToolError(error, toolName)
+  return {
+    text: response.content?.[0]?.text || (error instanceof Error ? error.message : String(error)),
+    isError: true,
+  }
+}
+
+async function safeSearchPrecedentsStructured(
+  apiClient: LawApiClient,
+  args: SearchPrecedentsInput,
+  context: PrecedentSearchContext = {}
+): Promise<{ result: StructuredPrecedentSearchResult; error?: CallResult }> {
+  try {
+    return {
+      result: await searchPrecedentsStructured(apiClient, args, context),
+    }
+  } catch (error) {
+    return {
+      result: emptyStructuredPrecedentResult(args),
+      error: errorCallResult(error, "search_precedents"),
+    }
+  }
+}
 
 async function callTool(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -172,113 +213,71 @@ function selectLawTextSource(laws: LawInfo[], query: string): { reliableLaws: La
   return { reliableLaws, textLaw: laws[0], lowConfidence: laws.length > 0 }
 }
 
-function normalizeRelevanceText(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/\s+/g, "")
-    .replace(/[^\p{L}\p{N}]+/gu, "")
-}
-
-function candidateRelevanceTerms(candidate: CompactQueryCandidate): string[] {
-  return Array.from(new Set([candidate.query, candidate.semanticAnchor]
-    .filter((term): term is string => typeof term === "string" && normalizeRelevanceText(term).length >= 2)))
-}
-
-function textContainsCandidateTerm(text: string, candidate: CompactQueryCandidate): boolean {
-  const haystack = normalizeRelevanceText(text)
-  return candidateRelevanceTerms(candidate)
-    .some(term => haystack.includes(normalizeRelevanceText(term)))
-}
-
-function extractPrecedentCaseLines(searchText: string): string[] {
-  return searchText
-    .split("\n")
-    .filter(line => /^\[\d+\]\s+/.test(line.trim()))
-}
-
-function extractFirstPrecedentId(searchText: string): string | undefined {
-  for (const line of searchText.split("\n")) {
-    const match = line.trim().match(/^\[(\d+)\]\s+/)
-    if (match?.[1]) return match[1]
-  }
-  return undefined
-}
-
-async function validateRetryPrecedentResult(
+async function searchPrecedentsForChain(
   apiClient: LawApiClient,
-  candidate: CompactQueryCandidate,
-  result: CallResult,
-  apiKey?: string
-): Promise<boolean> {
-  const caseLines = extractPrecedentCaseLines(result.text)
-  if (caseLines.some(line => textContainsCandidateTerm(line, candidate))) {
-    return true
+  input: { query: string; display: number; apiKey?: string },
+  context: PrecedentSearchContext = {},
+  detailLimit = 2
+): Promise<{ structuredResult: StructuredPrecedentSearchResult; searchResult: CallResult; detailResult: CallResult | null }> {
+  const args: SearchPrecedentsInput = {
+    query: input.query,
+    display: input.display,
+    page: 1,
+    apiKey: input.apiKey,
   }
-
-  if (candidate.search !== 2 && !candidate.requiresResultValidation) {
-    return false
-  }
-
-  const id = extractFirstPrecedentId(result.text)
-  if (!id) return false
-
-  const detail = await callTool(getPrecedentText, apiClient, {
-    id,
-    full: candidate.search === 2,
-    apiKey,
-  })
-  if (isSearchFailure(detail) || !detail.text.trim()) return false
-
-  return textContainsCandidateTerm(detail.text, candidate)
-}
-
-function formatRetryCandidate(candidate: CompactQueryCandidate): string {
-  return candidate.search === 2 ? `"${candidate.query}"(본문검색)` : `"${candidate.query}"`
-}
-
-async function retryPrecedentsIfNeeded(
-  apiClient: LawApiClient,
-  input: { query: string; apiKey?: string },
-  precedentResult: CallResult,
-  aiLawResult?: CallResult
-): Promise<CallResult> {
-  if (!isSearchFailure(precedentResult)) return precedentResult
-
-  const route = routeQuery(input.query)
-  const candidates = buildCompactLegalQueries({
-    originalQuery: input.query,
-    aiLawArticles: aiLawResult?.aiLawArticles,
-    aiLawText: aiLawResult?.text,
-    route,
-    failedSearchText: precedentResult.text,
-    max: PRECEDENT_RETRY_LIMIT,
+  const { result: search, error } = await safeSearchPrecedentsStructured(apiClient, args, {
+    ...context,
+    maxFallbackAttempts: context.maxFallbackAttempts ?? PRECEDENT_FALLBACK_LIMIT,
+    validateResult: validation => validatePrecedentSearchResult(apiClient, validation, { apiKey: input.apiKey }),
   })
 
-  if (candidates.length === 0) return precedentResult
-
-  for (const candidate of candidates) {
-    const retried = await callTool(searchPrecedents, apiClient, {
-      query: candidate.query,
-      search: candidate.search,
-      display: 5,
-      apiKey: input.apiKey,
-    })
-    if (!isSearchFailure(retried) && retried.text.trim() && await validateRetryPrecedentResult(apiClient, candidate, retried, input.apiKey)) {
-      return {
-        text: `판례 1차 검색 실패 후 재검색어 "${candidate.query}"로 조회했습니다.\n\n${retried.text}`,
-        isError: false,
-      }
+  if (error) {
+    return {
+      structuredResult: search,
+      searchResult: error,
+      detailResult: null,
     }
   }
 
+  const searchResult: CallResult = {
+    text: renderPrecedentSearchResult(search),
+    isError: search.hits.length === 0,
+  }
+  const evidence = await fetchPrecedentEvidence(apiClient, search, {
+    apiKey: input.apiKey,
+    detailLimit,
+    full: false,
+  })
+
   return {
-    text: [
-      precedentResult.text,
-      "",
-      `재검색 시도(최대 ${PRECEDENT_RETRY_LIMIT}회): ${candidates.map(formatRetryCandidate).join(", ")}`,
-      "모든 재검색에서 판례 검색 결과가 없습니다.",
-    ].join("\n"),
-    isError: true,
+    structuredResult: search,
+    searchResult,
+    detailResult: evidence ? { text: evidence.text, isError: evidence.isError } : null,
+  }
+}
+
+function combineStructuredPrecedentResults(
+  results: StructuredPrecedentSearchResult[]
+): StructuredPrecedentSearchResult | null {
+  const nonEmpty = results.filter(result => result.hits.length > 0)
+  if (nonEmpty.length === 0) return null
+
+  const seen = new Set<string>()
+  const hits = nonEmpty.flatMap(result => result.hits)
+    .filter(hit => {
+      if (seen.has(hit.id)) return false
+      seen.add(hit.id)
+      return true
+    })
+
+  return {
+    originalArgs: nonEmpty[0].originalArgs,
+    totalCount: hits.length,
+    page: 1,
+    hits,
+    attempts: results.flatMap(result => result.attempts),
+    fallbackUsed: results.some(result => result.fallbackUsed),
+    successfulAttempt: nonEmpty[0].successfulAttempt,
   }
 }
 
@@ -444,9 +443,13 @@ export async function chainDisputePrep(
   try {
     const parts = [`═══ 쟁송 대비: ${input.query} ═══`]
 
-    // Step 1: 판례 + 행정심판 (병렬)
+    // Step 1: 판례 + 행정심판 (병렬). 판례는 구조화 hit 기반 상세조회까지 같은 경로에서 처리한다.
+    const precedentPromise = searchPrecedentsForChain(
+      apiClient,
+      { query: input.query, display: 8, apiKey: input.apiKey },
+      { route: routeQuery(input.query) }
+    )
     const parallel: Promise<CallResult>[] = [
-      callTool(searchPrecedents, apiClient, { query: input.query, display: 8, apiKey: input.apiKey }),
       callTool(searchAdminAppeals, apiClient, { query: input.query, display: 8, apiKey: input.apiKey }),
     ]
 
@@ -460,25 +463,27 @@ export async function chainDisputePrep(
       parallel.push(callTool(searchPipcDecisions, apiClient, { query: input.query, display: 5, apiKey: input.apiKey }))
     }
 
-    const results = await Promise.all(parallel)
-
-    parts.push(secOrSkip("대법원 판례", results[0]))
-    parts.push(secOrSkip("행정심판례", results[1]))
-
-    const [precDetail, appealDetail] = await Promise.all([
-      fetchSearchDetailChain(apiClient, "search_precedents", results[0], { apiKey: input.apiKey }),
-      fetchSearchDetailChain(apiClient, "search_admin_appeals", results[1], { apiKey: input.apiKey }),
+    const [precedentBundle, results] = await Promise.all([
+      precedentPromise,
+      Promise.all(parallel),
     ])
-    if (precDetail) parts.push(secOrSkip("대법원 판례 상세", precDetail))
+
+    parts.push(secOrSkip("대법원 판례", precedentBundle.searchResult))
+    parts.push(secOrSkip("행정심판례", results[0]))
+
+    const [appealDetail] = await Promise.all([
+      fetchSearchDetailChain(apiClient, "search_admin_appeals", results[0], { apiKey: input.apiKey }),
+    ])
+    if (precedentBundle.detailResult) parts.push(secOrSkip("대법원 판례 상세", precedentBundle.detailResult))
     if (appealDetail) parts.push(secOrSkip("행정심판례 상세", appealDetail))
 
-    if (results[2]) {
+    if (results[1]) {
       const domainNames: Record<string, string> = {
         tax: "조세심판원 결정",
         labor: "중앙노동위 결정",
         privacy: "개인정보위 결정",
       }
-      parts.push(secOrSkip(domainNames[domain] || "전문 결정례", results[2]))
+      parts.push(secOrSkip(domainNames[domain] || "전문 결정례", results[1]))
 
       const domainSearchTools: Record<string, string> = {
         tax: "search_tax_tribunal_decisions",
@@ -487,7 +492,7 @@ export async function chainDisputePrep(
       }
       const domainSearchTool = domainSearchTools[domain]
       if (domainSearchTool) {
-        const domainDetail = await fetchSearchDetailChain(apiClient, domainSearchTool, results[2], { apiKey: input.apiKey })
+        const domainDetail = await fetchSearchDetailChain(apiClient, domainSearchTool, results[1], { apiKey: input.apiKey })
         if (domainDetail) parts.push(secOrSkip(`${domainNames[domain] || "전문 결정례"} 상세`, domainDetail))
       }
     }
@@ -662,20 +667,27 @@ export async function chainFullResearch(
   try {
     const parts = [`═══ 종합 리서치: ${input.query} ═══`]
 
-    // Step 1: AI 검색 + 법령 검색 + 판례/해석 모두 병렬
+    // Step 1: AI 검색 + 법령 검색 + 해석례를 병렬 실행하고, 판례는 AI 구조화 신호를 받은 뒤 공통 core로 검색한다.
     // findLaws를 안전하게 래핑 (throw 시 Promise.all 전체 reject 방지)
     const safeFindLaws = async (): Promise<LawInfo[]> => {
       try { return await findLaws(apiClient, input.query, input.apiKey, 2) }
       catch { return [] }
     }
-    const [aiResult, rawLawsResult, precResult, interpResult] = await Promise.all([
+    const [aiResult, rawLawsResult, interpResult] = await Promise.all([
       callAiLaw(apiClient, { query: input.query, search: "0", display: 10, page: 1, apiKey: input.apiKey }),
       safeFindLaws(),
-      callTool(searchPrecedents, apiClient, { query: input.query, display: 5, apiKey: input.apiKey }),
       callTool(searchInterpretations, apiClient, { query: input.query, display: 5, apiKey: input.apiKey }),
     ])
     const { reliableLaws: lawsResult, textLaw, lowConfidence } = selectLawTextSource(rawLawsResult, input.query)
-    const finalPrecResult = await retryPrecedentsIfNeeded(apiClient, input, precResult, aiResult)
+    const precedentBundle = await searchPrecedentsForChain(
+      apiClient,
+      { query: input.query, display: 5, apiKey: input.apiKey },
+      {
+        aiLawArticles: aiResult.aiLawArticles,
+        route: routeQuery(input.query),
+        maxFallbackAttempts: PRECEDENT_FALLBACK_LIMIT,
+      }
+    )
 
     parts.push(secOrSkip("AI 법령검색 결과", aiResult))
 
@@ -686,14 +698,13 @@ export async function chainFullResearch(
       parts.push(secOrSkip(`${textLaw.lawName} 본문${confidenceSuffix}`, lawText))
     }
 
-    parts.push(secOrSkip("관련 판례", finalPrecResult))
+    parts.push(secOrSkip("관련 판례", precedentBundle.searchResult))
     parts.push(secOrSkip("법령 해석례", interpResult))
 
-    const [precDetail, interpDetail] = await Promise.all([
-      fetchSearchDetailChain(apiClient, "search_precedents", finalPrecResult, { apiKey: input.apiKey }),
+    const [interpDetail] = await Promise.all([
       fetchSearchDetailChain(apiClient, "search_interpretations", interpResult, { apiKey: input.apiKey }),
     ])
-    if (precDetail) parts.push(secOrSkip("관련 판례 상세", precDetail))
+    if (precedentBundle.detailResult) parts.push(secOrSkip("관련 판례 상세", precedentBundle.detailResult))
     if (interpDetail) parts.push(secOrSkip("법령 해석례 상세", interpDetail))
 
     // 키워드 확장
@@ -831,48 +842,66 @@ export async function chainDocumentReview(
     // 중복 제거 후 최대 5개 힌트로 제한
     const uniqueHints = [...new Set(searchHints)].slice(0, 5)
 
-    const searchPromises: Promise<CallResult>[] = []
-    for (const hint of uniqueHints) {
-      searchPromises.push(
-        callTool(searchPrecedents, apiClient, { query: hint, display: 3, apiKey: input.apiKey })
-      )
-    }
-    // AI 법령 검색도 상위 3개 힌트로 병렬 실행
-    const lawHints = uniqueHints.slice(0, 3)
-    for (const hint of lawHints) {
-      searchPromises.push(
-        callTool(searchAiLaw, apiClient, { query: hint, display: 3, apiKey: input.apiKey })
-      )
-    }
+    const precedentSearches = await Promise.all(
+      uniqueHints.map(hint => safeSearchPrecedentsStructured(apiClient, {
+        query: hint,
+        display: 3,
+        page: 1,
+        apiKey: input.apiKey,
+      }, {
+        documentHints: [hint],
+        maxFallbackAttempts: 3,
+        validateResult: validation => validatePrecedentSearchResult(apiClient, validation, { apiKey: input.apiKey }),
+      }))
+    )
+    const precedentResults = precedentSearches.map(search => search.result)
 
-    const searchResults = await Promise.all(searchPromises)
+    // AI 법령 검색은 상위 3개 힌트로 병렬 실행
+    const lawHints = uniqueHints.slice(0, 3)
+    const lawResults = await Promise.all(
+      lawHints.map(hint => callTool(searchAiLaw, apiClient, { query: hint, display: 3, apiKey: input.apiKey }))
+    )
 
     // 판례 결과 합산
     const precTexts: string[] = []
     for (let i = 0; i < uniqueHints.length; i++) {
-      const r = searchResults[i]
-      if (!r.isError && r.text.trim()) {
-        precTexts.push(`[${uniqueHints[i]}]\n${r.text}`)
+      const r = precedentResults[i]
+      if (r.hits.length > 0) {
+        precTexts.push(`[${uniqueHints[i]}]\n${renderPrecedentSearchResult(r)}`)
       }
     }
     if (precTexts.length > 0) {
       parts.push(sec("관련 판례", precTexts.join("\n\n")))
     }
+    const precedentErrors = precedentSearches
+      .map((search, index) => search.error ? `[${uniqueHints[index]}]\n${search.error.text}` : "")
+      .filter(text => text.trim())
+    if (precedentErrors.length > 0) {
+      parts.push(secOrSkip("판례 검색 실패", {
+        text: precedentErrors.join("\n\n"),
+        isError: true,
+      }))
+    }
 
-    const precedentDetail = await fetchCombinedSearchDetailChain(
-      apiClient,
-      "search_precedents",
-      searchResults.slice(0, uniqueHints.length),
-      { apiKey: input.apiKey }
-    )
-    if (precedentDetail) {
-      parts.push(secOrSkip("관련 판례 상세", precedentDetail))
+    const combinedPrecedents = combineStructuredPrecedentResults(precedentResults)
+    if (combinedPrecedents) {
+      const precedentEvidence = await fetchPrecedentEvidence(apiClient, combinedPrecedents, {
+        apiKey: input.apiKey,
+        detailLimit: 2,
+        full: false,
+      })
+      if (precedentEvidence) {
+        parts.push(secOrSkip("관련 판례 상세", {
+          text: precedentEvidence.text,
+          isError: precedentEvidence.isError,
+        }))
+      }
     }
 
     // 법령 결과 합산
     const lawTexts: string[] = []
     for (let i = 0; i < lawHints.length; i++) {
-      const r = searchResults[uniqueHints.length + i]
+      const r = lawResults[i]
       if (!r.isError && r.text.trim()) {
         lawTexts.push(`[${lawHints[i]}]\n${r.text}`)
       }
