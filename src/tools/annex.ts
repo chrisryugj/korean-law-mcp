@@ -8,6 +8,7 @@ import { fetchWithRetry } from "../lib/fetch-with-retry.js"
 import { parseAnnexFile } from "../lib/annex-file-parser.js"
 import { truncateResponse, MAX_RESPONSE_SIZE } from "../lib/schemas.js"
 import { formatToolError, notFoundResponse } from "../lib/errors.js"
+import { getLawSiteBaseUrl } from "../lib/law-url-config.js"
 
 /** 법제처 별표/서식 API 응답 개별 항목 */
 interface AnnexItem {
@@ -26,7 +27,7 @@ interface AnnexItem {
   지자체기관명?: string
 }
 
-const LAW_BASE_URL = "https://www.law.go.kr"
+const LAW_BASE_URL = getLawSiteBaseUrl()
 
 export const GetAnnexesSchema = z.object({
   lawName: z.string().describe("법령명 (예: '관세법'). 별표를 바로 지정하려면 '... 별표4'처럼 함께 입력 가능"),

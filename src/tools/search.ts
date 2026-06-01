@@ -9,6 +9,7 @@ import { lawCache } from "../lib/cache.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError, noResultHint } from "../lib/errors.js"
 import { expandLawQuery, normalizeAliasKey, resolveLawAlias } from "../lib/search-normalizer.js"
+import { searchAdminRule } from "./admin-rule.js"
 
 export const SearchLawSchema = z.object({
   query: z.string().describe("검색할 법령명 (예: '관세법', 'fta특례법', '화관법')"),
@@ -85,6 +86,22 @@ export async function searchLaw(
     }
 
     if (laws.length === 0) {
+      // Fallback: 외국환거래규정·은행업감독규정 등 "규정/고시"는 행정규칙(고시)임.
+      // 일반 법령에 없으면 search_admin_rule 자동 시도.
+      const adminFallback = await searchAdminRule(apiClient, {
+        query: input.query,
+        display: input.display,
+        apiKey: input.apiKey,
+      }).catch(() => null)
+
+      if (adminFallback && !adminFallback.isError) {
+        const text = adminFallback.content[0]?.text || ""
+        const prefix = `[FALLBACK] 법령 '${input.query}' 0건 → 행정규칙으로 자동 폴백.\n` +
+                       `💡 '규정/고시/훈령/예규/지침'은 행정규칙이며 search_admin_rule이 본 도구입니다.\n\n`
+        return {
+          content: [{ type: "text", text: truncateResponse(prefix + text) }],
+        }
+      }
       return noResultHint(input.query, "법령")
     }
 

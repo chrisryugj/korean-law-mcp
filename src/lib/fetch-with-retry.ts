@@ -30,11 +30,37 @@ const DEFAULT_RETRIES = 3
 const DEFAULT_RETRY_DELAY = 1000
 const DEFAULT_RETRY_ON = [429, 503, 504]
 
+/**
+ * 법제처 API가 200으로 빈 본문/HTML(점검·과부하 페이지)을 반환하는 간헐 장애 감지.
+ * 정상 응답은 XML(`<`) 또는 JSON(`{`/`[`)으로 시작하므로 빈 본문과 HTML 페이지만 걸러낸다.
+ */
+function detectBadBody(text: string): "empty" | "html" | null {
+  const t = text.trim()
+  if (!t) return "empty"
+  if (/^<!doctype html/i.test(t) || /^<html[\s>]/i.test(t)) return "html"
+  return null
+}
+
 // 법제처 OPEN API가 Node 기본 UA(undici)를 봇으로 분류해 거부하므로
 // 일반 브라우저 UA로 호출. LAW_USER_AGENT 환경변수로 override 가능.
 const DEFAULT_USER_AGENT =
   process.env.LAW_USER_AGENT ||
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+// 법제처 OPEN API는 Referer 헤더가 없으면 OC 키가 유효해도
+// "사용자 정보 검증에 실패하였습니다 (정확한 서버장비의 IP주소 및 도메인주소를 등록해 주세요)"
+// XML을 반환한다. 메시지는 IP/도메인 등록 문제로 오인되기 쉬우나 실제 원인은 Referer 누락이다.
+// (브라우저 UA만으로는 통과하지 못하고 Referer가 결정적). LAW_REFERER 환경변수로 override 가능.
+const DEFAULT_REFERER = process.env.LAW_REFERER || "https://www.law.go.kr/"
+
+// Referer를 붙일 법제처 계열 호스트 판별 (그 외 호스트엔 주입하지 않음).
+function isLawGoKrHost(targetUrl: string): boolean {
+  try {
+    return /(^|\.)law\.go\.kr$/i.test(new URL(targetUrl).hostname)
+  } catch {
+    return false
+  }
+}
 
 /**
  * Fetch with automatic retry and timeout
@@ -59,6 +85,7 @@ export async function fetchWithRetry(
 
     const headers = new Headers(fetchOptions.headers)
     if (!headers.has("user-agent")) headers.set("user-agent", DEFAULT_USER_AGENT)
+    if (!headers.has("referer") && isLawGoKrHost(url)) headers.set("referer", DEFAULT_REFERER)
 
     try {
       const response = await fetch(url, {
@@ -71,6 +98,22 @@ export async function fetchWithRetry(
 
       // Success or non-retryable error
       if (response.ok || !retryOn.includes(response.status)) {
+        // 200인데 빈 본문/HTML(법제처 점검·과부하 페이지)이면 일시 장애로 보고 재시도.
+        // 이를 막지 않으면 XML 파서가 "missing root element"로 터진다.
+        if (response.ok && attempt < retries) {
+          let bodyText: string | null = null
+          try { bodyText = await response.clone().text() } catch { /* clone 실패 시 정상 처리 */ }
+          if (bodyText !== null) {
+            const bad = detectBadBody(bodyText)
+            if (bad) {
+              lastError = new Error(
+                `법제처 API 비정상 응답(${bad === "empty" ? "빈 본문" : "HTML 페이지"}) - ${maskSensitiveUrl(url)}`
+              )
+              await sleep(getRetryDelay(response, retryDelay, attempt))
+              continue
+            }
+          }
+        }
         return response
       }
 

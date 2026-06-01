@@ -1,6 +1,6 @@
 # Korean Law MCP
 
-**법제처 41개 API를 17개 도구로.** 법령, 판례, 행정규칙, 자치법규, 조약, 해석례 + **LLM 환각 방지 인용 검증** + **조문 영향 그래프** + **시점 비교 자동 diff** + **시민 5단계 실행 가이드**를 AI 어시스턴트나 터미널에서 바로 사용.
+**법제처 42개 API를 17개 도구로.** 법령, 판례, 행정규칙, 자치법규, 조약, 해석례(국세청 포함) + **LLM 환각 방지 인용 검증** + **조문 영향 그래프** + **시점 비교 자동 diff** + **이럴 땐 이렇게 — 5단계 안내**를 AI 어시스턴트나 터미널에서 바로 사용.
 
 [![npm version](https://img.shields.io/npm/v/korean-law-mcp.svg)](https://www.npmjs.com/package/korean-law-mcp)
 [![MCP 1.27](https://img.shields.io/badge/MCP-1.27-blue)](https://modelcontextprotocol.io)
@@ -16,7 +16,7 @@
 
 ## v4.0 — 3개 킬러 기능 동시 추가
 
-**조문 영향 그래프 + 시점 비교 + 시민 가이드.** 법무팀·연구자·시민이 매뉴얼로 며칠 걸리던 작업이 한 번에.
+**조문 영향 그래프 + 시점 비교 + 단계별 안내.** 법무팀·연구자·실수요자가 매뉴얼로 며칠 걸리던 작업이 한 번에.
 
 ### 1. `impact_map` — 조문 한 줄의 파급효과 그래프
 
@@ -41,13 +41,37 @@ graph LR
 
 → 임의의 두 시점에 시행 중이었던 본문을 자동으로 가져와 **조문 단위 자동 diff**: 추가(+) / 삭제(-) / 변경(△) 분류 + 변경 전후 본문 + 자수 변화량.
 
-### 3. `action_plan` — 시민 5단계 실행 가이드
+### 3. `action_plan` — 이럴 땐 이렇게, 5단계 안내
 
 ```
 "전세금 못 받았어"
 ```
 
-→ STEP 1 상황진단(주택임대차보호법 자동 식별) → STEP 2 권리/구제수단(판례) → STEP 3 신청기관/기한(행정규칙+해석) → STEP 4 필요서류/양식(별표) → STEP 5 함정/주의(시효·법률구조공단). 시민 자연어 → 실행 가능한 단계로 변환.
+→ STEP 1 상황진단(주택임대차보호법 자동 식별) → STEP 2 권리/구제수단(판례) → STEP 3 신청기관/기한(행정규칙+해석) → STEP 4 필요서류/양식(별표) → STEP 5 함정/주의(시효·법률구조공단). 평소 말투 그대로 → 실행 가능한 단계로 변환.
+
+### + v4.1.0 — 판례 검색 구조화 + 상세 증거 자동 연결
+
+판례 검색을 공통 구조화 core(`searchPrecedentsStructured`)로 통합. 긴 자연어/개념형 질의를 compact query로 보정하고, 사건번호→제목→본문검색 순으로 폴백. 상위 판례를 `get_precedent_text`에 자동 연결(기본 2건/최대 5건)해 근거 본문을 함께 제공하며, `search_decisions(domain="precedent", options.includeText=true)`로 opt-in. 다건 상세조회 합산 시 뒷 판례가 잘리던 문제도 건당 본문 예산 배분으로 해결. (외부 PR #46 + 후속 최적화)
+
+### + v4.0.9 — 법제처 API `Referer` 헤더 자동 주입
+
+법제처 OPEN API가 **`Referer` 헤더 없는 요청을 OC 키 유효 여부와 무관하게 거부**("사용자 정보 검증 실패")하는 문제 대응. `law.go.kr` 계열 호스트 호출 시 기본 `Referer`를 자동 주입한다(`LAW_REFERER`로 override). IP/도메인 등록 문제로 오인되기 쉬운 증상의 실제 근본 원인이었음 — IP 등록을 했는데도 모든 검색이 실패하던 케이스를 해결. (외부 PR #45)
+
+### + v4.0.8 — 법제처 빈/HTML 응답 자동 재시도
+
+법제처 OPEN API가 간헐적으로 200 상태에 **빈 본문이나 HTML 점검 페이지**를 반환하던 문제 대응. 이 경우 XML 파서가 `missing root element`로 터지며 "됐다 안 됐다" 증상이 발생했음. `fetchWithRetry`가 빈/HTML 응답을 일시 장애로 간주해 자동 재시도(exponential backoff)하고, 재시도 소진 후에도 빈 응답이면 `search_law`가 `missing root element` 대신 명확한 안내 메시지를 반환하도록 수정. (IP 등록·OC 키와 무관한 외부 응답 불안정 이슈)
+
+### + v4.0.7 — 국세청 판례 본문 fallback
+
+법제처 JSON API에 본문이 비어 오는 판례를 국세청 `taxlaw.nts.go.kr`에서 HTML로 자동 보강. JSON 실패·파싱 실패·본문 누락 세 경우 모두 fallback으로 진입하며 안전하게 회수됨. 사내망/SSL inspection 환경용 `LAW_EXTERNAL_HTTPS_PROXY`(선택)·`LAW_EXTERNAL_TLS_REJECT_UNAUTHORIZED`(진단용) 지원 — 자세한 설정은 아래 "국세청 판례 서버 TLS/프록시 설정" 섹션 참조. (외부 PR #44)
+
+### + v4.0.6 — 법제처 API 프로토콜 설정 + 판례 재검색 개선
+
+폐쇄망/인증서 문제 환경을 위해 `LAW_API_PROTOCOL=http` 옵션 추가(기본 https). 판례 재검색 키워드 후보 생성 개선으로 매칭률 향상. (외부 PR #41/#42)
+
+### + v4.0.5 — 의존성 취약점 일괄 패치 (Security)
+
+`npm audit` High 4건(@xmldom/xmldom 5건의 XML injection + DoS, @hono/node-server 경로 우회, express-rate-limit IPv6 우회, fast-uri path traversal) 일괄 패치. 모두 semver-major 변경 없는 patch/minor 업데이트. `npm audit` → **0 vulnerabilities**. 코드 변경 0건. 자세한 GHSA 목록은 [CHANGELOG](CHANGELOG.md#405---2026-05-23) 참조.
 
 ### + v4.0.4 — 약어 부분 매칭
 
@@ -192,7 +216,7 @@ graph LR
 **v3.5.0** — Killer feature: `verify_citations` 인용 검증 + Critical 핫픽스 + 보안 강화
 
 - **`verify_citations`** 신규 — LLM 환각 방지. 사용자 텍스트에서 조문 인용 정규식 추출 + 직전 30자 lookback으로 법령명 역추적 + 법제처 DB 병렬 교차검증. 결과: ✓(실존) / ✗(없음, 존재 범위 제시) / ⚠(법령명 불명확)
-- **Critical 핫픽스** — v3.4.0 `full` 파라미터가 12개 도메인(tax_tribunal, customs, ftc, pipc, nlrc, acr, treaty, interpretation 등)에서 스키마에 필드가 없어 묵묵히 무시되던 문제 수정. `unified-decisions.ts`가 하위 핸들러 응답을 받은 뒤 `compactLongSections()` 후처리로 계단식 축약 일괄 적용
+- **Critical 핫픽스** — v3.4.0 `full` 파라미터가 12개 도메인(tax_tribunal, customs, ftc, pipc, nlrc, acr, treaty, interpretation 등)에서 스키마에 필드가 없어 조용히 무시되던 문제 수정. `unified-decisions.ts`가 하위 핸들러 응답을 받은 뒤 `compactLongSections()` 후처리로 계단식 축약 일괄 적용
 - **보안 High 2건** — `fetch-with-retry.ts` 타임아웃/네트워크 에러에 API 키 포함 URL이 로그로 유출되던 문제 → `maskSensitiveUrl()`로 `OC=***` 마스킹. `trust proxy true` → `TRUST_PROXY` 환경변수(기본 `1`), X-Forwarded-For 스푸핑 rate limit 우회 차단
 - **품질 3건** — `decision-compact.ts` 날짜 정규식 경계 가드, TAIL 경계 `". "` 오탐 제거, `stripRepeatedSummary` 종료점 정확 탐지
 - **UX** — 체인 8개 description 구체화(LLM이 체인 선택 가능), 검색 결과 "💡 다음: get_law_text(...)" 힌트, `search_law` 약칭/오타 확장 자동 재시도, `query-router` 패턴 5개 추가, `discover_tools` 별칭 매칭 27개
@@ -219,7 +243,7 @@ graph LR
 
 긴 결정례(15,000자↑)에서 **80~89%** 절감이 가장 두드러짐. 짧은 본문은 `minSave` 가드로 원본 유지. 품질 손실 없음 (판시·요지·주문은 항상 full).
 
-부가로 **ListTools 페이로드도 -14%** (9,671 → 8,296 bytes, 344 토큰↓): `chain_*` 8개 description 간결화, `search_decisions`/`get_decision_text` 필드 describe에서 17 도메인 이중 기재 제거.
+부가로 **ListTools 페이로드도 -14%** (9,671 → 8,296 bytes, 344 토큰↓): `chain_*` 8개 description 간결화, `search_decisions`/`get_decision_text` 필드 describe에서 17 도메인 중복 표기 제거.
 
 **v3.3.1** — 법령 약칭 사전 대폭 확장 (11 → 52개, +41)
 
@@ -244,7 +268,7 @@ lexdiff에서 "산안기준규칙" 질의가 법제처 aiSearch의 키워드 부
 <details>
 <summary>개발자용: 시나리오 기술 상세</summary>
 
-기존 8개 체인 도구에 `scenario` 파라미터가 추가되었습니다. (노출 도구 수는 v3.2.2에서 `get_annexes` 노출 추가로 14 → 15개)
+기존 8개 체인 도구에 `scenario` 파라미터가 추가됐습니다. (노출 도구 수는 v3.5의 `verify_citations`, v4.0의 `impact_map`까지 추가돼 17개)
 
 | scenario | 호스트 체인 | 추가 조회 |
 |---------|-----------|----------|
@@ -280,14 +304,14 @@ lexdiff에서 "산안기준규칙" 질의가 법제처 aiSearch의 키워드 부
 
 ## v3.1.0 — Production Hardening
 
-프로덕션 리뷰 기반 20개 파일 수정. 잠재적 버그, 보안, 안정성 일괄 개선.
+실사용 점검 기반 20개 파일 수정. 잠재적 버그, 보안, 안정성 일괄 개선.
 
 - **truncateResponse 누락 일괄 수정** — 17개 도구에서 50KB 응답 제한 미적용 수정
 - **HTTP 서버 세션 제한** — MAX_SESSIONS=100 추가, 503 응답 (DoS 방어)
 - **CORS 와일드카드 경고** — 미설정 시 stderr 경고 로그 추가
 - **파라미터 오염 방어** — `search_decisions`/`get_decision_text`의 options에서 핵심 필드 덮어쓰기 차단
 - **체인 도구 안정성** — 인증 에러(401/403/429) 즉시 전파, findLaws 안전 래핑
-- **API 클라이언트** — throwIfError에서 response body 소비 (stream 리크 방지)
+- **API 클라이언트** — throwIfError에서 response body 소비 (스트림 누수 방지)
 - **CLI 개선** — REPL 모드 Ctrl+C 2회 강제종료 구현
 - **SSE 서버 제거** — 사용되지 않는 데드코드 삭제 (HTTP 서버가 SSE 스트리밍 지원)
 - **데드 코드/의존성 정리** — `zod-to-json-schema`, ordinance 힌트, `start:sse` script
@@ -300,11 +324,11 @@ lexdiff에서 "산안기준규칙" 질의가 법제처 aiSearch의 키워드 부
 **v3.0.2** — Unified Architecture + Setup Wizard
 
 법제처 41개 API를 89개 MCP 도구로 구조화했던 v2.
-v3는 같은 41개 API를 **15개 도구**로 재압축했습니다.
+v3는 같은 41개 API를 **14개 도구**로 재압축했습니다 (v3.2.2 이후 15개, v4.0 현재 17개).
 
 | | 법제처 원본 | v2 | v3 |
 |---|:---:|:---:|:---:|
-| API/도구 수 | 41 | 89 | **15** |
+| API/도구 수 | 41 | 89 | **14** |
 | AI 컨텍스트 비용 | - | ~110 KB | **~20 KB** |
 | 기능 커버리지 | - | 100% | **100%** |
 | 프로필 관리 | - | lite/full 분리 | **단일 (불필요)** |
@@ -314,7 +338,7 @@ v3는 같은 41개 API를 **15개 도구**로 재압축했습니다.
 v2의 실수: API 하나당 도구 하나. 직관적이지만, AI 입장에서는 89개 스키마를
 전부 읽어야 해서 **컨텍스트의 절반을 도구 목록에 소비**했습니다.
 
-v3의 발상 전환: 비슷한 패턴의 도구를 `domain` 파라미터 하나로 통합.
+v3의 접근 전환: 비슷한 패턴의 도구를 `domain` 파라미터 하나로 통합.
 판례·헌재·조세심판·공정위 등 **17개 도메인**이
 `search_decisions(domain)` + `get_decision_text(domain)` **2개**로 합쳐졌습니다.
 
@@ -348,7 +372,7 @@ MCP 도구 설계에서 **도구 수 ≠ 기능 수**입니다.
 <details>
 <summary>v2.x 변경 이력</summary>
 
-**v2.3.2** — 프로덕션 코드 품질 개선 (47파일, -179줄). 이모지/장식 축소, 체인 캐시, 에러 처리 통일.
+**v2.3.2** — 운영 코드 품질 개선 (47파일, -179줄). 이모지/장식 축소, 체인 캐시, 에러 처리 통일.
 
 **v2.3.0** — 도구 프로필 (lite/full), URL 쿼리 API 키, kordoc 통합 파서.
 
@@ -364,7 +388,7 @@ MCP 도구 설계에서 **도구 수 ≠ 기능 수**입니다.
 
 대한민국에는 **1,600개 이상의 현행 법률**, **10,000개 이상의 행정규칙**, 그리고 대법원·헌법재판소·조세심판원·관세청까지 이어지는 방대한 판례 체계가 있습니다. 이 모든 게 [법제처](https://www.law.go.kr)라는 하나의 사이트에 있지만, 개발자 경험은 최악입니다.
 
-이 프로젝트는 그 전체 법령 시스템을 **15개 도구**로 감싸서, AI 어시스턴트나 스크립트에서 바로 호출할 수 있게 만듭니다. 법제처를 백 번째 수동 검색하다 지친 공무원이 만들었습니다.
+이 프로젝트는 그 전체 법령 시스템을 **17개 도구**로 감싸서, AI 어시스턴트나 스크립트에서 바로 호출할 수 있게 만듭니다. 법제처를 수백 번 수동 검색하다 지친 공무원이 만들었습니다.
 
 ---
 
@@ -469,7 +493,7 @@ https://korean-law-mcp.fly.dev/mcp?oc=honggildong
 
 > **참고**: 커넥터 URL을 수정하려면 삭제 후 다시 추가해야 합니다.
 
-> v3부터 프로필 선택이 필요 없습니다. 15개 도구가 41개 API 전체를 커버합니다.
+> v3부터 프로필 선택이 필요 없습니다. 17개 도구가 42개 API 전체를 커버합니다.
 > 기존에 `?profile=lite&oc=...` 주소를 넣으셨다면 **그대로 두셔도 됩니다** — 동일하게 작동합니다.
 
 ---
@@ -599,6 +623,77 @@ korean-law help search_law                 # 도구별 도움말
 | 환경변수 | `LAW_OC=내키` | 로컬 설치(방법 3, 4) |
 | 도구 파라미터 | `apiKey: "내키"` | 특정 요청만 다른 키 쓸 때 |
 
+### 법제처 API 프로토콜 설정
+
+법제처 API 호출은 기본적으로 HTTPS를 사용합니다. 사내망·폐쇄망 등 인증서 검증이 어려운 환경에서는 `LAW_API_PROTOCOL=http`를 설정해 HTTP로 호출할 수 있습니다.
+
+MCP 클라이언트 설정의 `env` 블록에 함께 넣는 방식이 가장 명확합니다:
+
+```json
+{
+  "mcpServers": {
+    "korean-law": {
+      "command": "korean-law-mcp",
+      "env": {
+        "LAW_OC": "honggildong",
+        "LAW_API_PROTOCOL": "http"
+      }
+    }
+  }
+}
+```
+
+터미널에서 직접 실행하거나 `.env` 파일을 사용할 수도 있습니다:
+
+```bash
+export LAW_API_PROTOCOL=http        # Mac/Linux
+set LAW_API_PROTOCOL=http           # Windows CMD
+$env:LAW_API_PROTOCOL="http"       # Windows PowerShell
+```
+
+```env
+LAW_OC=honggildong
+LAW_API_PROTOCOL=http
+```
+
+허용값은 `http`, `https`입니다. 설정하지 않거나 다른 값을 넣으면 `https`가 사용됩니다.
+
+### 국세청 판례 서버 TLS/프록시 설정
+
+국세청 출처 판례 본문은 법제처 JSON 응답만으로 제공되지 않는 경우가 있어, 내부적으로 `taxlaw.nts.go.kr`의 국세청 판례 서버를 추가 조회합니다. 이 서버는 HTTP로 접근해도 HTTPS로 리다이렉트되므로, `LAW_API_PROTOCOL=http` 설정과 별개로 Node.js 런타임이 `https://taxlaw.nts.go.kr` 인증서를 신뢰해야 합니다.
+
+사내망, 폐쇄망, 방화벽, SSL inspection 프록시 뒤에서는 브라우저로는 국세청 판례 페이지가 열리지만 Node.js `fetch()`만 `[EXTERNAL_API_ERROR] fetch failed`로 실패할 수 있습니다. 브라우저와 Node.js가 사용하는 인증서 저장소와 프록시 설정이 다를 수 있기 때문입니다.
+
+운영환경에서 먼저 Node.js 기준으로 HTTPS 연결을 확인하세요:
+
+```bash
+node -e "fetch('https://taxlaw.nts.go.kr/qt/USEQTA002P.do?ntstDcmId=200000000000019303').then(r=>console.log(r.status,r.url)).catch(e=>console.error(e.name,e.message,e.cause))"
+```
+
+운영망에서 직접 연결이 끊기고 별도 웹 프록시를 거쳐야 한다면 실제 프록시 서버 주소를 설정하세요. 현재 이 설정은 국세청 판례 본문 fallback의 외부 HTTPS 연결에 적용됩니다:
+
+```env
+LAW_EXTERNAL_HTTPS_PROXY=http://proxy-host:8080
+```
+
+Windows에서 시스템 환경변수로 등록해야 하는 경우 관리자 권한 터미널에서 설정합니다. 적용 후 Windows 또는 Node.js 프로세스를 재시작하세요:
+
+```cmd
+setx LAW_EXTERNAL_HTTPS_PROXY http://proxy-host:8080 /M
+```
+
+프록시 경로에서도 사내 인증서 검증 문제가 남는 경우, 원인 확인용으로만 이 프로젝트의 외부 HTTPS 프록시 경로에 한해 TLS 인증서 검증을 임시 비활성화할 수 있습니다. 운영 상시 설정으로 사용하지 마세요:
+
+```cmd
+setx LAW_EXTERNAL_TLS_REJECT_UNAUTHORIZED 0 /M
+```
+
+진단 후 제거:
+
+```cmd
+reg delete "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v LAW_EXTERNAL_TLS_REJECT_UNAUTHORIZED /f
+```
+
 ---
 
 ## 사용 예시
@@ -620,17 +715,17 @@ korean-law help search_law                 # 도구별 도움말
 
 ---
 
-## 도구 구조 (15개)
+## 도구 구조 (17개)
 
-v3는 15개 도구만 노출합니다. 나머지 전문 도구는 `discover_tools` → `execute_tool`로 접근.
+v4는 17개 도구만 노출합니다. 나머지 전문 도구는 `discover_tools` → `execute_tool`로 접근.
 
 | 구분 | 도구 | 설명 | 시나리오 확장 |
 |------|------|------|-------------|
 | **체인** (8) | `chain_full_research` | 종합 리서치 (AI검색→법령→판례→해석) | `customs`: 관세·통관 종합 |
 | | `chain_law_system` | 법체계 분석 (3단비교, 위임구조) | `delegation`: 위임입법 감시 / `impact`: 영향도 분석 |
-| | `chain_action_basis` | 처분 근거 확인 (허가·인가·처분) | `penalty`: 처분·벌칙 기준 종합 |
+| | `chain_action_basis` | 처분 근거 확인 (허가·인가·처분) | `penalty`: 처분·벌칙 기준 종합 / `action_plan`: 이럴 땐 이렇게, 5단계 안내 |
 | | `chain_dispute_prep` | 쟁송 대비 (불복·소송·심판) | — |
-| | `chain_amendment_track` | 개정 추적 (신구대조, 연혁) | `timeline`: 시계열 타임라인 |
+| | `chain_amendment_track` | 개정 추적 (신구대조, 연혁) | `timeline`: 시계열 타임라인 / `time_travel`: 두 시점 자동 diff |
 | | `chain_ordinance_compare` | 조례 비교 (상위법→전국 조례) | `compliance`: 상위법 적합성 검증 |
 | | `chain_procedure_detail` | 절차·비용·서식 안내 | `manual`: 공무원 처리 매뉴얼 |
 | | `chain_document_review` | 계약서·약관 리스크 분석 | — |
@@ -639,6 +734,8 @@ v3는 15개 도구만 노출합니다. 나머지 전문 도구는 `discover_tool
 | | `get_annexes` | 별표/서식 조회 (금액표·요율표·별지서식) |
 | **통합** (2) | `search_decisions` | **17개 도메인** 통합 검색 (판례·헌재·조세심판·공정위·노동위·관세·해석례·행심·개인정보위·권익위·소청심사·학칙·공사공단·공공기관·조약·영문법령) |
 | | `get_decision_text` | **17개 도메인** 전문 조회 |
+| **킬러** (2) | `verify_citations` | LLM 환각 방지 — 인용 조문 실존 여부 일괄 검증 (v3.5) |
+| | `impact_map` | 조문 영향 그래프 — 인용 판례·해석·자치법규 역방향 탐색 + mermaid (v4.0) |
 | **메타** (2) | `discover_tools` | 전문 도구 검색 (용어·별표·이력·비교 등) |
 | | `execute_tool` | 전문 도구 프록시 실행 |
 
@@ -648,7 +745,7 @@ v3는 15개 도구만 노출합니다. 나머지 전문 도구는 `discover_tool
 
 ## 주요 특징
 
-- **41개 API → 15개 도구** — 법령, 판례, 행정규칙, 자치법규, 헌재결정, 조세심판, 관세해석, 조약, 학칙/공단/공공기관 규정, 법령용어
+- **42개 API → 17개 도구** — 법령, 판례, 행정규칙, 자치법규, 헌재결정, 조세심판, 관세해석, 국세청 해석례, 조약, 학칙/공단/공공기관 규정, 법령용어
 - **MCP + CLI** — Claude Desktop에서도, 터미널에서도 같은 도구 사용
 - **법률 도메인 특화** — 약칭 자동 인식(`화관법` → `화학물질관리법`), 조문번호 변환(`제38조` ↔ `003800`), 3단 위임 구조 시각화
 - **별표/별지서식 본문 추출** — HWPX·HWP·PDF·XLSX·DOCX 자동 변환 ([kordoc](https://github.com/chrisryugj/kordoc) 엔진)

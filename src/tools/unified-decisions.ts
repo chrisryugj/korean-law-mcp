@@ -13,7 +13,7 @@ import { formatToolError } from "../lib/errors.js"
 import { compactLongSections } from "../lib/decision-compact.js"
 
 // 기존 handler 재사용 (함수 직접 import)
-import { searchPrecedents, getPrecedentText } from "./precedents.js"
+import { searchPrecedents, getPrecedentText, renderPrecedentSearchResult } from "./precedents.js"
 import { searchInterpretations, getInterpretationText } from "./interpretations.js"
 import { searchTaxTribunalDecisions, getTaxTribunalDecisionText } from "./tax-tribunal-decisions.js"
 import {
@@ -35,6 +35,8 @@ import {
 import { searchSchoolRules, getSchoolRuleText, searchPublicCorpRules, getPublicCorpRuleText, searchPublicInstitutionRules, getPublicInstitutionRuleText } from "./institutional-rules.js"
 import { searchTreaties, getTreatyText } from "./treaties.js"
 import { searchEnglishLaw, getEnglishLawText } from "./english-law.js"
+import { searchPrecedentsStructured } from "./precedent-search-core.js"
+import { fetchPrecedentEvidence, validatePrecedentSearchResult } from "./precedent-evidence.js"
 
 // ========================================
 // Domain enum & config
@@ -141,6 +143,42 @@ export const SearchDecisionsSchema = z.object({
 
 export type SearchDecisionsInput = z.infer<typeof SearchDecisionsSchema>
 
+function isEnabled(value: unknown): boolean {
+  return value === true || value === "true"
+}
+
+function getPositiveIntegerOption(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value)
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return Math.trunc(parsed)
+  }
+  return undefined
+}
+
+async function searchPrecedentDecisionsWithText(
+  apiClient: LawApiClient,
+  args: Record<string, unknown>,
+  detailLimit?: number
+): Promise<LooseToolResponse> {
+  const apiKey = typeof args.apiKey === "string" ? args.apiKey : undefined
+  const searchResult = await searchPrecedentsStructured(apiClient, args as any, {
+    validateResult: validation => validatePrecedentSearchResult(apiClient, validation, { apiKey }),
+  })
+  const listText = renderPrecedentSearchResult(searchResult)
+  const evidence = await fetchPrecedentEvidence(apiClient, searchResult, {
+    apiKey,
+    detailLimit,
+    full: false,
+  })
+  const text = evidence ? `${listText}\n\n▶ 관련 판례 상세\n${evidence.text}` : listText
+
+  return {
+    content: [{ type: "text", text: truncateResponse(text) }],
+    isError: searchResult.hits.length === 0 || undefined,
+  }
+}
+
 export async function searchDecisions(
   apiClient: LawApiClient,
   input: SearchDecisionsInput
@@ -169,6 +207,14 @@ export async function searchDecisions(
       for (const [k, v] of Object.entries(input.options)) {
         if (!reserved.has(k)) args[k] = v
       }
+    }
+
+    if (input.domain === "precedent" && isEnabled(input.options?.includeText)) {
+      return await searchPrecedentDecisionsWithText(
+        apiClient,
+        args,
+        getPositiveIntegerOption(input.options?.detailLimit)
+      )
     }
 
     return await handler(apiClient, args)

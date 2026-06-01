@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Korean Law MCP Server v4.0.0 - 법제처 41개 API → 17개 통합 도구 (내부 93개) + 9개 시나리오 + 자연어 CLI + HTTP stateless + 판례 토큰 74% 감축 + **verify_citations (LLM 환각 방지)** + **impact_map (조문 영향 그래프)** + **time_travel (시점 diff)** + **action_plan (시민 5단계 가이드)**
+Korean Law MCP Server v4.0.0 - 법제처 42개 API → 17개 통합 도구 (내부 93개) + 9개 시나리오 + 자연어 CLI + HTTP stateless + 판례 토큰 74% 감축 + **verify_citations (LLM 환각 방지)** + **impact_map (조문 영향 그래프)** + **time_travel (시점 diff)** + **action_plan (이럴 땐 이렇게, 5단계 안내)**
 
 ## Structure
 
@@ -58,7 +58,7 @@ korean-law "서울시 주차 조례"               # 자치법규 검색
 # v4.0 킬러 기능
 korean-law "민법 제103조 인용한 판례"        # impact_map: 조문 영향 그래프 (mermaid 포함)
 korean-law "관세법 2024 vs 2026"             # time_travel: 두 시점 본문 자동 diff
-korean-law "전세금 못 받았어"                # action_plan: 시민 5단계 실행 가이드
+korean-law "전세금 못 받았어"                # action_plan: 이럴 땐 이렇게, 5단계 안내
 
 # 대화형 모드
 korean-law                                 # REPL 모드 진입

@@ -7,6 +7,7 @@ import type { LawApiClient } from "../lib/api-client.js"
 import { buildJO } from "../lib/law-parser.js"
 import { lawCache } from "../lib/cache.js"
 import { formatArticleUnit } from "../lib/article-parser.js"
+import { getStrategyWarning } from "../lib/article-warnings.js"
 import { formatToolError } from "../lib/errors.js"
 
 import { MAX_RESPONSE_SIZE, truncateResponse } from "../lib/schemas.js"
@@ -207,6 +208,10 @@ export async function getLawText(
 
       if (formatted.header) resultText += `${formatted.header}\n`
       if (formatted.body) resultText += `${formatted.body}\n\n`
+
+      // 민법 의사표시 하자 조문(107~110)에 전략 경고 주입
+      const warning = getStrategyWarning(lawName, unit.조문번호 || "", unit.조문가지번호 || "")
+      if (warning) resultText += `${warning}\n\n`
     }
 
     // 응답 크기 제한 - 조문 경계에서 자르기 (mid-article 절단 방지)

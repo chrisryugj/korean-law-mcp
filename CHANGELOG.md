@@ -1,5 +1,114 @@
 # Changelog
 
+## [4.1.0] - 2026-05-31
+
+### Added — 판례 검색 구조화 + 상세 증거 자동 연결 (외부 PR #46)
+
+판례 검색을 공통 구조화 core로 모으고, 긴 자연어/개념형 질의의 누락을 줄이며, 검색→본문조회 연결을 안정화.
+
+- **`precedent-search-core.ts`** `searchPrecedentsStructured()`: 공통 판례 검색 진입점. `hits`/`attempts`/`fallbackUsed`/`successfulAttempt` 구조화. 사건번호 우선 → 제목 검색 → 본문검색(`search=2`) 폴백. compact query로 긴 질의 보정. 날짜 필터 시 표시 hit·`totalCount` 정합성 처리, `date_relaxed` 폴백.
+- **`precedent-evidence.ts`** `fetchPrecedentEvidence()`: 상위 hit를 `get_precedent_text`에 연결(기본 2건/최대 5건). 부분 실패는 숨기지 않고 렌더링. `validatePrecedentSearchResult()`로 폴백 결과 질의 축 검증.
+- **`compact-query-planner.ts`** 확장: 법리축+사실축 후보 생성, 출처/점수/variant/검증 메타데이터 보존.
+- **`search_decisions(domain="precedent", options.includeText=true)`** + `options.detailLimit` 추가(기본 동작 유지, opt-in).
+- 체인 도구(`chain_full_research`/`chain_dispute_prep`/`chain_document_review`) 판례 경로를 공통 core로 정리.
+- 조문 기반 도구(`article-with-precedents`/`impact-map`)는 `fallbackPolicy: "none"`으로 정확 검색 유지.
+- `docs/PRECEDENT-SEARCH-GUIDELINES.md` 추가.
+
+기존 `[id] 제목` 렌더링·bracketed ID 추출 흐름 유지, 신규 노출 도구 없음.
+
+### Fixed — 상세조회 다건 합산 시 뒷 판례 통째 잘림 (코드 리뷰 후속)
+
+`search_decisions(includeText=true)`가 상세조회 2건을 이어붙인 뒤 `truncateResponse`(50KB)를 한 번만 적용해, 합산이 한도를 넘으면 두 번째 판례가 통째로 잘리던 문제. `fetchPrecedentEvidence`가 성공 항목 본문에 건당 예산(`MAX_RESPONSE_SIZE` 균등 배분)을 미리 적용하도록 수정 → 모든 판례가 균형 있게 보존.
+
+### Changed
+
+- `kordoc` 1.6.1 → 2.4.0 (별표 통합 파서 의존성 업데이트).
+
+### 검증
+- `npm run build` + 판례 검색 관련 비-live 회귀 테스트 + `test-precedent-evidence-budget.cjs`(건당 예산 배분) + v4.0.8/4.0.9 회귀 테스트 통과.
+
+## [4.0.9] - 2026-05-31
+
+### Fixed — 법제처 API `Referer` 헤더 누락으로 인한 "사용자 정보 검증 실패" / 전 검색 실패 (외부 PR #45)
+
+법제처 OPEN API는 요청에 **`Referer` 헤더가 없으면 OC 키가 유효해도** "사용자 정보 검증에 실패하였습니다(정확한 서버장비의 IP주소 및 도메인주소를 등록해 주세요)" XML을 반환한다(헤더 격리 테스트로 입증, 동일 키·동일 IP 기준 Referer 유무만으로 갈림). 메시지가 IP 화이트리스트 문제로 오인되기 쉬우나 **실제 원인은 Referer 누락**.
+
+- v4.0.8의 빈/HTML 재시도는 증상(`missing root element`)을 완화했을 뿐, 근본 원인은 이 Referer 누락이었음. fly 서버에서 재현 확인: Referer 없으면 `ECONNRESET`/검증실패, `Referer: https://www.law.go.kr/` 추가 시 정상 응답. 법제처가 최근(2026-05) 이 검증을 강화한 것으로 보임.
+- **`fetch-with-retry.ts`**: 요청 호스트가 `law.go.kr` 계열일 때만 기본 `Referer` 주입(`isLawGoKrHost`). 호출자가 이미 지정했거나 다른 호스트(국세청 `taxlaw.nts.go.kr` 등)는 미주입. `LAW_REFERER` 환경변수로 override 가능.
+
+### 검증
+- `test/test-law-go-kr-referer.cjs`: 호스트 판별·기본 주입·호출자 보존·override·서브도메인 통과.
+- `npm run build` + v4.0.8 빈/HTML 재시도 회귀 테스트 통과.
+
+## [4.0.8] - 2026-05-29
+
+### Fixed — 법제처 빈/HTML 응답으로 인한 `missing root element` 간헐 실패
+
+법제처 OPEN API가 간헐적으로 **HTTP 200에 빈 본문 또는 HTML 점검 페이지**를 반환할 때, `search_law` 등 XML 파싱 경로가 `@xmldom`의 `missing root element`(빈 본문) / `Opening and ending tag mismatch`(HTML) 예외로 터지던 문제. `EXTERNAL_API_ERROR: missing root element`로 노출되며 "됐다 안 됐다" 증상으로 보고됨.
+
+원인 규명:
+- **IP 등록·OC 키 문제 아님.** IP 미등록 시 법제처는 *정상 형식의 XML*(`<Response>사용자 정보 검증 실패</Response>`)을 반환하고, 이 경우 도구는 `NOT_FOUND`를 냄 — `missing root element`는 **빈 응답/HTML(비-XML)** 일 때만 발생.
+- **코드 회귀 아님.** v4.0.6→v4.0.7 변경(`precedents.ts`/`external-https-proxy.ts`)은 `search_law` 경로와 무관. 외부(법제처) 응답 불안정이 배포 시점과 우연히 겹친 것.
+
+수정:
+- **`fetch-with-retry.ts`**: HTTP 200이어도 본문이 비었거나 HTML 페이지면 일시 장애로 간주해 재시도(exponential backoff). 정상 응답(XML `<`, JSON `{`/`[`)은 영향 없음. 모든 법제처 호출(법령·판례·조례 등)이 공통 혜택 — `detectBadBody()` 추가.
+- **`api-client.ts`**: `searchLaw`에 `checkEmptyResponse()`(빈 응답 감지) + `checkHtmlError()` 적용. 재시도 소진 후에도 빈/HTML이면 `missing root element` 대신 "법제처 API가 빈 응답을 반환했습니다. 일시적 장애일 수 있으니 잠시 후 다시 시도하세요" 안내.
+
+### 검증
+- mock 서버 단위 검증: 빈 응답·HTML 응답 재시도 동작, 간헐 장애(빈 2회→정상 XML) 재시도 복구 확인.
+- `npm run build` 통과.
+
+## [4.0.7] - 2026-05-29
+
+### Fixed — 국세청 판례 본문 fallback 안정화 (외부 PR #44)
+
+법제처 JSON API에 본문이 비어 오는 판례(예: 616821)를 국세청 `taxlaw.nts.go.kr`에서 HTML로 보강하는 fallback 추가.
+
+- **3갈래 fallback 진입**: JSON 요청 실패 / JSON 파싱 실패 / 본문 누락(`isMissingPrecedentJson`) 모두 HTML fallback 경로로 진입. 전체가 outer try-catch로 감싸져 fallback이 실패해도 안전하게 에러 반환.
+- **`formatPrecedentText`**: 판례 출력 로직 함수화로 중복 제거.
+- **외부 HTTPS 프록시 지원** (`src/lib/external-https-proxy.ts`): `LAW_EXTERNAL_HTTPS_PROXY`(선택) — 사내망/SSL inspection 환경의 국세청 판례 접근용 CONNECT 프록시. `LAW_EXTERNAL_TLS_REJECT_UNAUTHORIZED=0`(진단/임시용, 운영 금지)로 해당 경로 한정 TLS 검증 우회.
+- **redirect 추적**: `resolveTaxlawDetailUrl`이 상세 URL location 헤더를 최대 3회 추적.
+
+### Refactor
+
+- `isMissingPrecedentJson` 죽은 코드 제거 — `PrecService` early-return 이후 도달 불가능했던 `lawMessage` 분기 정리, 동작 유지하며 `return !obj.PrecService`로 단순화.
+
+## [4.0.6] - 2026-05-23
+
+### Added — 법제처 API 프로토콜 설정 (외부 PR #41)
+
+- **`LAW_API_PROTOCOL`** 환경변수 추가(기본 `https`). 폐쇄망/인증서 문제 환경에서 `http`로 전환 가능.
+
+### Fixed — 판례 재검색 키워드 후보 개선 (외부 PR #42)
+
+- 판례 재검색 시 키워드 후보 생성 로직 개선으로 매칭 정확도 향상.
+
+## [4.0.5] - 2026-05-23
+
+### Security — 의존성 취약점 일괄 패치 (High 4건 → 0건)
+
+`npm audit` High 등급 4개 패키지 일괄 업그레이드. 모두 semver-major 변경 없는 patch/minor 업데이트로 안전.
+
+- **@xmldom/xmldom 0.9.8 → 0.9.10** (직접 의존성 + kordoc 간접, dedupe됨)
+  - [GHSA-wh4c-j3r5-mjhp](https://github.com/advisories/GHSA-wh4c-j3r5-mjhp) — XML injection via unsafe CDATA serialization
+  - [GHSA-2v35-w6hq-6mfw](https://github.com/advisories/GHSA-2v35-w6hq-6mfw) — Uncontrolled recursion in XML serialization (DoS)
+  - [GHSA-f6ww-3ggp-fr8h](https://github.com/advisories/GHSA-f6ww-3ggp-fr8h) — XML injection through unvalidated DocumentType serialization
+  - [GHSA-x6wf-f3px-wcqx](https://github.com/advisories/GHSA-x6wf-f3px-wcqx) — XML node injection through unvalidated processing instruction serialization
+  - [GHSA-j759-j44w-7fr8](https://github.com/advisories/GHSA-j759-j44w-7fr8) — XML node injection through unvalidated comment serialization
+- **@hono/node-server 1.19.9 → 1.19.14** (MCP SDK 간접) — 정적 미들웨어 경로 우회 (당 프로젝트는 미사용이나 트리 정리)
+- **express-rate-limit 8.2.1 → 8.5.2** (MCP SDK 간접) — IPv4-mapped IPv6 우회로 rate limit 회피
+- **fast-uri 3.1.0 → 3.1.2** (MCP SDK → ajv 간접) — path traversal / host confusion
+
+### 검증
+- `npm audit` → **found 0 vulnerabilities**
+- `npm run build` → TypeScript 빌드 통과
+- `@xmldom/xmldom` DOMParser smoke test 통과 (`hwpx-parser` 사용 코드 영향 없음)
+- xmldom DOMParser API는 0.9.x 내 안정 — `lib/annex-file-parser.ts`의 HWPX 파싱 동작 변경 없음
+
+### Files
+- 수정: [package.json](package.json) (version), [package-lock.json](package-lock.json) (의존성 트리)
+- 코드 변경 없음
+
 ## [4.0.4] - 2026-05-19
 
 ### Added — 약어 부분 매칭 (`extractEmbeddedAliases`)
