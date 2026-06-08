@@ -762,6 +762,10 @@ v4는 17개 도구만 노출합니다. 나머지 전문 도구는 `discover_tool
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 시스템 설계
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — 개발 가이드
 
+## 관련 예제 (Related)
+
+- [`examples/agno-bindu/`](examples/agno-bindu/) — 이 MCP 서버를 [Bindu](https://github.com/GetBindu/Bindu)로 감싸 DID 신원을 가진 네트워크 접근형 A2A 에이전트로 노출하는 커뮤니티 예제입니다(에이전트 루프는 agno). 본 저장소 코드는 수정하지 않는 추가 전용(additive) 예제입니다.
+
 ## Star History
 
 <a href="https://www.star-history.com/?repos=chrisryugj%2Fkorean-law-mcp&type=timeline&legend=bottom-right">

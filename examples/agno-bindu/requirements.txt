@@ -1,0 +1,15 @@
+# Python dependencies for the agno + Bindu glue in this example.
+#
+# The Korean-law MCP server itself is the Node/TypeScript project in the
+# parent directory — it is NOT a Python package. Build it once with
+# `npm install && npm run build` at the repo root (see README.md → Setup);
+# this example launches the built `build/index.js` over stdio.
+
+bindu>=2026.20
+agno>=2.6,<3
+openai>=1.40
+mcp>=1.0
+sqlalchemy>=2
+aiosqlite>=0.20
+python-dotenv>=1.0
+rich>=13
