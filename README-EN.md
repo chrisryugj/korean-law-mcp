@@ -343,6 +343,10 @@ User: "산업안전보건법 별표1 내용"
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — System design
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — Development guide
 
+## Related
+
+- [`examples/agno-bindu/`](examples/agno-bindu/) — a community-contributed example that wraps this MCP server as a network-addressable A2A agent with a DID identity using [Bindu](https://github.com/GetBindu/Bindu) (agno provides the agent loop). Additive only — it does not modify this repository's code.
+
 ## Credits
 
 - [법제처](https://www.law.go.kr) Open API — Korea's official legal database

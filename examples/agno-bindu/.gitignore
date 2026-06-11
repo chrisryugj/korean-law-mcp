@@ -1,0 +1,8 @@
+.env
+tmp/
+__pycache__/
+*.db
+
+# DID keypair generated at runtime — never commit the private key
+.bindu/
+*.pem
