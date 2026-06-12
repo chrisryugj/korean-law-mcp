@@ -8,6 +8,7 @@ import { truncateResponse } from "../lib/schemas.js"
 import { buildJO } from "../lib/law-parser.js"
 import { cleanHtml } from "../lib/article-parser.js"
 import { formatToolError } from "../lib/errors.js"
+import { toArray } from "../lib/xml-parser.js"
 
 export const GetArticleDetailSchema = z.object({
   mst: z.string().optional().describe("법령일련번호 (search_law에서 획득)"),
@@ -75,7 +76,7 @@ export async function getArticleDetail(
 
     // 조문 추출
     const rawUnits = lawData.조문?.조문단위
-    const articleUnits: any[] = Array.isArray(rawUnits) ? rawUnits : rawUnits ? [rawUnits] : []
+    const articleUnits: any[] = toArray(rawUnits)
 
     if (articleUnits.length === 0) {
       return {

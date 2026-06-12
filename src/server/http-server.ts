@@ -11,6 +11,7 @@ import type { Server } from "@modelcontextprotocol/sdk/server/index.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
 import { requestContext } from "../lib/session-state.js"
 import { maskSensitiveUrl } from "../lib/fetch-with-retry.js"
+import { TOOL_COUNTS } from "../tool-registry.js"
 import { VERSION } from "../version.js"
 
 /**
@@ -109,9 +110,9 @@ export async function startHTTPServer(createServer: () => Server, port: number) 
         health: "/health",
       },
       tools: {
-        exposed: 16,
-        total: 92,
-        description: "V3_EXPOSED 16개 직노출, 나머지 76개는 execute_tool 경유",
+        exposed: TOOL_COUNTS.exposed,
+        total: TOOL_COUNTS.total,
+        description: `V3_EXPOSED ${TOOL_COUNTS.exposed}개 직노출, 나머지 ${TOOL_COUNTS.total - TOOL_COUNTS.exposed}개는 execute_tool 경유`,
       },
     })
   })
@@ -120,18 +121,42 @@ export async function startHTTPServer(createServer: () => Server, port: number) 
     res.json({ status: "ok", timestamp: new Date().toISOString() })
   })
 
+  // 서버 LAW_OC 폴백 사용량 전역 상한 — 키 없는 분산 요청이 서버 키의 법제처 quota를
+  // 소진시키는 것 방지 (IP당 limit만으로는 막을 수 없음). 0이면 폴백 비활성.
+  const fallbackRpm = parseInt(process.env.FALLBACK_RATE_LIMIT_RPM || "120", 10)
+  const fallbackBucket = { count: 0, resetAt: 0 }
+  function fallbackAllowed(): boolean {
+    if (fallbackRpm <= 0) return false
+    const now = Date.now()
+    if (now >= fallbackBucket.resetAt) {
+      fallbackBucket.count = 0
+      fallbackBucket.resetAt = now + 60_000
+    }
+    return ++fallbackBucket.count <= fallbackRpm
+  }
+
   // POST /mcp - stateless 요청 처리
   app.post("/mcp", async (req, res) => {
-    // Extract API key: URL query > header
-    const apiKeyFromQuery = req.query.oc as string | undefined
+    // Extract API key: header > URL query
+    // 쿼리스트링 키는 프록시/엣지 액세스 로그에 평문으로 남으므로 헤더 사용 권장 (하위호환용 유지)
     const apiKey =
-      apiKeyFromQuery ||
       (req.headers["apikey"] as string | undefined) ||
       (req.headers["law_oc"] as string | undefined) ||
       (req.headers["law-oc"] as string | undefined) ||
       (req.headers["x-api-key"] as string | undefined) ||
       (req.headers["authorization"] as string | undefined)?.replace(/^Bearer\s+/i, "") ||
-      (req.headers["x-law-oc"] as string | undefined)
+      (req.headers["x-law-oc"] as string | undefined) ||
+      (req.query.oc as string | undefined)
+
+    // 자체 키 없는 요청은 서버 LAW_OC로 폴백 — 전역 상한 적용
+    if (!apiKey && !fallbackAllowed()) {
+      res.status(429).json({
+        jsonrpc: "2.0",
+        error: { code: -32000, message: "Shared API quota exceeded. Provide your own key via 'apiKey' header (free: https://open.law.go.kr)." },
+        id: null,
+      })
+      return
+    }
 
     let server: Server | undefined
     let transport: StreamableHTTPServerTransport | undefined
@@ -197,12 +222,19 @@ export async function startHTTPServer(createServer: () => Server, port: number) 
     console.error(`✓ Health check: http://0.0.0.0:${port}/health`)
   })
 
-  // 종료 처리
-  async function gracefulShutdown(signal: string) {
+  // 종료 처리 — in-flight 요청 완료 대기 (최대 10초), 이후 강제 종료
+  function gracefulShutdown(signal: string) {
     console.error(`${signal} received, shutting down server...`)
-    expressServer.close()
-    console.error("Server shutdown complete")
-    process.exit(0)
+    const forceExit = setTimeout(() => {
+      console.error("Shutdown timeout (10s) — forcing exit")
+      process.exit(1)
+    }, 10_000)
+    forceExit.unref()
+    expressServer.close(() => {
+      clearTimeout(forceExit)
+      console.error("Server shutdown complete")
+      process.exit(0)
+    })
   }
 
   process.on("SIGINT", () => gracefulShutdown("SIGINT"))

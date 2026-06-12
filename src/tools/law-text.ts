@@ -107,10 +107,23 @@ export async function getLawText(
     const lawName = basicInfo?.법령명_한글 || basicInfo?.법령명한글 || basicInfo?.법령명 || "알 수 없음"
     const promDate = basicInfo?.공포일자 || ""
     const effDate = basicInfo?.시행일자 || basicInfo?.최종시행일자 || ""
+    const prevLawName = basicInfo?.이전법령명 || ""
 
     let resultText = `법령명: ${lawName}\n`
+    if (prevLawName) resultText += `(구 법령명: ${prevLawName} — 개정/분법으로 명칭 변경됨)\n`
     if (promDate) resultText += `공포일: ${promDate}\n`
     if (effDate) resultText += `시행일: ${effDate}\n`
+
+    // 현행성 라벨: LLM이 옛 버전 조문을 현행으로 오인하지 않도록
+    // 조회 시점 날짜와 시행일자를 비교해 명시
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, "")
+    if (input.efYd) {
+      resultText += `⚠️ 특정 시행일자(efYd=${input.efYd}) 버전 조회 — 현행 법령이 아닐 수 있음. 현행 기준 답변에는 efYd 없이 재조회할 것.\n`
+    } else if (effDate && String(effDate) > today) {
+      resultText += `⚠️ 시행 예정 버전 (조회기준일 ${today} 현재 미시행). 현재 효력 있는 조문과 다를 수 있음.\n`
+    } else if (effDate) {
+      resultText += `ℹ️ 조회기준일 ${today} — 위 시행일 버전 본문. 연혁 MST로 조회한 경우 과거 버전일 수 있으니, 개정 여부가 의심되면 search_law로 [현행] MST를 재확인할 것.\n`
+    }
     resultText += `\n`
 
     // 조문 내용 추출 (정확한 경로: 법령.조문.조문단위)
@@ -193,11 +206,13 @@ export async function getLawText(
       }
       tocText += `\n여러 조문 일괄 조회: get_batch_articles 도구 사용`
 
-      lawCache.set(cacheKey, tocText)
+      // 절단본을 캐시 — 캐시 히트 경로는 절단 없이 반환하므로 미절단 캐시 시 50KB 제한 우회됨
+      const truncatedToc = truncateResponse(tocText)
+      lawCache.set(cacheKey, truncatedToc)
       return {
         content: [{
           type: "text",
-          text: truncateResponse(tocText)
+          text: truncatedToc
         }]
       }
     }

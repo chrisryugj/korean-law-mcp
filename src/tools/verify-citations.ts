@@ -22,6 +22,7 @@ import { findLaws, type LawInfo } from "../lib/law-search.js"
 import { parseHangNumber } from "../lib/article-parser.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError } from "../lib/errors.js"
+import { toArray } from "../lib/xml-parser.js"
 
 export const VerifyCitationsSchema = z.object({
   text: z.string().min(1).describe("검증할 법률 텍스트 (LLM 답변/계약서/판결문 등). 조문 인용이 포함된 문자열"),
@@ -149,7 +150,7 @@ async function verifyOne(
     const jsonText = await apiClient.getLawText({ mst: chosen.mst, jo: cite.joCode, apiKey })
     const json = JSON.parse(jsonText)
     const rawUnits = json?.법령?.조문?.조문단위
-    const units = Array.isArray(rawUnits) ? rawUnits : rawUnits ? [rawUnits] : []
+    const units = toArray<any>(rawUnits)
     const found = units.find((u: any) => u.조문여부 === "조문")
 
     if (!found) {
@@ -158,7 +159,7 @@ async function verifyOne(
       try {
         const fullJson = JSON.parse(await apiClient.getLawText({ mst: chosen.mst, apiKey }))
         const fullRaw = fullJson?.법령?.조문?.조문단위
-        const fullUnits = Array.isArray(fullRaw) ? fullRaw : fullRaw ? [fullRaw] : []
+        const fullUnits = toArray<any>(fullRaw)
         const nums = fullUnits
           .filter((u: any) => u.조문여부 === "조문" && u.조문번호)
           .map((u: any) => parseInt(u.조문번호, 10))
@@ -176,7 +177,7 @@ async function verifyOne(
 
     if (cite.hang) {
       const rawHang = found.항
-      const hangs = Array.isArray(rawHang) ? rawHang : rawHang ? [rawHang] : []
+      const hangs = toArray<any>(rawHang)
       const hangNumbers = hangs
         .map((h: any) => parseHangNumber(h.항번호))
         .filter((n: number) => !isNaN(n))

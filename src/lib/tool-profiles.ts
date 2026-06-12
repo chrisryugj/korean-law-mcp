@@ -36,6 +36,8 @@ export const TOOL_ALIASES: Record<string, string[]> = {
   "해석례": ["법제처 해석", "유권해석", "질의회신"],
   // 도구 의도 별칭
   "인용검증": ["verify_citations", "조문 실존 확인", "환각 검증"],
+  "판례생사": ["cite_check", "판례 유효성", "판례 변경 여부", "인용 추적", "citator"],
+  "행위시법": ["applicable_law", "당시 법령", "적용 법령 판단", "경과조치", "부칙"],
   "문서검토": ["analyze_document", "chain_document_review", "계약서 검토", "약관 검토"],
   "처분기준": ["chain_action_basis", "과태료 기준", "과징금 기준", "영업정지 기간"],
   "절차매뉴얼": ["chain_procedure_detail", "처리 절차", "신청 방법", "수수료"],
@@ -72,6 +74,8 @@ export const TOOL_CATEGORIES: Record<string, string[]> = {
   "영문법령": ["search_english_law", "get_english_law_text"],
   "용어": ["search_legal_terms", "get_legal_term_kb", "get_legal_term_detail", "get_daily_term", "get_daily_to_legal", "get_legal_to_daily", "get_term_articles", "get_related_laws"],
   "문서분석": ["analyze_document"],
+  "판례생사": ["cite_check"],
+  "행위시법": ["applicable_law"],
   "유틸리티": ["parse_jo_code", "get_law_abbreviations"],
 }
 

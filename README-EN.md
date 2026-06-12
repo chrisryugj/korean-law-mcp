@@ -1,6 +1,6 @@
 # Korean Law MCP
 
-**41 APIs compressed into 16 tools.** Search, retrieve, and analyze Korean law — statutes, precedents, ordinances, treaties + **LLM hallucination guard for legal citations**.
+**42 APIs compressed into 9 tools.** Search, retrieve, and analyze Korean law — statutes, precedents, ordinances, treaties + **LLM hallucination guard for legal citations** + **precedent citator (cite_check)** + **point-in-time law resolution (applicable_law)**.
 
 [![npm version](https://img.shields.io/npm/v/korean-law-mcp.svg)](https://www.npmjs.com/package/korean-law-mcp)
 [![MCP 1.27](https://img.shields.io/badge/MCP-1.27-blue)](https://modelcontextprotocol.io)
@@ -15,7 +15,19 @@
 
 ---
 
-## What's New in v3.5 — Citation Hallucination Guard
+## What's New in v4.3 — Precedent Citator + Point-in-Time Law
+
+### `cite_check` — "Is this precedent still good law?" (Korean Shepard's)
+
+Give it a case number (e.g. `2007다27670`). It back-traces every later decision citing that case via full-text search, deep-scans en banc decisions for overruling language ("…변경하기로 한다"), and tracks alias references like "(이하 '2008년 전원합의체 판결'이라 한다)". Verdict: ✅ still cited / ⚠️ en banc successor exists / ❌ overruling detected — with the exact holding context.
+
+### `applicable_law` — "Which version of the law applies to my case date?"
+
+Give it a statute + a date. It pins the version in force on that date (MST), fetches the article as it read then, diffs against the current text, and extracts transitional provisions (적용례·경과조치) from every later amendment's addenda — plus lex temporis guidance (Criminal Act §1, General Act on Public Administration §14).
+
+---
+
+## v3.5 — Citation Hallucination Guard
 
 **Catches fake article citations in AI-generated legal answers in real time.** Cross-verifies every citation against Korea's official law database.
 

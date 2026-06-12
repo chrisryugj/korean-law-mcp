@@ -22,7 +22,6 @@ import { analyzeDocument } from "./document-analysis.js"
 import { getThreeTier } from "./three-tier.js"
 import { getBatchArticles } from "./batch-articles.js"
 import { renderPrecedentSearchResult, searchPrecedents, type SearchPrecedentsInput } from "./precedents.js"
-import { summarizePrecedent } from "./precedent-summary.js"
 import { searchInterpretations } from "./interpretations.js"
 import { searchAdminAppeals } from "./admin-appeals.js"
 import { compareOldNew } from "./comparison.js"
@@ -190,10 +189,6 @@ function noResult(query: string): ToolResponse {
     content: [{ type: "text", text: lines.join("\n") }],
     isError: true,
   }
-}
-
-function isSearchFailure(result: CallResult): boolean {
-  return result.isError || /\[NOT_FOUND\]|\[FAILED\]|검색 결과가 없습니다|조회 실패/.test(result.text)
 }
 
 function filterReliableLawResults(laws: LawInfo[], query: string): LawInfo[] {

@@ -62,15 +62,16 @@ function extractLawName(query: string): string {
     // 수식어: 단독 키워드만 제거 (법령명 일부인 경우 보존)
     // "별표 1", "별표" 등 독립적 사용만 제거
     .replace(/별표\s*\d*/g, "")
-    .replace(/(?:^|\s)(판례|판결|사례|대법원|헌재|행정심판)(?:\s|$)/g, " ")
-    .replace(/(?:^|\s)(해석례?|유권해석|질의회신)(?:\s|$)/g, " ")
-    .replace(/(?:^|\s)(개정|이력|변경|연혁|신구대조)(?:\s|$)/g, " ")
-    .replace(/(?:^|\s)(3단비교|위임|인용|체계)(?:\s|$)/g, " ")
-    .replace(/(?:^|\s)(영문|영어|English)(?:\s|$)/gi, " ")
-    .replace(/(?:^|\s)(서식|양식|별지|신청서)(?:\s|$)/g, " ")
+    // 뒤 경계는 lookahead(소비 안 함) — 소비하면 "개정 연혁"처럼 연속 키워드의 두 번째가 살아남음
+    .replace(/(?:^|\s)(판례|판결|사례|대법원|헌재|행정심판)(?=\s|$)/g, " ")
+    .replace(/(?:^|\s)(해석례?|유권해석|질의회신)(?=\s|$)/g, " ")
+    .replace(/(?:^|\s)(개정|이력|변경|연혁|신구대조)(?=\s|$)/g, " ")
+    .replace(/(?:^|\s)(3단비교|위임|인용|체계)(?=\s|$)/g, " ")
+    .replace(/(?:^|\s)(영문|영어|English)(?=\s|$)/gi, " ")
+    .replace(/(?:^|\s)(서식|양식|별지|신청서)(?=\s|$)/g, " ")
     // 조례/규칙은 법령명 일부이므로 유지
     // 동사형 수식어 제거
-    .replace(/(?:^|\s)(검색|조회|확인|알려줘|찾아줘|보여줘)(?:\s|$)/g, " ")
+    .replace(/(?:^|\s)(검색|조회|확인|알려줘|찾아줘|보여줘)(?=\s|$)/g, " ")
     // 정리
     .replace(/\s+/g, " ")
     .trim()
@@ -105,6 +106,11 @@ const routePatterns: Pattern[] = [
     extract: (query) => {
       // impact_map 키워드가 있으면 양보 (영향그래프/인용한 판례 등)
       if (/(?:파급|영향\s*그래프|impact|인용한\s*(?:모든|판례|판결|어디))/i.test(query)) {
+        return { _skip: true }
+      }
+      // applicable_law 양보: 기준일 + 시점 키워드 (예: "2023.5.10 당시 도로교통법 제44조")
+      if (/행위시법/.test(query) ||
+          (/\d{4}\s*[년.\-/]\s*\d{1,2}/.test(query) && /당시|시점|기준|에\s*적용/.test(query))) {
         return { _skip: true }
       }
       const jo = extractArticleNumber(query)
@@ -662,6 +668,55 @@ const routePatterns: Pattern[] = [
     priority: 7,
   },
 
+  // ── 29-0-3. 판례 생사 확인 (cite_check, v4.3) ──
+  // "2013다61381 아직 유효해?", "이 판례 변경됐어?", "2018두42559 인용 추적"
+  {
+    name: "cite_check",
+    patterns: [
+      /\d{2,4}\s*[가-힣]{1,5}\s*\d{1,7}.*?(?:유효|살아|변경|폐기|뒤집|생사|추적|아직|citator)/i,
+      /판례\s*(?:생사|유효성|변경\s*여부|폐기\s*여부|인용\s*추적)/,
+      /(?:변경|폐기)된?\s*판례(?:인지|냐|인가요?|\s*확인)/,
+    ],
+    tool: "cite_check",
+    extract: (query) => {
+      const m = query.match(/(\d{2,4})\s*([가-힣]{1,5})\s*(\d{1,7})/)
+      if (!m) return { _fallback: true, query }
+      return { caseNumber: `${m[1]}${m[2]}${m[3]}` }
+    },
+    reason: "사건번호 + 유효성 키워드 → cite_check (후속 인용 역추적 + 변경·폐기 감지)",
+    priority: 2,
+  },
+
+  // ── 29-0-4. 행위시법 판단 (applicable_law, v4.3) ──
+  // "2023년 5월 당시 도로교통법 제44조", "사건 시점에 적용되는 법", "행위시법"
+  {
+    name: "applicable_law",
+    patterns: [
+      /(\d{4})\s*[년\.\-\/]\s*(\d{1,2})\s*[월\.\-\/]?\s*(\d{1,2})?\s*일?\s*(?:당시|시점|기준|에\s*적용)/,
+      /(?:행위\s*시|사건\s*당시|계약\s*당시|위반\s*당시)\s*(?:의\s*)?(?:법|적용)/,
+      /행위시법|적용\s*법령\s*판단|당시\s*시행/,
+    ],
+    tool: "applicable_law",
+    extract: (query) => {
+      const dm = query.match(/(\d{4})\s*[년\.\-\/]\s*(\d{1,2})(?:\s*[월\.\-\/]\s*(\d{1,2}))?/)
+      if (!dm) return { _fallback: true, query }
+      const date = `${dm[1]}${dm[2].padStart(2, "0")}${(dm[3] || "1").padStart(2, "0")}`
+      const jo = extractArticleNumber(query)
+      // 키워드 strip은 단어 경계 필수 — "근로기준법"의 "기준"을 떼면 법령명 파괴
+      const lawName = extractLawName(
+        query.replace(/(\d{4})\s*[년\.\-\/]\s*\d{1,2}\s*[월\.\-\/]?\s*\d{0,2}\s*일?/g, " ")
+          .replace(/(?:^|\s)(당시|시점|기준일?|행위시법|사건|적용|시행)(?=\s|$)/g, " ")
+          .replace(/에\s*적용되?는?\s*법령?/g, " ")
+      )
+      if (!lawName) return { _fallback: true, query }
+      const params: Record<string, unknown> = { lawName, date }
+      if (jo) params.jo = jo
+      return params
+    },
+    reason: "기준일 + 법령명 → applicable_law (시점 적용 버전 + 부칙 경과규정)",
+    priority: 2,
+  },
+
   // ── 29-1. 인용 검증 (citation validator) ──
   {
     name: "verify_citations",
@@ -790,8 +845,11 @@ export function routeQuery(query: string): RouteResult {
   const dateParsed = parseDateRange(q)
   const dateRange = dateParsed.range
 
+  // 행위시법(applicable_law) 의도는 날짜 자체가 파라미터 — 날짜 제거 전 원문으로 매칭해야 함
+  const applicableLawHint = /행위시법|\d{4}\s*[년.\-/].{0,14}(?:당시|시점|기준|에\s*적용)/.test(q)
+
   // 날짜 표현이 제거된 순수 검색어로 패턴 매칭
-  const routeInput = dateParsed.cleanQuery || q
+  const routeInput = applicableLawHint ? q : (dateParsed.cleanQuery || q)
   const result = _matchRoute(routeInput)
 
   // 날짜 범위가 있으면 결과에 첨부

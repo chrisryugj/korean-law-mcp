@@ -46,11 +46,6 @@ function startServer() {
       if (output.includes('[DEBUG]')) {
         console.log(output);
       }
-      if (output.includes('running on stdio') && !initialized) {
-        initialized = true;
-        console.log('✅ Server started\n');
-        setTimeout(resolve, 500);
-      }
     });
 
     serverProcess.on('error', reject);
@@ -59,6 +54,37 @@ function startServer() {
         reject(new Error(`Server exited with code ${code}`));
       }
     });
+
+    // MCP initialize 핸드셰이크로 기동 확인
+    // (서버는 STDIO 모드에서 부팅 로그를 출력하지 않음 — stdout 오염 방지, 99b855d 이후)
+    let initBuf = '';
+    const onInitData = (data) => {
+      initBuf += data.toString();
+      for (const line of initBuf.split('\n')) {
+        if (!line.trim()) continue;
+        try {
+          const resp = JSON.parse(line);
+          if (resp.id === 'init' && !initialized) {
+            initialized = true;
+            serverProcess.stdout.removeListener('data', onInitData);
+            serverProcess.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
+            console.log('✅ Server started\n');
+            setTimeout(resolve, 300);
+            return;
+          }
+        } catch (e) {}
+      }
+    };
+    serverProcess.stdout.on('data', onInitData);
+    setTimeout(() => {
+      serverProcess.stdin.write(JSON.stringify({
+        jsonrpc: '2.0', id: 'init', method: 'initialize',
+        params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '1.0' } }
+      }) + '\n');
+    }, 300);
+    setTimeout(() => {
+      if (!initialized) reject(new Error('initialize timeout (8s)'));
+    }, 8000);
   });
 }
 

@@ -39,9 +39,18 @@ export async function runScenario(
   }
   try {
     return await runner(ctx)
-  } catch {
-    // 시나리오 실패는 체인 전체를 중단시키지 않음
-    return { sections: [], suggestedActions: [] }
+  } catch (e) {
+    // 시나리오 실패는 체인 전체를 중단시키지 않되, 무음 증발 금지 —
+    // 실패 섹션을 반환해 LLM이 "결과 없음"과 "실행 실패"를 구분하게 한다 (secOrSkip과 동일 원칙)
+    const msg = e instanceof Error ? e.message : String(e)
+    return {
+      sections: [{
+        title: `시나리오(${type}) [FAILED]`,
+        content: `⚠️ 시나리오 실행 실패 — LLM은 이 섹션 내용을 추측/생성하지 마세요.\n사유: ${msg.slice(0, 200)}`,
+        isError: true,
+      }],
+      suggestedActions: [],
+    }
   }
 }
 

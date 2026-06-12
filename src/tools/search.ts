@@ -25,6 +25,8 @@ interface LawHit {
   lawId: string
   mst: string
   promDate: string
+  effDate: string
+  statusCode: string // 현행연혁코드: "현행" | "연혁" | "" (API 미제공)
   lawType: string
 }
 
@@ -40,6 +42,8 @@ function parseLawsXml(xmlText: string): LawHit[] {
       lawId: n.getElementsByTagName("법령ID")[0]?.textContent || "",
       mst: n.getElementsByTagName("법령일련번호")[0]?.textContent || "",
       promDate: n.getElementsByTagName("공포일자")[0]?.textContent || "",
+      effDate: n.getElementsByTagName("시행일자")[0]?.textContent || "",
+      statusCode: n.getElementsByTagName("현행연혁코드")[0]?.textContent || "",
       lawType: n.getElementsByTagName("법령구분명")[0]?.textContent || "",
     })
   }
@@ -47,7 +51,11 @@ function parseLawsXml(xmlText: string): LawHit[] {
 }
 
 function formatHit(idx: number, h: LawHit): string {
-  return `${idx}. ${h.name}\n   - 법령ID: ${h.lawId}\n   - MST: ${h.mst}\n   - 공포일: ${h.promDate}\n   - 구분: ${h.lawType}\n\n`
+  const status = h.statusCode === "연혁" ? " ⚠️[연혁-과거버전]" : h.statusCode === "현행" ? " [현행]" : ""
+  let line = `${idx}. ${h.name}${status}\n   - 법령ID: ${h.lawId}\n   - MST: ${h.mst}\n   - 공포일: ${h.promDate}`
+  if (h.effDate) line += ` / 시행일: ${h.effDate}`
+  line += `\n   - 구분: ${h.lawType}\n\n`
+  return line
 }
 
 export async function searchLaw(
@@ -111,6 +119,13 @@ export async function searchLaw(
     const queryKey = normalizeAliasKey(input.query)
     const canonicalKey = normalizeAliasKey(resolveLawAlias(input.query).canonical)
 
+    // 현행 우선 정렬: 연혁(과거버전) 법령이 정확매칭 첫 항목으로 노출되면
+    // LLM이 옛 조문을 현행으로 오인해 답변하는 사고가 남 (소방시설법 분법 사례).
+    laws.sort((a, b) => {
+      const rank = (h: LawHit) => h.statusCode === "연혁" ? 1 : 0
+      return rank(a) - rank(b)
+    })
+
     const exact: LawHit[] = []
     const partial: LawHit[] = []
     for (const h of laws) {
@@ -151,6 +166,9 @@ export async function searchLaw(
     const primary = exact[0] || partial[0]
     if (primary) {
       resultText += `💡 다음: get_law_text(mst="${primary.mst}") 로 「${primary.name}」 조문 전문. 특정 조문만은 jo="제N조" 추가.\n`
+      if (primary.statusCode === "연혁") {
+        resultText += `⚠️ 위 법령은 **연혁(과거버전)** 입니다. 현행 기준 답변에는 [현행] 표시된 법령의 MST를 사용하세요.\n`
+      }
     }
     if (exact.length === 0 && laws.length > 0) {
       resultText += `⚠️ 정확매칭 없음 — 법제처 API의 부분 LIKE 검색 특성상 위 결과는 법령명에 "${input.query}"가 포함된 모든 법령입니다. 의도한 법령이 없으면 정식 법령명으로 재검색하세요.\n`

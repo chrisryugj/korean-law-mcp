@@ -80,25 +80,28 @@ export async function findLaws(
 
   const effectiveMax = Math.max(max, searchDisplay)  // 정렬 대상 전체 수집
 
-  // 1차: 원본 쿼리
-  let results: LawInfo[] = []
-  try {
-    const xmlText = await apiClient.searchLaw(query, apiKey, searchDisplay)
-    results = parseLawXml(xmlText, effectiveMax)
-  } catch (e) {
-    if (e instanceof Error && /429|401|403|API 키/.test(e.message)) throw e
+  // 인프라 에러(타임아웃·5xx·파싱 실패)는 "법령 없음"과 구분해야 한다.
+  // 삼키면 법제처 장애 중 verify_citations가 실존 조문을 NOT_FOUND로 오판한다.
+  let lastInfraError: unknown
+  const trySearch = async (q: string): Promise<LawInfo[]> => {
+    try {
+      const xmlText = await apiClient.searchLaw(q, apiKey, searchDisplay)
+      return parseLawXml(xmlText, effectiveMax)
+    } catch (e) {
+      if (e instanceof Error && /429|401|403|API 키/.test(e.message)) throw e
+      lastInfraError = e
+      return []
+    }
   }
+
+  // 1차: 원본 쿼리
+  let results: LawInfo[] = await trySearch(query)
 
   // 2차: 부가 키워드 제거
   if (results.length === 0) {
     const stripped = stripNonLawKeywords(query)
     if (stripped && stripped !== query) {
-      try {
-        const xmlText = await apiClient.searchLaw(stripped, apiKey, searchDisplay)
-        results = parseLawXml(xmlText, effectiveMax)
-      } catch (e) {
-        if (e instanceof Error && /429|401|403|API 키/.test(e.message)) throw e
-      }
+      results = await trySearch(stripped)
     }
   }
 
@@ -106,14 +109,15 @@ export async function findLaws(
   if (results.length === 0) {
     const lawNameMatch = query.match(/[가-힣]+(법|시행령|시행규칙|규칙|규정|령)(?:\s|$)/)
     if (lawNameMatch) {
-      const extracted = lawNameMatch[0].trim()
-      try {
-        const xmlText = await apiClient.searchLaw(extracted, apiKey, searchDisplay)
-        results = parseLawXml(xmlText, effectiveMax)
-      } catch (e) {
-        if (e instanceof Error && /429|401|403|API 키/.test(e.message)) throw e
-      }
+      results = await trySearch(lawNameMatch[0].trim())
     }
+  }
+
+  // 전 단계가 인프라 에러로만 끝났으면 "없음"이 아니라 "실패"로 전파
+  if (results.length === 0 && lastInfraError !== undefined) {
+    throw lastInfraError instanceof Error
+      ? new Error(`법령 검색 실패 (법제처 API 오류 — 법령이 없다는 뜻이 아님): ${lastInfraError.message}`)
+      : lastInfraError
   }
 
   // 관련도 정렬

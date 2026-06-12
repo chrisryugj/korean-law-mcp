@@ -8,6 +8,7 @@ import { cleanHtml } from "../lib/article-parser.js"
 import { buildJO } from "../lib/law-parser.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError } from "../lib/errors.js"
+import { toArray } from "../lib/xml-parser.js"
 
 export const GetOrdinanceSchema = z.object({
   ordinSeq: z.string().describe("자치법규 일련번호"),
@@ -62,7 +63,7 @@ export async function getOrdinance(
 
     // 조문 내용 (단일 객체 → 배열 정규화)
     const rawArticles = lawService.조문?.조
-    const articles = Array.isArray(rawArticles) ? rawArticles : rawArticles ? [rawArticles] : []
+    const articles = toArray(rawArticles)
 
     if (articles.length > 0) {
       // jo 파라미터가 있으면 해당 조문만 필터링

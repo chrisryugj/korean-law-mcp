@@ -1,5 +1,92 @@
 # Changelog
 
+## [4.4.1] - 2026-06-11
+
+### Fixed — 광고 스키마 required 버그 + 통합 진입점 보강 (시니어 리뷰 반영)
+
+- **광고 스키마 required 버그**: `z.toJSONSchema()`가 기본 `io:"output"` 모드라 `.default()` 필드를 required로 직렬화 — `legal_research.task`("미지정 시 full_research"인데 required로 광고), `search_law.display`가 강제 입력으로 노출되던 문제. `{ io: "input" }` 명시로 수정
+- **scenario 무음 폐기 제거**: task와 비호환인 scenario를 조용히 버리던 것을 응답 첫 줄 경고 노트로 명시 (`⚠ scenario=X는 task=Y와 비호환이라 무시하고 자동 감지로 대체`). 호출 LLM이 파라미터 무시를 인지 가능
+- **task↔scenario 호환표 단일화**: 수동 `TASK_SCENARIOS` Set + `as` 캐스트 제거 → 체인 스키마(`chains.ts`)의 `shape.scenario`에서 직접 파생(`pickScenario`). 체인 enum 변경 시 자동 추종, 드리프트 원천 차단
+- **`legal_analysis` 비용 옵션 패스스루**: `maxCitations`·`display`·`deepScan`·`includeOrdinances`·`includeMermaid`를 하드코딩에서 optional 파라미터로 — 비싼 변형(deepScan 본문 스캔, 전국 조례 팬아웃, mermaid)을 노출 프로필에서 직접 끌 수 있음. 기본값은 원본 도구와 동일
+- **타입 통일**: `legal-research.ts`의 `Awaited<ReturnType<...>>` 핵 제거 → `LooseToolResponse`로 통일
+- **테스트 신설**: `test-legal-research-analysis-dispatch.cjs` — 광고 스키마 계약(io:input required + apiKey 숨김), task×scenario 호환 매트릭스(6×9+미지정), 필수 파라미터 가드, withNote 주입, TOOL_COUNTS 파생값
+- 문서 정리: CLAUDE.md stale 노출 수(19개→9개), API.md에 legal_analysis 패스스루 옵션 표기
+
+## [4.4.0] - 2026-06-11
+
+### Changed — 노출 도구 통폐합 19개 → 9개 (컨텍스트 52% 감축)
+
+MCP 클라이언트의 ListTools 컨텍스트 비용 ~15.1KB → ~7.2KB (실측, ≈6,000 → ≈2,900토큰).
+
+- **`legal_research` 신설**: `chain_*` 8개를 `task` 파라미터로 통합 (full_research·law_system·action_basis·dispute_prep·amendment_track·ordinance_compare·procedure_detail·document_review). scenario/domain/articles 등 기존 파라미터 전부 유지, task별 비호환 scenario는 무시하고 자동 감지에 위임
+- **`legal_analysis` 신설**: 킬러피처 4개(verify_citations·cite_check·applicable_law·impact_map)를 `mode` 파라미터로 통합. 세부 옵션(deepScan, includeMermaid 등)은 원본 기본값 적용
+- **하위호환 보장**: 원본 12개 도구는 `allTools`에 유지 — CallTool 직접 호출·`execute_tool` 경유 모두 기존대로 동작. 광고(ListTools)만 제외
+- **apiKey 스키마 노출 제거**: 정식 경로는 HTTP 헤더(session-state)이므로 광고 스키마에서 숨김. 인자로 넘기는 기존 클라이언트는 Zod parse가 계속 수용
+- `discover_tools` 설명의 하드코딩 도구 수(73개) 제거
+
+최종 노출 9개: legal_research, legal_analysis, search_law, get_law_text, get_annexes, search_decisions, get_decision_text, discover_tools, execute_tool
+
+## [4.3.0] - 2026-06-11
+
+### Added — cite_check: 판례 생사 확인 (한국형 Shepard's Citator)
+
+"이 판례 아직 유효한가?" — 변경·폐기된 판례를 살아있는 것처럼 인용하는 사고 방지.
+
+- 사건번호(`nb=`)로 대상 판례 특정 → 본문검색(`search=2`)으로 그 사건번호를 인용한 후속 판례 역추적
+- 전원합의체 우선 본문 정밀 스캔: "변경하기로 한다 / 폐기 / 더 이상 유지될 수 없다 / 배치되는 범위에서 변경" 감지
+- **별칭 추적**: 판결문이 "(이하 '2008년 전원합의체 판결'이라 한다)"로 별칭 정의 후 별칭으로 변경 선언하는 관행 대응 — 사건번호만 쫓으면 false negative (2007다27670 → 2018다248626 변경 케이스로 검증)
+- 판정 4단계: ❌ 변경·폐기 신호 / ⚠️ 미스캔 전합 후속 존재 / ✅ 계속 인용 추정 / ℹ️ 후속 인용 없음
+- 한계 명시: 법제처 수록 판례(대법원 중심) 범위 — 출력에 고지하여 과신 방지
+
+### Added — applicable_law: 행위시법 판단 + 부칙 경과규정 발췌
+
+"사건 시점(2023.5.10)에 적용되는 법은?" — LLM이 현행법으로 오답하는 것 방지.
+
+- lsHistory 연혁으로 기준일에 시행 중이던 버전(MST) 특정 + 그 시점 조문 본문 (eflaw는 MST+efYd 동반 필수)
+- 현행 조문과 동일/변경 비교 (변경 시 time_travel 연계 안내)
+- 이후 개정 부칙에서 적용례·경과조치 자동 발췌 (공포번호 매칭, 조문 지정 시 해당 조문 언급 라인 우선)
+- 행위시법(형법 §1)·제재처분 위반행위시법(행정기본법 §14③)·처분시법 법리 안내 — 해석은 하지 않고 발췌만 (사람/LLM 몫)
+
+### Changed
+
+- V3_EXPOSED 17 → **19개** (cite_check, applicable_law 직노출), 내부 도구 93 → 95개
+- query-router: 사건번호+유효성 키워드 → cite_check, 기준일+법령명 → applicable_law 자동 라우팅
+  - 행위시법 의도 쿼리는 날짜 제거 전 원문으로 매칭 (날짜 자체가 파라미터)
+  - specific_article이 "2023.5.10 당시 ... 제44조" 패턴을 applicable_law에 양보
+
+### Fixed — 프로덕션 리팩토링 (시니어 리뷰 P0~P2 11건)
+
+- **P0** `findLaws`가 타임아웃·5xx를 삼켜 "법령 없음"으로 둔갑 → 인프라 에러는 throw로 전파. 법제처 장애 중 verify_citations가 실존 조문을 NOT_FOUND로 오판하던 설계 모순 해소
+- **P1** HTTP API 키 수신 우선순위를 헤더 > 쿼리스트링으로 변경 (프록시 액세스 로그 평문 유출 방지)
+- **P1** 서버 LAW_OC 폴백에 전역 상한 추가 (`FALLBACK_RATE_LIMIT_RPM`, 기본 120rpm) — 키 없는 분산 요청의 quota 소진 방지
+- **P1** runScenario 무음 예외 삼킴 → [FAILED] 섹션 반환 (LLM이 "결과 없음"과 "실행 실패" 구분 가능)
+- **P1** get_law_text TOC 캐시 히트 시 50KB 절단 우회 수정 (절단본을 캐시)
+- **P2** graceful shutdown이 in-flight 요청 완료 대기 (최대 10초)
+- **P2** formatToolError에 maskSensitiveUrl 최종 방어선 추가
+- **P2** extractLawName 연속 키워드 제거 실패 수정 ("개정 연혁" → lookahead 경계)
+- **P2** tool-registry: 요청마다 93개 도구 재등록 → 모듈 로드 시 1회. 노출 수 하드코딩 → `TOOL_COUNTS` 파생값
+- **P2** `toArray()` 헬퍼 도입 (Critical Rule 6 수동 패턴 8곳 치환), chains.ts 데드코드 제거
+
+## [4.2.1] - 2026-06-11
+
+### Changed — kordoc 2.4.0 → 3.0.0 (별표 파서 엔진 업그레이드)
+
+별표(HWPX/HWP5/PDF) 파싱 엔진 kordoc을 v3.0.0으로 업그레이드. API 변경 없음(`parse()` 그대로).
+
+- HWPX 텍스트 재현율 99.699% → **99.998%**, 표 구조 정확일치 **100%** (중첩표 343건 포함)
+- 환각률(phantom) 0.019% → **0.006%**, PDF consensus coverage 97.0% → **99.16%**
+- 중첩표 구조 보존, HWP5 BinData 이미지 추출, 한컴 PUA 기호 매핑, 머리말/각주/하이퍼링크 처리 강화
+
+## [4.2.0] - 2026-06-10
+
+### Added — 법령 현행성(現行性) 가드: LLM이 개정 전 법령으로 답하는 사고 방지
+
+LLM이 도구 결과만 보고도 "이 본문이 현행인지"를 판단할 수 있도록 검색·본문 조회 출력에 현행성 메타데이터를 명시. (실사고: 소방 관련 질의에 2022년 분법 전 「화재예방, 소방시설 설치ㆍ유지 및 안전관리에 관한 법률」 기준 답변)
+
+- **`search_law`**: 법제처 응답의 `현행연혁코드`·`시행일자` 파싱 — 각 결과에 `[현행]` / `⚠️[연혁-과거버전]` 라벨 + 시행일 표기. 현행 우선 정렬, 첫 추천 항목이 연혁이면 현행 MST 사용 경고.
+- **`get_law_text`**: 본문 헤더에 **조회기준일 vs 시행일 비교 라벨** — 시행 예정 버전(미시행) 경고, `efYd` 지정 시 "현행 아닐 수 있음" 경고, 연혁 MST 재확인 안내.
+- **`get_law_text`**: `이전법령명` 표기 — 개정/분법으로 명칭이 바뀐 법령은 "(구 법령명: …)"을 함께 출력해 LLM이 학습데이터의 옛 법령명과 혼동하지 않도록 함.
+
 ## [4.1.0] - 2026-05-31
 
 ### Added — 판례 검색 구조화 + 상세 증거 자동 연결 (외부 PR #46)

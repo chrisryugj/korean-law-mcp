@@ -12,6 +12,14 @@ export function stripHtml(text: string): string {
 }
 
 /**
+ * 단일 객체 정규화 (Critical Rule 6) — API 응답의 배열 필드가 단일 객체로 올 수 있음.
+ * 기존 수동 패턴 `Array.isArray(x) ? x : x ? [x] : []`과 의미 동일 (falsy → []).
+ */
+export function toArray<T>(x: T | T[] | null | undefined): T[] {
+  return Array.isArray(x) ? x : x ? [x] : []
+}
+
+/**
  * XML 태그에서 텍스트 추출 (CDATA 지원)
  */
 export function extractTag(content: string, tag: string): string {
