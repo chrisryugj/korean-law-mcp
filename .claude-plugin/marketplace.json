@@ -12,7 +12,7 @@
         "source": "github",
         "repo": "chrisryugj/korean-law-mcp"
       },
-      "description": "법제처 42개 API → 19개 MCP 도구. 법령·판례·조례·조약 검색 + LLM 환각 방지 인용 검증 + 조문 영향 그래프 + 시점 비교 + 판례 생사 확인(Citator) + 행위시법 판단",
+      "description": "법제처 42개 API → 9개 통합 도구. 법령·판례·행정규칙·자치법규·조약·해석례 + LLM 환각 방지 인용 검증 + 조문 영향 그래프 + 시점 비교 자동 diff + 판례 생사 확인(Citator) + 행위시법 판단 + 이럴 땐 이렇게 5단계 안내",
       "version": "4.4.1",
       "author": {
         "name": "Chris"

@@ -30,7 +30,7 @@ interface AnnexItem {
 const LAW_BASE_URL = getLawSiteBaseUrl()
 
 export const GetAnnexesSchema = z.object({
-  lawName: z.string().describe("법령명 (예: '관세법'). 별표를 바로 지정하려면 '... 별표4'처럼 함께 입력 가능"),
+  lawName: z.string().describe("법령명 (예: '관세법'). 별표를 바로 지정하려면 '... 별표4' 또는 '... 별표1의2'처럼 함께 입력 가능"),
   knd: z.enum(["1", "2", "3", "4", "5"]).optional().describe("1=별표, 2=서식, 3=부칙별표, 4=부칙서식, 5=전체"),
   bylSeq: z.string().optional().describe("별표번호 (예: '000300'). 지정 시 해당 별표 파일을 다운로드하여 텍스트로 추출"),
   annexNo: z.string().optional().describe("별표 번호 (예: '4', '별표4', '제4호'). bylSeq 대체 입력"),
@@ -314,21 +314,33 @@ function extractParentLawName(lawName: string): string | null {
 
 function parseLawNameAndHint(lawName: string): { normalizedLawName: string, annexNo?: string } {
   const trimmedLawName = lawName.trim()
-  const annexHintMatch = trimmedLawName.match(/\[?\s*(별표|서식)\s*(?:제)?\s*(\d{1,6})\s*(?:호)?\s*\]?/)
+  // "별표1", "별표 제1호", "별표 1의2"(= 별표 제1호의2) 모두 매칭. 의-번호는 별도 캡처해 법령명에 남지 않게 한다.
+  const annexHintMatch = trimmedLawName.match(/\[?\s*(별표|서식)\s*(?:제)?\s*(\d{1,6})\s*(?:호)?\s*(?:의\s*(\d{1,2}))?\s*\]?/)
 
   if (!annexHintMatch) {
     return { normalizedLawName: trimmedLawName }
   }
 
-  const parsedAnnexNo = Number.parseInt(annexHintMatch[2], 10)
+  const mainNo = Number.parseInt(annexHintMatch[2], 10)
+  const subNo = annexHintMatch[3] ? Number.parseInt(annexHintMatch[3], 10) : null
   const normalizedLawName = trimmedLawName
     .replace(annexHintMatch[0], " ")
     .replace(/\s+/g, " ")
     .trim()
 
+  if (Number.isNaN(mainNo)) {
+    return { normalizedLawName: normalizedLawName || trimmedLawName }
+  }
+
+  // 의-번호가 있으면 법제처 별표번호 6자리 코드(AAAABB)로 변환 (별표 1의2 → "000102").
+  // 없으면 기존 동작 유지(정수 문자열 → buildSelectorCandidates가 6자리 코드 후보 생성).
+  const annexNo = subNo != null
+    ? String(mainNo).padStart(4, "0") + String(subNo).padStart(2, "0")
+    : String(mainNo)
+
   return {
     normalizedLawName: normalizedLawName || trimmedLawName,
-    annexNo: Number.isNaN(parsedAnnexNo) ? undefined : String(parsedAnnexNo)
+    annexNo
   }
 }
 
