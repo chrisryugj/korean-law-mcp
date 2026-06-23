@@ -7,6 +7,14 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/)
 
+<a href="https://jocohunt.com/p/5lkkxp3x" target="_blank" rel="noopener" title="조코헌트 주간 1등 Top 1 위너">
+  <img
+    src="https://jocohunt.com/images/badges/weekly-light.svg"
+    alt="조코헌트 주간 1등 Top 1 위너"
+    style="width: 250px; height: auto;"
+  />
+</a>
+
 > MCP server + CLI for Korea's official legal database (법제처 Open API). Works with Claude Desktop, Cursor, Windsurf, Zed, and any MCP-compatible client.
 
 [한국어](./README.md)

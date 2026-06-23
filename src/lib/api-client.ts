@@ -285,8 +285,8 @@ export class LawApiClient {
       return 'law'
     }
 
-    // 행정규칙: 훈령, 예규, 고시, 지침, 내규
-    if (/훈령|예규|고시|지침|내규/.test(lawName)) {
+    // 행정규칙: 훈령, 예규, 고시, 지침, 내규, 세칙 (규정/규칙 단독은 시행규칙 오분류 위험 → 4차 fallback에 위임)
+    if (/훈령|예규|고시|지침|내규|세칙/.test(lawName)) {
       return 'admin'
     }
 

@@ -6,6 +6,14 @@
 [![MCP 1.27](https://img.shields.io/badge/MCP-1.27-blue)](https://modelcontextprotocol.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+<a href="https://jocohunt.com/p/5lkkxp3x" target="_blank" rel="noopener" title="조코헌트 주간 1등 Top 1 위너">
+  <img
+    src="https://jocohunt.com/images/badges/weekly-light.svg"
+    alt="조코헌트 주간 1등 Top 1 위너"
+    style="width: 250px; height: auto;"
+  />
+</a>
+
 > 법제처 Open API 기반 MCP 서버 + CLI. Claude Desktop, Cursor, Windsurf, Zed, Claude.ai 등에서 바로 사용 가능.
 
 [English](./README-EN.md)
