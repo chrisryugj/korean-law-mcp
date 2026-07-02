@@ -531,7 +531,7 @@ Failed to install: Failed to clone repository: Cloning into
    - **URL**: 아래 주소를 붙여넣으세요. `honggildong` 부분을 **0단계에서 발급받은 본인 인증키**로 바꾸세요:
 
 ```
-https://korean-law-mcp.fly.dev/mcp?oc=honggildong
+https://mcp.gomdori.app/law?oc=honggildong
 ```
 
 7. **추가** 버튼을 누르면 등록 완료!
@@ -577,7 +577,7 @@ Claude Desktop은 원격 HTTP MCP 서버를 직접 연결하지 못하므로 `mc
       "args": [
         "-y",
         "mcp-remote",
-        "https://korean-law-mcp.fly.dev/mcp?oc=honggildong"
+        "https://mcp.gomdori.app/law?oc=honggildong"
       ]
     }
   }
@@ -592,7 +592,7 @@ Claude Desktop은 원격 HTTP MCP 서버를 직접 연결하지 못하므로 `mc
 {
   "mcpServers": {
     "korean-law": {
-      "url": "https://korean-law-mcp.fly.dev/mcp?oc=honggildong"
+      "url": "https://mcp.gomdori.app/law?oc=honggildong"
     }
   }
 }
