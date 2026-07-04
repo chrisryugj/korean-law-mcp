@@ -1,5 +1,19 @@
 # Changelog
 
+## [4.6.0] - 2026-07-04
+
+### Added — verify_citations 내용검증 (존재 + 내용 이중검증)
+
+- **조문 제목 내용검증**: `verify_citations` / `legal_analysis(mode=verify_citations)`가 기존 "조문 실존" 검증에 더해, 인용한 조문제목이 실제 조문제목과 일치하는지 대조. `민법 제750조(계약해제)`처럼 **존재하는 조문에 엉뚱한 제목을 붙인 내용 환각**을 `[CONTENT_MISMATCH]`로 탐지 (기존엔 750조만 실존하면 통과). LexDiff의 `citation-content-matcher`(정규화 후 exact 30자 공통 substring + 문자 bigram Jaccard ≥ 0.25) 이식 (`lib/citation-content-matcher.ts`). `제N조(제목)` 형태의 제목만 검증 대상, 개정이력·날짜·항호 참조 괄호는 제외
+
+### Added — law.go.kr JS 안티봇 우회 (클라우드 IP 대응)
+
+- **`location.assign` 리다이렉트 추적**: 클라우드 IP(GCP/AWS/Fly)에서 법제처가 API 데이터 대신 JS 안티봇 페이지를 반환할 때, 난독화 URL(concat/substr 2패턴)을 파싱해 토큰 URL로 우회 (`lib/law-antibot.ts`, 최대 3홉, 토큰 URL 404 시 원본 재시도). 로컬/등록 IP에선 no-op. `fetch-with-retry`가 law.go.kr 호스트 응답에만 적용해 방어층 추가
+
+### Tests
+
+- `law-antibot.test.ts`(3), `citation-content-matcher.test.ts`(8) 신설 — vitest 44 케이스 그린
+
 ## [4.4.3] - 2026-06-29
 
 ### Fixed — zod v4 고정 (신규 설치 크래시 해결)

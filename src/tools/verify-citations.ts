@@ -23,6 +23,7 @@ import { parseHangNumber } from "../lib/article-parser.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError } from "../lib/errors.js"
 import { toArray } from "../lib/xml-parser.js"
+import { matchCitationContent } from "../lib/citation-content-matcher.js"
 
 export const VerifyCitationsSchema = z.object({
   text: z.string().min(1).describe("검증할 법률 텍스트 (LLM 답변/계약서/판결문 등). 조문 인용이 포함된 문자열"),
@@ -41,6 +42,7 @@ interface ParsedCitation {
   ho?: number
   joCode: string
   displayArticle: string
+  claimTitle?: string
 }
 
 // 조문 인용 패턴 — "제N조", "제N조의M", "제N조 제K항 제L호"
@@ -51,6 +53,19 @@ const LAW_NAME_REGEX = /([가-힣][가-힣·ㆍ\s]{0,30}?(?:법률|법|시행령
 
 // 법령명 앞에 붙는 한국어 접속사·부사·수식어 제거 — "또한 상법" → "상법"
 const LAW_NAME_STOPWORDS = /^(또한|그리고|하며|따라서|따라|위해|위하여|의한|의하여|따른|해당|관련|이에|아울러|본|이|저|그|또|및|또는|혹은|한편|더불어|이어|이는|즉|결국|결과적으로|실제로|특히)\s+/u
+
+// 인용 바로 뒤 "(제목)"에서 조문 제목 claim 추출 — 내용검증용.
+// 개정이력·날짜·항호 참조 괄호는 조문 제목이 아니므로 제외.
+function extractClaimTitle(after: string): string | undefined {
+  const m = after.match(/^\s*\(([^)]{1,40})\)/)
+  if (!m) return undefined
+  const t = m[1].trim()
+  if (!/[가-힣]/.test(t)) return undefined                    // 한글 없으면 제목 아님
+  if (/(개정|신설|삭제|전문개정|본조신설)/.test(t)) return undefined  // 개정이력 괄호
+  if (/\d{4}\s*\.\s*\d/.test(t)) return undefined             // 날짜(2020. 1. …)
+  if (/^제?\s*\d+\s*(항|호|목|조)/.test(t)) return undefined    // 항/호/목 참조
+  return t
+}
 
 function parseCitations(text: string, maxCitations: number): ParsedCitation[] {
   const citations: ParsedCitation[] = []
@@ -86,6 +101,10 @@ function parseCitations(text: string, maxCitations: number): ParsedCitation[] {
     if (seen.has(key)) continue
     seen.add(key)
 
+    // 조문 번호 바로 뒤 "(제목)" 캡처 — 내용검증(matchCitationContent)용
+    const afterIdx = m.index + raw.length
+    const claimTitle = extractClaimTitle(text.slice(afterIdx, afterIdx + 45))
+
     citations.push({
       raw: raw.trim(),
       lawName,
@@ -95,6 +114,7 @@ function parseCitations(text: string, maxCitations: number): ParsedCitation[] {
       ho: hoStr ? parseInt(hoStr, 10) : undefined,
       joCode,
       displayArticle,
+      claimTitle,
     })
   }
   return citations
@@ -175,6 +195,15 @@ async function verifyOne(
     const joTitle = found.조문제목 ? `(${found.조문제목})` : ""
     const officialLabel = `${chosen.lawName} ${cite.displayArticle}`
 
+    // 내용검증: 인용한 조문 제목이 실제 조문제목과 일치하는지 (lexdiff matchCitationContent 이식).
+    // "존재하는 조문에 엉뚱한 제목 붙인 환각"(예: 제750조(계약해제) ← 실제 불법행위) 탐지.
+    if (cite.claimTitle && found.조문제목) {
+      const cm = matchCitationContent(cite.claimTitle, String(found.조문제목))
+      if (!cm.matched) {
+        return `✗ ${officialLabel} — [CONTENT_MISMATCH] 인용 제목 '${cite.claimTitle}' ≠ 실제 조문제목 '${found.조문제목}' (단순 표기차이 아니면 인용 오류)`
+      }
+    }
+
     if (cite.hang) {
       const rawHang = found.항
       const hangs = toArray<any>(rawHang)
@@ -193,7 +222,7 @@ async function verifyOne(
       return `✗ ${officialLabel}${joTitle} — [NOT_FOUND] 제${cite.hang}항 없음 (최대 제${maxHang}항)`
     }
 
-    return `✓ ${officialLabel}${joTitle} 실존`
+    return `✓ ${officialLabel}${joTitle} 실존${cite.claimTitle ? " · 제목 일치" : ""}`
   } catch (e) {
     return `⚠ ${formatCitationLabel(cite, chosen.lawName)} — 조문 조회 실패: ${e instanceof Error ? e.message : String(e)}`
   }
@@ -234,7 +263,7 @@ export async function verifyCitations(
       output += `${line}\n`
     }
     if (hasHallucination) {
-      output += `\n⚠️ [HALLUCINATION_DETECTED] ${failCount}건 인용이 법제처 DB에 실존하지 않습니다.\n`
+      output += `\n⚠️ [HALLUCINATION_DETECTED] ${failCount}건 인용이 법제처 DB에 실존하지 않거나 인용 내용(조문 제목)이 실제와 불일치합니다.\n`
       output += `   LLM이 지어낸 인용일 가능성이 높습니다. 원문을 수정하거나 사용자에게 '인용 오류'를 명시 보고하세요.\n`
       output += `   절대로 "검증 완료"로 답변하지 마세요.\n`
     }
