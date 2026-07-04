@@ -778,10 +778,10 @@ const V3_EXPOSED = new Set([
 /**
  * 마켓플레이스(playmcp 등) 광고용 메타데이터.
  * 원본 allTools 정의는 그대로 두고, ListTools 광고 시점에만 주입한다.
- *   - 서비스명: description에 "국가법령정보 MCP" 포함 요구 충족
+ *   - 서비스명: description에 "Korean-law-mcp" 포함 요구 충족
  *   - annotations: MCP ToolAnnotations. 노출 9개 모두 법제처 read-only 조회(멱등) + 외부 API 호출.
  */
-const SERVICE_NAME = "국가법령정보 MCP"
+const SERVICE_NAME = "Korean-law-mcp"
 
 const TOOL_TITLES: Record<string, string> = {
   legal_research: "법령 리서치 (다단계 체인)",
