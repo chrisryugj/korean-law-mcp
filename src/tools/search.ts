@@ -11,6 +11,7 @@ import { formatToolError, noResultHint } from "../lib/errors.js"
 import { expandLawQuery, normalizeAliasKey, resolveLawAlias } from "../lib/search-normalizer.js"
 import { buildUpcomingNotes, fetchUpcomingLaws } from "../lib/upcoming-laws.js"
 import { searchAdminRule } from "./admin-rule.js"
+import { searchOrdinance } from "./ordinance-search.js"
 
 export const SearchLawSchema = z.object({
   query: z.string().describe("검색할 법령명 (예: '관세법', 'fta특례법', '화관법')"),
@@ -49,6 +50,13 @@ function parseLawsXml(xmlText: string): LawHit[] {
     })
   }
   return out
+}
+
+// '광진구 복무 조례'처럼 조례 키워드나 지역명 토큰(○○시/군/구)이 있으면 자치법규 쿼리로 판단.
+// '도'는 도로법·양도세 등 오탐이 많아 제외. 토큰 3자 미만('구', '시')도 제외.
+function looksLikeOrdinanceQuery(query: string): boolean {
+  if (query.includes("조례")) return true
+  return query.split(/\s+/).some((t) => t.length >= 3 && /[시군구]$/.test(t))
 }
 
 function formatHit(idx: number, h: LawHit): string {
@@ -118,6 +126,24 @@ export async function searchLaw(
                        `💡 '규정/고시/훈령/예규/지침'은 행정규칙이며 search_admin_rule이 본 도구입니다.\n\n`
         return {
           content: [{ type: "text", text: truncateResponse(prefix + text) }],
+        }
+      }
+      // Fallback: 조례·규칙(지자체)은 자치법규라 국가법령 검색에 안 잡힘.
+      // 쿼리가 자치법규 형태면 search_ordinance 자동 시도.
+      if (looksLikeOrdinanceQuery(input.query)) {
+        const ordinFallback = await searchOrdinance(apiClient, {
+          query: input.query,
+          display: Math.min(input.display, 100),
+          apiKey: input.apiKey,
+        }).catch(() => null)
+
+        if (ordinFallback && !ordinFallback.isError) {
+          const text = ordinFallback.content[0]?.text || ""
+          const prefix = `[FALLBACK] 법령 '${input.query}' 0건 → 자치법규로 자동 폴백.\n` +
+                         `💡 조례·규칙(지자체)은 자치법규이며 search_ordinance(execute_tool 경유)가 본 도구입니다.\n\n`
+          return {
+            content: [{ type: "text", text: truncateResponse(prefix + text) }],
+          }
         }
       }
       return noResultHint(input.query, "법령")

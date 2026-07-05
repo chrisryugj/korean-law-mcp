@@ -1,6 +1,6 @@
 {
   "name": "korean-law-mcp",
-  "version": "4.6.2",
+  "version": "4.6.3",
   "description": "법제처 42개 API → 9개 MCP 도구. 법령·판례·조례·조약 + 다단계 리서치(legal_research, 8 task) + 정밀분석(legal_analysis: 인용검증·판례생사·행위시법·영향그래프) + 시점 비교(time_travel) + 상황별 5단계 안내(action_plan) + 국세청 해석례(nts)",
   "type": "module",
   "main": "build/index.js",
