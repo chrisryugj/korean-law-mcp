@@ -158,7 +158,11 @@ export async function startHTTPServer(createServer: () => Server, port: number) 
       (req.query.oc as string | undefined)
 
     // 자체 키 없는 요청은 서버 LAW_OC로 폴백 — 전역 상한 적용
-    if (!apiKey && !fallbackAllowed()) {
+    // initialize/tools/list 등 핸드셰이크는 법제처 쿼터를 안 쓰므로 tools/call만 게이트
+    // (핸드셰이크까지 429로 막으면 claude.ai 커넥터가 도구 목록 자체를 못 싣는다)
+    const bodyMessages = Array.isArray(req.body) ? req.body : [req.body]
+    const consumesQuota = bodyMessages.some((m) => m?.method === "tools/call")
+    if (!apiKey && consumesQuota && !fallbackAllowed()) {
       res.status(429).json({
         jsonrpc: "2.0",
         error: { code: -32000, message: "Shared API quota exceeded. Provide your own key via 'apiKey' header (free: https://open.law.go.kr)." },
