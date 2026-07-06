@@ -62,6 +62,14 @@ export async function startHTTPServer(createServer: () => Server, port: number) 
     app.use((req, res, next) => {
       if (req.path === "/health" || req.path === "/") return next()
 
+      // 핸드셰이크(initialize)·도구목록(tools/list)·알림은 rate limit 제외.
+      // 이들이 429를 맞으면 클라이언트가 도구 목록을 못 받아 "도구 못 찾음"이 된다.
+      // claude.ai 커넥터는 소수 egress IP로 트래픽이 몰려 IP 버킷을 공유하므로,
+      // 비용 소모 요청(tools/call)에만 게이트한다. (v4.6.2 폴백 게이트와 동일 원칙)
+      const msgs = Array.isArray(req.body) ? req.body : [req.body]
+      const consumesQuota = msgs.some(m => m?.method === "tools/call")
+      if (!consumesQuota) return next()
+
       const ip = req.ip || req.socket.remoteAddress || "unknown"
       const now = Date.now()
       let bucket = rateBuckets.get(ip)

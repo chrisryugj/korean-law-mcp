@@ -82,7 +82,7 @@ export const allTools: McpTool[] = [
   // === 법령 검색/조회 ===
   {
     name: "search_law",
-    description: "[법령검색] 법령명 키워드검색 → lawId, mst 획득. 약칭 자동변환. 제명변경·시행예정 개정 자동 병기. 법령 조회 전 식별자 확보용.",
+    description: "[법령검색] 법령명·조례명·행정규칙명 키워드검색 → lawId, mst 획득. 지자체 조례·규칙(자치법규), 훈령·예규·고시(행정규칙)도 검색 — 0건 시 자치법규/행정규칙으로 자동 폴백(예: '광진구 복무조례', '외국환거래규정'). 약칭 자동변환. 제명변경·시행예정 개정 자동 병기. 법령·조례·행정규칙 조회 전 식별자 확보용.",
     schema: SearchLawSchema,
     handler: searchLaw
   },

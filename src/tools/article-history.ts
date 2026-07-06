@@ -66,7 +66,11 @@ export async function getArticleHistory(
       }
     }
 
-    const xmlText = await apiClient.getArticleHistory({ ...input, lawId, apiKey: input.apiKey })
+    // lsJoHstInf는 날짜 범위가 없으면 lawId를 줘도 항상 0건 반환 → 날짜 미지정 시 전체 기간 자동 적용
+    const noDateFilter = !input.regDt && !input.fromRegDt && !input.toRegDt
+    const dateDefaults = noDateFilter ? { fromRegDt: "19480101", toRegDt: "20991231" } : {}
+
+    const xmlText = await apiClient.getArticleHistory({ ...input, ...dateDefaults, lawId, apiKey: input.apiKey })
 
     const parser = new DOMParser()
     const doc = parser.parseFromString(xmlText, "text/xml")
