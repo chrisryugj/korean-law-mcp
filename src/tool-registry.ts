@@ -805,6 +805,7 @@ export function registerTools(server: Server, apiClient: LawApiClient) {
       inputSchema: toMcpInputSchema(tool.schema),
       annotations: {
         readOnlyHint: true,
+        destructiveHint: false,
         idempotentHint: true,
         openWorldHint: true,
       }

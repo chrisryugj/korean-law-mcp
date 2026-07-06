@@ -1,5 +1,11 @@
 # Changelog
 
+## [4.6.5] - 2026-07-06
+
+### Fixed
+
+- **ToolAnnotations `destructiveHint` 추가**: ListTools 광고 annotations에 `destructiveHint: false` 명시. 9개 도구 모두 법제처 read-only 조회라 파괴적 동작 없음을 명시적으로 선언 — 일부 MCP 호스트(카카오 등) 등록 심사가 `destructiveHint` 정의를 필수로 요구해 경고가 발생하던 문제 해소 (`src/tool-registry.ts`)
+
 ## [4.6.1] - 2026-07-05
 
 ### Docs
