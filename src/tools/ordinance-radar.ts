@@ -22,9 +22,10 @@ export const OrdinanceRadarSchema = z.object({
   ordinSeq: z.string().optional().describe("자치법규 일련번호 (search_ordinance 결과의 [번호])"),
   id: z.string().optional().describe("ordinSeq 별칭 — 힌트가 id=로 안내하는 경우 대응"),
   ordinanceName: z.string().optional().describe("자치법규명 — 지정 시 검색 후 첫 결과 사용 (예: '서울특별시 광진구 주차장 설치 및 관리 조례')"),
+  query: z.string().optional().describe("ordinanceName 별칭 — 자연어 조례명으로 검색 (search_law 등 다른 도구와 규약 통일)"),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달"),
-}).refine(d => d.ordinSeq || d.id || d.ordinanceName, {
-  message: "ordinSeq(또는 별칭 id) 또는 ordinanceName 중 하나는 필수입니다",
+}).refine(d => d.ordinSeq || d.id || d.ordinanceName || d.query, {
+  message: "ordinSeq(또는 별칭 id)·ordinanceName·query 중 하나는 필수입니다",
 })
 
 export type OrdinanceRadarInput = z.infer<typeof OrdinanceRadarSchema>
@@ -127,14 +128,15 @@ export async function ordinanceRadar(
   try {
     // 1. ordinSeq 확보 (직접 지정 우선, 없으면 조례명 검색 첫 결과)
     let ordinSeq = input.ordinSeq || input.id
-    if (!ordinSeq && input.ordinanceName) {
-      const sx = await apiClient.searchOrdinance({ query: input.ordinanceName, display: 5, apiKey: input.apiKey })
+    const searchName = input.ordinanceName || input.query
+    if (!ordinSeq && searchName) {
+      const sx = await apiClient.searchOrdinance({ query: searchName, display: 5, apiKey: input.apiKey })
       const parsed = parseSearchXML(sx, "OrdinSearch", "law", (c) => ({
         자치법규일련번호: extractTag(c, "자치법규일련번호"),
       }))
       ordinSeq = parsed.items[0]?.자치법규일련번호 || undefined
       if (!ordinSeq) {
-        return notFound(`[NOT_FOUND] 자치법규 '${input.ordinanceName}'을(를) 찾을 수 없습니다.\n⚠️ search_ordinance로 유효한 조례명·ordinSeq를 먼저 확인하세요.`)
+        return notFound(`[NOT_FOUND] 자치법규 '${searchName}'을(를) 찾을 수 없습니다.\n⚠️ search_ordinance로 유효한 조례명·ordinSeq를 먼저 확인하세요.`)
       }
     }
     if (!ordinSeq) return notFound("[NOT_FOUND] ordinSeq 또는 ordinanceName이 필요합니다.")
