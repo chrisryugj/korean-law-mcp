@@ -1,5 +1,39 @@
 # Changelog
 
+## [4.6.5] - 2026-07-06
+
+### Fixed
+
+- **ToolAnnotations `destructiveHint` 추가**: ListTools 광고 annotations에 `destructiveHint: false` 명시. 9개 도구 모두 법제처 read-only 조회라 파괴적 동작 없음을 명시적으로 선언 — 일부 MCP 호스트(카카오 등) 등록 심사가 `destructiveHint` 정의를 필수로 요구해 경고가 발생하던 문제 해소 (`src/tool-registry.ts`)
+
+## [4.6.1] - 2026-07-05
+
+### Docs
+
+- **README 현행화**: v4.6.0 릴리스 노트(인용 내용검증 + law.go.kr JS 안티봇 우회) 추가, tagline을 "인용 검증(실존+내용)"으로 갱신
+- **README-EN 현행화**: 영문판이 v4.3부터 뒤처져 있던 것을 보강 — v4.4.0(도구 통폐합)·v4.4.1–4.4.3(안정성)·v4.5.0(시행예정)·v4.6.0 릴리스 노트 반영
+- 코드 변경 없음(문서 전용 패치)
+
+## [4.6.0] - 2026-07-04
+
+### Added — verify_citations 내용검증 (존재 + 내용 이중검증)
+
+- **조문 제목 내용검증**: `verify_citations` / `legal_analysis(mode=verify_citations)`가 기존 "조문 실존" 검증에 더해, 인용한 조문제목이 실제 조문제목과 일치하는지 대조. `민법 제750조(계약해제)`처럼 **존재하는 조문에 엉뚱한 제목을 붙인 내용 환각**을 `[CONTENT_MISMATCH]`로 탐지 (기존엔 750조만 실존하면 통과). LexDiff의 `citation-content-matcher`(정규화 후 exact 30자 공통 substring + 문자 bigram Jaccard ≥ 0.25) 이식 (`lib/citation-content-matcher.ts`). `제N조(제목)` 형태의 제목만 검증 대상, 개정이력·날짜·항호 참조 괄호는 제외
+
+### Added — law.go.kr JS 안티봇 우회 (클라우드 IP 대응)
+
+- **`location.assign` 리다이렉트 추적**: 클라우드 IP(GCP/AWS/Fly)에서 법제처가 API 데이터 대신 JS 안티봇 페이지를 반환할 때, 난독화 URL(concat/substr 2패턴)을 파싱해 토큰 URL로 우회 (`lib/law-antibot.ts`, 최대 3홉, 토큰 URL 404 시 원본 재시도). 로컬/등록 IP에선 no-op. `fetch-with-retry`가 law.go.kr 호스트 응답에만 적용해 방어층 추가
+
+### Tests
+
+- `law-antibot.test.ts`(3), `citation-content-matcher.test.ts`(8) 신설 — vitest 44 케이스 그린
+
+## [4.4.3] - 2026-06-29
+
+### Fixed — zod v4 고정 (신규 설치 크래시 해결)
+
+- **`z.toJSONSchema is not a function` 크래시**: `dependencies`가 zod를 `^3.25.76 || ^4.0.0`으로 선언했으나 코드는 zod v4 전용 API인 `z.toJSONSchema()`를 호출. 새 npm 설치가 zod 3.25를 해석하면 `listTools` 첫 호출에서 크래시. zod를 `^4`로 고정해 해결
+
 ## [4.4.2] - 2026-06-18
 
 ### Fixed — 행정규칙 별표/서식 조회 복구 (#50, #49, #51)

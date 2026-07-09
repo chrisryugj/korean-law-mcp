@@ -9,7 +9,9 @@ import { lawCache } from "../lib/cache.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError, noResultHint } from "../lib/errors.js"
 import { expandLawQuery, normalizeAliasKey, resolveLawAlias } from "../lib/search-normalizer.js"
+import { buildUpcomingNotes, fetchUpcomingLaws } from "../lib/upcoming-laws.js"
 import { searchAdminRule } from "./admin-rule.js"
+import { searchOrdinance } from "./ordinance-search.js"
 
 export const SearchLawSchema = z.object({
   query: z.string().describe("검색할 법령명 (예: '관세법', 'fta특례법', '화관법')"),
@@ -48,6 +50,13 @@ function parseLawsXml(xmlText: string): LawHit[] {
     })
   }
   return out
+}
+
+// '광진구 복무 조례'처럼 조례 키워드나 지역명 토큰(○○시/군/구)이 있으면 자치법규 쿼리로 판단.
+// '도'는 도로법·양도세 등 오탐이 많아 제외. 토큰 3자 미만('구', '시')도 제외.
+function looksLikeOrdinanceQuery(query: string): boolean {
+  if (query.includes("조례")) return true
+  return query.split(/\s+/).some((t) => t.length >= 3 && /[시군구]$/.test(t))
 }
 
 function formatHit(idx: number, h: LawHit): string {
@@ -94,6 +103,15 @@ export async function searchLaw(
     }
 
     if (laws.length === 0) {
+      // 공포됐지만 미시행인 신규 법령은 현행(target=law) 검색에 안 잡힘 → 시행예정 보조검색
+      const upcomingOnly = await fetchUpcomingLaws(apiClient, input.query, input.apiKey)
+      if (upcomingOnly.length > 0) {
+        const text = `현행 법령 0건 — 단, 공포 후 시행 대기 중인 법령이 있습니다:\n\n` +
+          buildUpcomingNotes([], upcomingOnly) +
+          `⚠️ 현재 시점에는 아직 효력이 없는 법령입니다. 현행 기준 답변에 인용하지 마세요.\n`
+        return { content: [{ type: "text", text: truncateResponse(text) }] }
+      }
+
       // Fallback: 외국환거래규정·은행업감독규정 등 "규정/고시"는 행정규칙(고시)임.
       // 일반 법령에 없으면 search_admin_rule 자동 시도.
       const adminFallback = await searchAdminRule(apiClient, {
@@ -108,6 +126,24 @@ export async function searchLaw(
                        `💡 '규정/고시/훈령/예규/지침'은 행정규칙이며 search_admin_rule이 본 도구입니다.\n\n`
         return {
           content: [{ type: "text", text: truncateResponse(prefix + text) }],
+        }
+      }
+      // Fallback: 조례·규칙(지자체)은 자치법규라 국가법령 검색에 안 잡힘.
+      // 쿼리가 자치법규 형태면 search_ordinance 자동 시도.
+      if (looksLikeOrdinanceQuery(input.query)) {
+        const ordinFallback = await searchOrdinance(apiClient, {
+          query: input.query,
+          display: Math.min(input.display, 100),
+          apiKey: input.apiKey,
+        }).catch(() => null)
+
+        if (ordinFallback && !ordinFallback.isError) {
+          const text = ordinFallback.content[0]?.text || ""
+          const prefix = `[FALLBACK] 법령 '${input.query}' 0건 → 자치법규로 자동 폴백.\n` +
+                         `💡 조례·규칙(지자체)은 자치법규이며 search_ordinance(execute_tool 경유)가 본 도구입니다.\n\n`
+          return {
+            content: [{ type: "text", text: truncateResponse(prefix + text) }],
+          }
         }
       }
       return noResultHint(input.query, "법령")
@@ -161,6 +197,12 @@ export async function searchLaw(
         resultText += formatHit(counter, partial[i])
       }
     }
+
+    // 시행예정 병기: 제명변경 개정(구명칭→신명칭)이 공포~시행 사이면 신명칭 검색 시
+    // "정확매칭 없음"만 떠서 LLM이 "법령 없음"으로 오판 → 신·구 명칭 매핑을 명시
+    const upcoming = await fetchUpcomingLaws(apiClient, usedQuery, input.apiKey)
+    const upcomingNotes = buildUpcomingNotes(laws, upcoming)
+    if (upcomingNotes) resultText += upcomingNotes
 
     // 다음 단계 힌트: 정확매칭이 있으면 그 첫 항목, 없으면 부분매칭 첫 항목 안내
     const primary = exact[0] || partial[0]

@@ -377,7 +377,13 @@ function findMatchingAnnex(
     return selectorNumbers.some((num) => titleMatchesAnnexNumber(annexTitle, num))
   })
 
-  if (matches.length === 0) return undefined
+  if (matches.length === 0) {
+    // 번호가 안 맞아도 별표가 유일 1건이면 그 별표를 정답으로 폴백.
+    // 여권법 시행령 '수수료 및 사무의 대행에 드는 비용(제39조 관련)'처럼 번호 없는 단일 별표는
+    // 모델이 "별표1" 등 임의 번호로 불러도 매칭 0건 → NOT_FOUND로 새는 대신 유일 별표를 반환.
+    if (annexList.length === 1) return annexList[0]
+    return undefined
+  }
   if (matches.length === 1) return matches[0]
 
   // 별표번호 충돌 → 별표종류("별표"/"서식")로 구분

@@ -1,8 +1,8 @@
 # Korean Law MCP - API Reference
 
-> **v4.4.0** | 9개 노출 도구 (내부 97개, 미노출 도구는 execute_tool 또는 직접 호출로 접근)
+> **v4.7.0** | 10개 노출 도구 (내부 98개, 미노출 도구는 execute_tool 또는 직접 호출로 접근)
 
-도구 구조는 [README.md](../README.md#도구-구조-9개) 참조.
+도구 구조는 [README.md](../README.md) 참조.
 상세 파라미터는 각 도구의 Zod 스키마(`src/tools/*.ts`) 참조.
 
 ---
@@ -71,11 +71,17 @@
 | `legal_research` | 다단계 리서치 — `task` 8종(full_research·law_system·action_basis·dispute_prep·amendment_track·ordinance_compare·procedure_detail·document_review)으로 아래 체인 도구 8개를 디스패치 |
 | `legal_analysis` | 정밀 분석/검증 — `mode` 4종(verify_citations·cite_check·applicable_law·impact_map)으로 아래 킬러 기능 4개를 디스패치. 비용 옵션 패스스루: `maxCitations`(기본 15), `display`(기본 20), `deepScan`(기본 true), `includeOrdinances`(기본 true), `includeMermaid`(기본 true) — v4.4.1 |
 
+### 조례 정비 레이더 (1개, 직노출 — v4.7.0)
+
+| 도구 | 설명 |
+|------|------|
+| `ordinance_radar` | 조례 제1조(목적)에서 근거 상위법령(법률/시행령/시행규칙)을 추출하고, 각 상위법의 현행 시행일 vs 조례 시행일을 대조해 "상위법이 조례 시행 이후 개정 → 정비 검토 대상"을 자동 플래그. `ordinSeq`(또는 `id`)나 `ordinanceName` 중 하나 필수. 본문 전체가 아닌 목적 조문만 스캔해 별표의 무관 인용(감면대상 정의 등) 과잉경보를 배제. lnkOrd 연계 API는 커버리지가 낮아 미사용 |
+
 ### 검색 (11개)
 
 | 도구 | target | 설명 |
 |------|--------|------|
-| `search_law` | `law` | 법령명 검색 (약칭 자동 인식) |
+| `search_law` | `law`+`eflaw` | 법령명 검색 (약칭 자동 인식, 제명변경·시행예정 개정 자동 병기) |
 | `search_admin_rule` | `admrul` | 훈령/예규/고시/공고 |
 | `search_ordinance` | `ordin` | 조례/규칙 |
 | `search_precedents` | `prec` | 판례 |

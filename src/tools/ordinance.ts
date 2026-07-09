@@ -11,10 +11,14 @@ import { formatToolError } from "../lib/errors.js"
 import { toArray } from "../lib/xml-parser.js"
 
 export const GetOrdinanceSchema = z.object({
-  ordinSeq: z.string().describe("자치법규 일련번호"),
+  ordinSeq: z.string().optional().describe("자치법규 일련번호 (검색결과의 [번호])"),
+  id: z.string().optional().describe("ordinSeq 별칭 — 검색결과 [번호]. 힌트가 id=로 안내하는 경우 대응"),
   jo: z.string().optional().describe("조문 번호 (예: '제20조'). 지정 시 해당 조문 본문만 반환"),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달")
-})
+}).refine(
+  data => data.ordinSeq || data.id,
+  { message: "ordinSeq(또는 별칭 id) 중 하나는 필수입니다" }
+)
 
 export type GetOrdinanceInput = z.infer<typeof GetOrdinanceSchema>
 
@@ -33,7 +37,8 @@ export async function getOrdinance(
       }
     }
 
-    const jsonText = await apiClient.getOrdinance(input.ordinSeq, joCode, input.apiKey)
+    const ordinSeq = input.ordinSeq || input.id!
+    const jsonText = await apiClient.getOrdinance(ordinSeq, joCode, input.apiKey)
     const json = JSON.parse(jsonText)
 
     const lawService = json?.LawService
@@ -96,7 +101,7 @@ export async function getOrdinance(
         }
         resultText += `목차 (총 ${articles.length}개 조문)\n\n`
         resultText += tocItems.join("\n")
-        resultText += `\n\n특정 조문 조회: get_ordinance(ordinSeq="${input.ordinSeq}", jo="제XX조")`
+        resultText += `\n\n특정 조문 조회: get_ordinance(ordinSeq="${ordinSeq}", jo="제XX조")`
       } else {
         for (const article of articles) {
           if (article.조제목) {

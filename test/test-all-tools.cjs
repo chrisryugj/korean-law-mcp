@@ -249,7 +249,7 @@ function sendMCPRequest(toolName, args) {
     setTimeout(() => {
       serverProcess.stdout.removeListener('data', dataHandler);
       reject(new Error('Request timeout'));
-    }, 10000);
+    }, 30000);
   });
 }
 

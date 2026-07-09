@@ -14,5 +14,5 @@
     "moduleResolution": "node10"
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "build"]
+  "exclude": ["node_modules", "build", "src/**/*.test.ts"]
 }

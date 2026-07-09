@@ -6,7 +6,6 @@ import { formatToolError, noResultHint } from "../lib/errors.js";
 import type { ToolResponse } from "../lib/types.js";
 
 // AI-powered intelligent law search tool
-// 이름은 searchAiLaw가 더 정확하지만, 호환성을 위해 searchLifeLaw alias 유지
 export const searchAiLawSchema = z.object({
   query: z.string().describe("자연어 질문 또는 일상 상황 (예: '음주운전 처벌', '임대차 보증금 반환', '퇴직금 계산')"),
   search: z.enum(["0", "1", "2", "3"]).default("0").describe(
@@ -237,10 +236,5 @@ export async function searchAiLaw(
     return formatToolError(error, "search_ai_law");
   }
 }
-
-// Alias for backward compatibility
-export const searchLifeLawSchema = searchAiLawSchema;
-export type SearchLifeLawInput = SearchAiLawInput;
-export const searchLifeLaw = searchAiLaw;
 
 // formatDate → schemas.ts의 formatDateDot 사용

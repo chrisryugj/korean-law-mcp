@@ -1,3 +1,5 @@
+# ⚠️ 사용 중지 (2026-07-02) — gomdori-mcp 통합 호스트가 korean-law-mcp 앱을 점유 중.
+# 여기서 deploy하면 통합 이미지가 덮여 MCP 5종 전부 죽는다. 배포는 .claude/commands/deploy.md 절차로.
 # fly.toml app configuration file generated for korean-law-mcp on 2026-01-18T12:11:34+09:00
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.

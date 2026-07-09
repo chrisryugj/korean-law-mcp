@@ -1,6 +1,6 @@
 # Korean Law MCP
 
-**법제처 42개 API를 9개 도구로.** 법령, 판례, 행정규칙, 자치법규, 조약, 해석례(국세청 포함) + **LLM 환각 방지 인용 검증** + **조문 영향 그래프** + **시점 비교 자동 diff** + **이럴 땐 이렇게 — 5단계 안내** + **판례 생사 확인(Citator)** + **행위시법 판단**을 AI 어시스턴트나 터미널에서 바로 사용.
+**법제처 42개 API를 10개 도구로.** 법령, 판례, 행정규칙, 자치법규, 조약, 해석례(국세청 포함) + **LLM 환각 방지 인용 검증(실존+내용)** + **조문 영향 그래프** + **시점 비교 자동 diff** + **이럴 땐 이렇게 — 5단계 안내** + **판례 생사 확인(Citator)** + **행위시법 판단** + **조례 정비 레이더**를 AI 어시스턴트나 터미널에서 바로 사용.
 
 [![npm version](https://img.shields.io/npm/v/korean-law-mcp.svg)](https://www.npmjs.com/package/korean-law-mcp)
 [![MCP 1.27](https://img.shields.io/badge/MCP-1.27-blue)](https://modelcontextprotocol.io)
@@ -21,6 +21,52 @@
 ![Korean Law MCP 데모](./demo.gif)
 
 ---
+
+## v4.7.0 — 조례 정비 레이더 (`ordinance_radar`)
+
+**"상위법 바뀌었는데, 우리 조례는 아직 그대로 아닌가?"** — 조례 담당 공무원이 매년 반복하는 상위법 개정 추적을 한 번의 호출로.
+
+```
+korean-law "광진구 주차장 조례" → ordinance_radar(ordinanceName="...")
+
+📡 조례 정비 레이더
+조례: 서울특별시 광진구 주차장 설치 및 관리 조례 (시행 20260227)
+근거 상위법령 3건 대조:
+  ⚠️ 주차장법 — 현행 시행 20260603 (조례보다 약 4개월 뒤 개정 → 정비 검토 대상)
+  ✅ 주차장법 시행령 — 현행 시행 20250817 (조례 시행 시점까지 반영)
+  ⚠️ 주차장법 시행규칙 — 현행 시행 20260331 (조례보다 약 1개월 뒤 개정 → 정비 검토 대상)
+```
+
+- **근거법 자동 추출**: 조례 제1조(목적)의 「」 인용에서 근거 법률·시행령·시행규칙을 추출 ("같은 법 시행령" 축약 표현도 해석). 본문 전체가 아닌 목적 조문만 스캔해 별표의 무관 인용(감면대상 정의의 공직선거법 등) 과잉경보를 배제
+- **개정 대조**: 각 상위법의 현행 시행일 vs 조례 시행일을 대조해 정비 검토 대상을 자동 플래그, 후속 확인용 MST 동봉
+- 법제처 자치법규 연계 API(lnkOrd)는 커버리지가 낮아 미사용 — 조례 본문 표준 표기 파싱으로 대체
+
+### + v4.6.1~4.6.6 — 운영 안정화 묶음
+
+- **v4.6.6**: 핸드셰이크(initialize/tools/list)를 rate limit에서 제외 — claude.ai 공유 egress IP가 429를 맞아 "간헐적 도구 못 찾음"이 되던 근본원인 해결 + `get_ordinance` id 별칭 수용 + `get_article_history` 날짜 미지정 시 전체기간 자동적용
+- **v4.6.5/4.6.4**: MCP 등록 심사 대응 — ToolAnnotations `destructiveHint` 추가, 한글 title 제거
+- **v4.6.3**: `search_law` 자치법규 자동 폴백 — 조례·지역명 쿼리 0건 시 search_ordinance 자동 시도
+- **v4.6.2**: 폴백 쿼터 게이트를 tools/call만 적용 — 핸드셰이크 429 차단 해제
+- **v4.7.0 보안·운영 패치 동봉**: JSON-RPC 배치의 tools/call을 개수만큼 rate limit·폴백 쿼터에 계수(배치 증폭 차단, 요청당 상한 20 — `MCP_MAX_BATCH_CALLS`) + graceful shutdown idle 연결 정리(clean exit) + `get_article_history` lawName 정확매칭 우선(가나다순 오매칭 방지)
+
+## v4.6.0 — 인용 검증 강화(내용까지) + 클라우드 안티봇 우회
+
+- **`verify_citations` 내용 검증**: 조문 실존 확인에 더해, `민법 제750조(계약해제)`처럼 **존재하는 조문에 엉뚱한 제목을 붙인 내용 환각**을 `[CONTENT_MISMATCH]`로 탐지. 기존엔 제750조만 실존하면 통과했으나, 이제 인용한 조문 제목이 실제와 일치하는지 대조합니다(LexDiff `citation-content-matcher` 이식 — 정규화 후 공통 substring + 문자 bigram Jaccard). `legal_analysis(mode=verify_citations)`에도 동일 적용
+- **law.go.kr JS 안티봇 우회**: 클라우드 IP(GCP/AWS/Fly)에서 법제처가 API 데이터 대신 `location.assign` JS 리다이렉트 페이지를 반환할 때, 난독화 URL을 파싱해 토큰 URL로 자동 우회(최대 3홉, 토큰 URL 404 시 원본 재시도). 로컬/등록 IP에선 no-op — `Referer` 주입(v4.0.9)으로도 안 뚫리는 클라우드 환경의 방어층
+
+## v4.5.0 — 시행예정 법령 감지 (제명변경 오판 방지)
+
+`search_law`가 시행예정(`target=eflaw`) 보조검색을 수행해 결과에 병기합니다.
+
+- **제명변경 예정**: 「데이터기반행정 활성화에 관한 법률」→「인공지능 및 데이터 기반 행정 활성화에 관한 법률」(2026-08-28 시행)처럼 공포~시행 사이의 제명변경을 신·구 명칭 매핑으로 표시 — 신명칭 검색 시 "정확매칭 없음"만 떠서 LLM이 "법령 없음"으로 오판하던 문제 해결
+- **개정 시행예정**: 검색된 현행 법령에 시행 대기 중인 개정이 있으면 시행일·공포번호와 시행예정본 MST 안내
+- **미시행 신규 법령**: 공포됐지만 아직 시행 전이라 현행 검색 0건인 법령을 별도 안내 (효력 없음 경고 포함)
+
+## v4.4.1–4.4.3 — 안정성 패치
+
+- **v4.4.3**: `zod`를 `^4`로 고정 — 신규 설치가 zod 3.x를 해석해 `listTools` 첫 호출에서 `z.toJSONSchema is not a function`으로 크래시하던 문제 해결
+- **v4.4.2**: `get_annexes` 행정규칙 별표/서식 조회 복구 — 응답 키 `admrulbyl` 우선 파싱 + "...시행세칙" 자동 판별 + 동일 bylSeq 별표/서식 충돌 분리 (#50/#49/#51)
+- **v4.4.1**: 광고 스키마 `required` 버그 수정 — `.default()` 필드(`legal_research.task`·`search_law.display`)가 필수 입력으로 노출되던 문제(`io:"input"` 명시) + `legal_analysis` 비용 옵션 패스스루 + 비호환 scenario 경고 노트
 
 ## v4.4.0 — 노출 도구 통폐합 19개 → 9개 (컨텍스트 52% 감축)
 
@@ -437,7 +483,7 @@ MCP 도구 설계에서 **도구 수 ≠ 기능 수**입니다.
 
 대한민국에는 **1,600개 이상의 현행 법률**, **10,000개 이상의 행정규칙**, 그리고 대법원·헌법재판소·조세심판원·관세청까지 이어지는 방대한 판례 체계가 있습니다. 이 모든 게 [법제처](https://www.law.go.kr)라는 하나의 사이트에 있지만, 개발자 경험은 최악입니다.
 
-이 프로젝트는 그 전체 법령 시스템을 **9개 도구**로 감싸서, AI 어시스턴트나 스크립트에서 바로 호출할 수 있게 만듭니다. 법제처를 수백 번 수동 검색하다 지친 공무원이 만들었습니다.
+이 프로젝트는 그 전체 법령 시스템을 **10개 도구**로 감싸서, AI 어시스턴트나 스크립트에서 바로 호출할 수 있게 만듭니다. 법제처를 수백 번 수동 검색하다 지친 공무원이 만들었습니다.
 
 ---
 
@@ -525,7 +571,7 @@ Failed to install: Failed to clone repository: Cloning into
    - **URL**: 아래 주소를 붙여넣으세요. `honggildong` 부분을 **0단계에서 발급받은 본인 인증키**로 바꾸세요:
 
 ```
-https://korean-law-mcp.fly.dev/mcp?oc=honggildong
+https://mcp.gomdori.app/law?oc=honggildong
 ```
 
 7. **추가** 버튼을 누르면 등록 완료!
@@ -542,7 +588,7 @@ https://korean-law-mcp.fly.dev/mcp?oc=honggildong
 
 > **참고**: 커넥터 URL을 수정하려면 삭제 후 다시 추가해야 합니다.
 
-> v3부터 프로필 선택이 필요 없습니다. 9개 도구가 42개 API 전체를 커버합니다.
+> v3부터 프로필 선택이 필요 없습니다. 10개 도구가 42개 API 전체를 커버합니다.
 > 기존에 `?profile=lite&oc=...` 주소를 넣으셨다면 **그대로 두셔도 됩니다** — 동일하게 작동합니다.
 
 ---
@@ -571,7 +617,7 @@ Claude Desktop은 원격 HTTP MCP 서버를 직접 연결하지 못하므로 `mc
       "args": [
         "-y",
         "mcp-remote",
-        "https://korean-law-mcp.fly.dev/mcp?oc=honggildong"
+        "https://mcp.gomdori.app/law?oc=honggildong"
       ]
     }
   }
@@ -586,7 +632,7 @@ Claude Desktop은 원격 HTTP MCP 서버를 직접 연결하지 못하므로 `mc
 {
   "mcpServers": {
     "korean-law": {
-      "url": "https://korean-law-mcp.fly.dev/mcp?oc=honggildong"
+      "url": "https://mcp.gomdori.app/law?oc=honggildong"
     }
   }
 }
@@ -764,9 +810,9 @@ reg delete "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /
 
 ---
 
-## 도구 구조 (9개)
+## 도구 구조 (10개)
 
-v4.4.0은 9개 도구만 노출합니다 (컨텍스트 52% 감축). 기존 `chain_*` 8개는 `legal_research`의 `task`로, 킬러피처 4개는 `legal_analysis`의 `mode`로 통합. 나머지 전문 도구는 `discover_tools` → `execute_tool`로 접근하며, 기존 도구명 직접 호출도 하위호환으로 계속 동작합니다.
+v4.4.0에서 노출 도구를 통폐합했습니다 (컨텍스트 52% 감축). 기존 `chain_*` 8개는 `legal_research`의 `task`로, 킬러피처 4개는 `legal_analysis`의 `mode`로 통합. 나머지 전문 도구는 `discover_tools` → `execute_tool`로 접근하며, 기존 도구명 직접 호출도 하위호환으로 계속 동작합니다. v4.7.0에서 `ordinance_radar`가 추가되어 10개입니다.
 
 | 구분 | 도구 | 설명 |
 |------|------|------|
@@ -775,6 +821,7 @@ v4.4.0은 9개 도구만 노출합니다 (컨텍스트 52% 감축). 기존 `chai
 | **법령** (3) | `search_law` | 법령 검색 → lawId, MST 획득 |
 | | `get_law_text` | 조문 전문 조회 |
 | | `get_annexes` | 별표/서식 조회 (금액표·요율표·별지서식) |
+| **자치법규** (1) | `ordinance_radar` | 조례 정비 레이더 — 근거 상위법 개정 자동 대조 (v4.7.0) |
 | **통합** (2) | `search_decisions` | **17개 도메인** 통합 검색 (판례·헌재·조세심판·공정위·노동위·관세·해석례·행심·개인정보위·권익위·소청심사·학칙·공사공단·공공기관·조약·영문법령) |
 | | `get_decision_text` | **17개 도메인** 전문 조회 |
 | **메타** (2) | `discover_tools` | 전문 도구 검색 (용어·별표·이력·비교 등) |
@@ -808,14 +855,14 @@ v4.4.0은 9개 도구만 노출합니다 (컨텍스트 52% 감축). 기존 `chai
 
 ## 주요 특징
 
-- **42개 API → 9개 도구** — 법령, 판례, 행정규칙, 자치법규, 헌재결정, 조세심판, 관세해석, 국세청 해석례, 조약, 학칙/공단/공공기관 규정, 법령용어
+- **42개 API → 10개 도구** — 법령, 판례, 행정규칙, 자치법규, 헌재결정, 조세심판, 관세해석, 국세청 해석례, 조약, 학칙/공단/공공기관 규정, 법령용어
 - **MCP + CLI** — Claude Desktop에서도, 터미널에서도 같은 도구 사용
 - **법률 도메인 특화** — 약칭 자동 인식(`화관법` → `화학물질관리법`), 조문번호 변환(`제38조` ↔ `003800`), 3단 위임 구조 시각화
 - **별표/별지서식 본문 추출** — HWPX·HWP·PDF·XLSX·DOCX 자동 변환 ([kordoc](https://github.com/chrisryugj/kordoc) 엔진)
 - **8개 체인 + 7개 시나리오** — 기본 체인에 상황별 확장 분석 자동 추가 (과태료 감경, 관세 통관, 위임입법 감시 등)
 - **17개 도메인 통합 검색** — `search_decisions` 하나로 판례·헌재·조세심판·공정위·노동위 등 즉시 접근
 - **캐시** — 검색 1시간, 조문 24시간 TTL
-- **원격 엔드포인트** — 설치 없이 `https://korean-law-mcp.fly.dev/mcp`로 바로 사용
+- **원격 엔드포인트** — 설치 없이 `https://mcp.gomdori.app/law`로 바로 사용 (구 `korean-law-mcp.fly.dev/mcp`도 하위호환 유지)
 
 ---
 

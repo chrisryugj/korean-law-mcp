@@ -23,6 +23,7 @@ import { getArticleDetail, GetArticleDetailSchema } from "./tools/article-detail
 import { getAnnexes, GetAnnexesSchema } from "./tools/annex.js"
 import { getOrdinance, GetOrdinanceSchema } from "./tools/ordinance.js"
 import { searchOrdinance, SearchOrdinanceSchema } from "./tools/ordinance-search.js"
+import { ordinanceRadar, OrdinanceRadarSchema } from "./tools/ordinance-radar.js"
 import { compareArticles, CompareArticlesSchema } from "./tools/article-compare.js"
 import { getLawTree, GetLawTreeSchema } from "./tools/law-tree.js"
 import { searchAll, SearchAllSchema } from "./tools/search-all.js"
@@ -82,7 +83,7 @@ export const allTools: McpTool[] = [
   // === 법령 검색/조회 ===
   {
     name: "search_law",
-    description: "[법령검색] 법령명 키워드검색 → lawId, mst 획득. 약칭 자동변환. 법령 조회 전 식별자 확보용.",
+    description: "[법령검색] 법령명·조례명·행정규칙명 키워드검색 → lawId, mst 획득. 지자체 조례·규칙(자치법규), 훈령·예규·고시(행정규칙)도 검색 — 0건 시 자치법규/행정규칙으로 자동 폴백(예: '광진구 복무조례', '외국환거래규정'). 약칭 자동변환. 제명변경·시행예정 개정 자동 병기. 법령·조례·행정규칙 조회 전 식별자 확보용.",
     schema: SearchLawSchema,
     handler: searchLaw
   },
@@ -149,6 +150,12 @@ export const allTools: McpTool[] = [
     description: "[자치법규] 조례/규칙 전문 조회. jo 파라미터로 특정 조문 본문 조회 가능.",
     schema: GetOrdinanceSchema,
     handler: getOrdinance
+  },
+  {
+    name: "ordinance_radar",
+    description: "[자치법규] 조례 정비 레이더 — 조례가 인용한 근거 상위법령(법률/시행령/시행규칙)을 본문에서 추출하고, 각 상위법의 현행 시행일과 조례 시행일을 대조해 '상위법이 조례 시행 이후 개정됨 → 정비 검토 대상'을 자동 플래그. 조례 담당 공무원의 상위법 개정 추적·조례 정비 판단용. ordinSeq(또는 id)나 ordinanceName 중 하나 지정.",
+    schema: OrdinanceRadarSchema,
+    handler: ordinanceRadar
   },
 
   // === 법령-자치법규 연계 ===
@@ -725,7 +732,7 @@ export const allTools: McpTool[] = [
 /**
  * Zod 스키마 → MCP 광고용 JSON Schema 변환 (apiKey 숨김 포함)
  */
-export function toMcpInputSchema(schema: unknown) {
+function toMcpInputSchema(schema: unknown) {
   // Zod v4: z.toJSONSchema()로 직접 변환 (zod-to-json-schema는 Zod v4 미지원)
   // io:"input" 필수 — 기본 "output" 모드는 .default() 필드를 required로 직렬화함
   // (legal_research.task, search_law.display가 required로 광고되던 버그, v4.4.1)
@@ -751,7 +758,7 @@ export function toMcpInputSchema(schema: unknown) {
 }
 
 /**
- * v4.4.0 통합 프로필 — 9개 도구 노출, 나머지는 execute_tool로 접근
+ * v4.4.0 통합 프로필 — 노출 도구 최소화, 나머지는 execute_tool로 접근 (v4.7.0: ordinance_radar 추가로 10개)
  *
  * 노출 기준:
  *   1) 체인 도구가 fallback으로 자주 호출하는 종착 도구
@@ -772,8 +779,17 @@ const V3_EXPOSED = new Set([
   "search_law", "get_law_text",
   "get_annexes",
   "search_decisions", "get_decision_text",
+  "ordinance_radar",  // v4.7.0: 조례 정비 레이더 (조례 담당 공무원 킬러기능)
   "discover_tools", "execute_tool",
 ])
+
+/**
+ * 마켓플레이스(playmcp 등) 광고용 메타데이터.
+ * 원본 allTools 정의는 그대로 두고, ListTools 광고 시점에만 주입한다.
+ *   - 서비스명: description에 "Korean-law-mcp" 포함 요구 충족
+ *   - annotations: MCP ToolAnnotations. 노출 도구 모두 법제처 read-only 조회(멱등) + 외부 API 호출.
+ */
+const SERVICE_NAME = "Korean-law-mcp"
 
 // 이름 기반 O(1) 조회용 Map
 // allTools는 정적 — 모듈 로드 시 1회만 구성 (HTTP 모드에서 요청마다 재구성 방지)
@@ -793,8 +809,14 @@ export function registerTools(server: Server, apiClient: LawApiClient) {
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: exposedTools.map(tool => ({
       name: tool.name,
-      description: tool.description,
-      inputSchema: toMcpInputSchema(tool.schema)
+      description: `${SERVICE_NAME} — ${tool.description}`,
+      inputSchema: toMcpInputSchema(tool.schema),
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      }
     }))
   }))
 

@@ -1,6 +1,6 @@
 # Korean Law MCP
 
-**42 APIs compressed into 9 tools.** Search, retrieve, and analyze Korean law — statutes, precedents, ordinances, treaties + **LLM hallucination guard for legal citations** + **precedent citator (cite_check)** + **point-in-time law resolution (applicable_law)**.
+**42 APIs compressed into 10 tools.** Search, retrieve, and analyze Korean law — statutes, precedents, ordinances, treaties + **LLM hallucination guard for legal citations (existence + content)** + **precedent citator (cite_check)** + **point-in-time law resolution (applicable_law)** + **ordinance revision radar (ordinance_radar)**.
 
 [![npm version](https://img.shields.io/npm/v/korean-law-mcp.svg)](https://www.npmjs.com/package/korean-law-mcp)
 [![MCP 1.27](https://img.shields.io/badge/MCP-1.27-blue)](https://modelcontextprotocol.io)
@@ -22,6 +22,42 @@
 ![Korean Law MCP demo](./demo.gif)
 
 ---
+
+## v4.7.0 — Ordinance revision radar (`ordinance_radar`)
+
+**"The parent statute changed — is our ordinance stale?"** One call answers the question local-government officials chase every year.
+
+- **Automatic basis-law extraction**: Parses the ordinance's Article 1 (Purpose) for its statutory basis — the parent act, enforcement decree, and enforcement rules cited in 「」 (including the "같은 법 시행령" shorthand). Scanning only the purpose article avoids false alarms from unrelated statutes cited in annex tables.
+- **Revision cross-check**: Compares each parent law's current enforcement date against the ordinance's enforcement date and flags "parent law amended after the ordinance took effect → review for revision", with MST identifiers for follow-up.
+- The official ordinance-linkage API (lnkOrd) has poor coverage, so this parses the standard citation format in ordinance text instead.
+- Also in this release: JSON-RPC batch requests now count each `tools/call` against rate/fallback quotas (amplification fix, per-request cap 20 via `MCP_MAX_BATCH_CALLS`), clean graceful shutdown, and exact-match-first law resolution in `get_article_history`.
+
+## v4.6.0 — Citation verification goes deeper (content) + cloud anti-bot
+
+- **`verify_citations` content check**: Beyond confirming an article exists, it now catches content hallucinations like `민법 제750조(계약해제)` — a real article (§750) tagged with the wrong title. It compares the cited article title against the actual one (`[CONTENT_MISMATCH]`) using LexDiff's `citation-content-matcher` (normalized common substring + character bigram Jaccard). Same for `legal_analysis(mode=verify_citations)`.
+- **law.go.kr JS anti-bot bypass**: When 법제처 serves a `location.assign` JS redirect instead of API data to cloud IPs (GCP/AWS/Fly), the client parses the obfuscated URL and follows the tokenized redirect (up to 3 hops, retrying the original URL on a 404). No-op on local/registered IPs — a defense layer for cloud deployments where `Referer` injection (v4.0.9) isn't enough.
+
+## v4.5.0 — Upcoming-law detection (prevents "renamed law not found" errors)
+
+`search_law` runs a supplementary `target=eflaw` (enforcement-date) search and annotates results.
+
+- **Pending rename**: e.g. 「데이터기반행정 활성화에 관한 법률」 → 「인공지능 및 데이터 기반 행정 활성화에 관한 법률」 (effective 2026-08-28). Maps old ↔ new titles so searching the new name doesn't return only "no exact match" and mislead the LLM into "the law doesn't exist."
+- **Pending amendment**: when a current law has an amendment awaiting enforcement, surfaces its enforcement date, promulgation number, and pending-version MST.
+- **Not-yet-in-force new law**: separately flags promulgated-but-not-yet-effective laws that return 0 hits in a current search (with a no-legal-effect warning).
+
+## v4.4.1–4.4.3 — Stability patches
+
+- **v4.4.3**: Pin `zod` to `^4` — fixes a crash where a fresh install resolving zod 3.x threw `z.toJSONSchema is not a function` on the first `listTools` call.
+- **v4.4.2**: Restore `get_annexes` for administrative-rule tables/forms — parse the `admrulbyl` key first, auto-detect "...시행세칙", and split table/form collisions that share a bylSeq (#50/#49/#51).
+- **v4.4.1**: Fix advertised-schema `required` bug — `.default()` fields (`legal_research.task`, `search_law.display`) were exposed as required inputs (fixed via `io:"input"`); pass through `legal_analysis` cost options; warn on incompatible scenarios.
+
+## v4.4.0 — Exposed tools consolidated 19 → 9 (52% context reduction)
+
+Shrinks the ListTools payload every MCP client reads per session from ~15.1KB to ~7.2KB.
+
+- 8 `chain_*` tools → one **`legal_research`** (`task` param: full_research·law_system·action_basis·dispute_prep·amendment_track·ordinance_compare·procedure_detail·document_review)
+- 4 killer features (`verify_citations`·`cite_check`·`applicable_law`·`impact_map`) → one **`legal_analysis`** (`mode` param)
+- **Backward compatible**: direct tool-name calls and `execute_tool` routing both still work; only the advertised list changes.
 
 ## What's New in v4.3 — Precedent Citator + Point-in-Time Law
 

@@ -23,7 +23,37 @@ import {
   chainDocumentReview,
 } from "./chains.js"
 
-export const LegalResearchSchema = z.object({
+const TASK_VALUES = new Set([
+  "full_research", "law_system", "action_basis", "dispute_prep",
+  "amendment_track", "ordinance_compare", "procedure_detail", "document_review",
+])
+
+// LLM이 scenario 값(penalty 등)을 task 자리에 잘못 넣어 툴콜이 실패하던 문제를 흡수한다 (v4.7.1).
+// description이 "action_basis=penalty"처럼 task·scenario를 한 줄에 섞어 설명해 오인이 잦다.
+// 잘못 온 scenario 값은 scenario로 옮기고 task는 호환 task로 승격, 그 외 미지의 값은 full_research로 폴백.
+const SCENARIO_TO_TASK: Record<string, string> = {
+  penalty: "action_basis",
+  delegation: "law_system", impact: "law_system",
+  timeline: "amendment_track", time_travel: "amendment_track",
+  compliance: "ordinance_compare",
+  customs: "full_research", action_plan: "full_research",
+  manual: "procedure_detail",
+}
+
+export const LegalResearchSchema = z.preprocess((raw) => {
+  if (!raw || typeof raw !== "object") return raw
+  const o = { ...(raw as Record<string, unknown>) }
+  const t = o.task
+  if (typeof t === "string" && !TASK_VALUES.has(t)) {
+    if (SCENARIO_TO_TASK[t]) {
+      if (o.scenario == null) o.scenario = t
+      o.task = SCENARIO_TO_TASK[t]
+    } else {
+      o.task = "full_research"
+    }
+  }
+  return o
+}, z.object({
   query: z.string().optional()
     .describe("자연어 질문/법령명/키워드 (예: '음주운전 처벌 기준', '관세법 체계'). document_review 외 모든 task에서 필수"),
   task: z.enum([
@@ -53,7 +83,7 @@ export const LegalResearchSchema = z.object({
   maxClauses: z.number().min(1).max(30).optional()
     .describe("[document_review] 최대 분석 조항 수 (기본 15)"),
   apiKey: z.string().optional(),
-})
+}))
 
 export type LegalResearchInput = z.infer<typeof LegalResearchSchema>
 

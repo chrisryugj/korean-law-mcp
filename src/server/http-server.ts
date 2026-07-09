@@ -43,15 +43,43 @@ export async function startHTTPServer(createServer: () => Server, port: number) 
       ? parseInt(trustProxyRaw, 10)
       : trustProxyRaw // CIDR/IP 리스트 패스스루
   app.set("trust proxy", trustProxy)
+
+  // ACCESS_LOG=1 일 때만 요청 로그 — req.path만 기록 (쿼리스트링의 oc= API 키 유출 방지)
+  if (process.env.ACCESS_LOG === "1") {
+    app.use((req, _res, next) => {
+      console.error(`[access] ${req.method} ${req.path} ip=${req.ip} ua="${req.headers["user-agent"] ?? "-"}"`)
+      next()
+    })
+  }
+
   app.use(express.json({ limit: process.env.MCP_BODY_LIMIT || "100kb" }))
 
   // Rate Limiting (RATE_LIMIT_RPM 환경변수, 기본: 60 req/min per IP)
   const rateLimitRpm = parseInt(process.env.RATE_LIMIT_RPM || "60", 10)
   const rateBuckets = new Map<string, { count: number; resetAt: number }>()
 
+  // 단일 POST에 담을 수 있는 tools/call 상한. JSON-RPC 배치는 배열의 요청을
+  // 전부 디스패치하므로(SDK 확인), 카운트 없이 두면 한 요청으로 rate limit·폴백
+  // 쿼터를 배수만큼 우회할 수 있다. 배치 크기를 제한해 증폭을 원천 차단한다.
+  const maxBatchCalls = parseInt(process.env.MCP_MAX_BATCH_CALLS || "20", 10)
+
   if (rateLimitRpm > 0) {
     app.use((req, res, next) => {
       if (req.path === "/health" || req.path === "/") return next()
+
+      // 핸드셰이크(initialize)·도구목록(tools/list)·알림은 rate limit 제외.
+      // 이들이 429를 맞으면 클라이언트가 도구 목록을 못 받아 "도구 못 찾음"이 된다.
+      // claude.ai 커넥터는 소수 egress IP로 트래픽이 몰려 IP 버킷을 공유하므로,
+      // 비용 소모 요청(tools/call)에만 게이트한다. (v4.6.2 폴백 게이트와 동일 원칙)
+      // 배치는 tools/call '개수'만큼 카운트한다 (요청당 1회가 아님 — 배치 증폭 방지).
+      const msgs = Array.isArray(req.body) ? req.body : [req.body]
+      const callCount = msgs.filter(m => m?.method === "tools/call").length
+      if (callCount === 0) return next()
+
+      if (callCount > maxBatchCalls) {
+        res.status(429).json({ error: `Too many tool calls in one request (max ${maxBatchCalls}).` })
+        return
+      }
 
       const ip = req.ip || req.socket.remoteAddress || "unknown"
       const now = Date.now()
@@ -62,7 +90,7 @@ export async function startHTTPServer(createServer: () => Server, port: number) 
         rateBuckets.set(ip, bucket)
       }
 
-      bucket.count++
+      bucket.count += callCount
 
       if (bucket.count > rateLimitRpm) {
         res.status(429).json({ error: "Too many requests. Try again later." })
@@ -125,14 +153,17 @@ export async function startHTTPServer(createServer: () => Server, port: number) 
   // 소진시키는 것 방지 (IP당 limit만으로는 막을 수 없음). 0이면 폴백 비활성.
   const fallbackRpm = parseInt(process.env.FALLBACK_RATE_LIMIT_RPM || "120", 10)
   const fallbackBucket = { count: 0, resetAt: 0 }
-  function fallbackAllowed(): boolean {
+  // n = 이 요청이 소모하는 tools/call 개수 (배치는 배열 길이만큼 서버 키를 쓴다)
+  function fallbackAllowed(n: number): boolean {
     if (fallbackRpm <= 0) return false
     const now = Date.now()
     if (now >= fallbackBucket.resetAt) {
       fallbackBucket.count = 0
       fallbackBucket.resetAt = now + 60_000
     }
-    return ++fallbackBucket.count <= fallbackRpm
+    if (fallbackBucket.count + n > fallbackRpm) return false
+    fallbackBucket.count += n
+    return true
   }
 
   // POST /mcp - stateless 요청 처리
@@ -149,7 +180,11 @@ export async function startHTTPServer(createServer: () => Server, port: number) 
       (req.query.oc as string | undefined)
 
     // 자체 키 없는 요청은 서버 LAW_OC로 폴백 — 전역 상한 적용
-    if (!apiKey && !fallbackAllowed()) {
+    // initialize/tools/list 등 핸드셰이크는 법제처 쿼터를 안 쓰므로 tools/call만 게이트
+    // (핸드셰이크까지 429로 막으면 claude.ai 커넥터가 도구 목록 자체를 못 싣는다)
+    const bodyMessages = Array.isArray(req.body) ? req.body : [req.body]
+    const fallbackCallCount = bodyMessages.filter((m) => m?.method === "tools/call").length
+    if (!apiKey && fallbackCallCount > 0 && !fallbackAllowed(fallbackCallCount)) {
       res.status(429).json({
         jsonrpc: "2.0",
         error: { code: -32000, message: "Shared API quota exceeded. Provide your own key via 'apiKey' header (free: https://open.law.go.kr)." },
@@ -227,9 +262,12 @@ export async function startHTTPServer(createServer: () => Server, port: number) 
     console.error(`${signal} received, shutting down server...`)
     const forceExit = setTimeout(() => {
       console.error("Shutdown timeout (10s) — forcing exit")
-      process.exit(1)
+      process.exit(0)
     }, 10_000)
     forceExit.unref()
+    // idle keep-alive 연결은 close()가 안 끊는다 → 없으면 항상 10초 타임아웃 후
+    // 비정상 종료로 기록됨. fly 롤링 배포의 clean exit을 위해 명시적으로 끊는다.
+    expressServer.closeIdleConnections()
     expressServer.close(() => {
       clearTimeout(forceExit)
       console.error("Server shutdown complete")
