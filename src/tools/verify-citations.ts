@@ -54,6 +54,31 @@ const LAW_NAME_REGEX = /([가-힣][가-힣·ㆍ\s]{0,30}?(?:법률|법|시행령
 // 법령명 앞에 붙는 한국어 접속사·부사·수식어 제거 — "또한 상법" → "상법"
 const LAW_NAME_STOPWORDS = /^(또한|그리고|하며|따라서|따라|위해|위하여|의한|의하여|따른|해당|관련|이에|아울러|본|이|저|그|또|및|또는|혹은|한편|더불어|이어|이는|즉|결국|결과적으로|실제로|특히)\s+/u
 
+// 캡처된 법령명 앞에 내용어 수식어가 남을 수 있음(예: "절도죄는 형법", "이혼시 재산분할은 민법").
+// 앞 어절을 하나씩 떼며 검색 후보를 만든다. 전체(full)를 먼저 두어 다어절 법령명
+// ("전자상거래 등에서의 소비자보호에 관한 법률")은 그대로 매칭되고, 수식어만 붙은 경우는
+// 뒤쪽 후보에서 실제 법령명("형법"·"민법")이 매칭된다. 붙어쓴 법령명은 어절 분리되지 않아 보존.
+export function lawNameCandidates(lawName: string): string[] {
+  const tokens = lawName.split(/\s+/).filter(Boolean)
+  const candidates: string[] = []
+  for (let i = 0; i < tokens.length; i++) {
+    const cand = tokens.slice(i).join(" ")
+    if (cand.length >= 2) candidates.push(cand)
+  }
+  return candidates.length > 0 ? candidates : [lawName]
+}
+
+// 후보 법령명과 법제처 공식 법령명의 느슨한 일치 — 공백 무시 + 접두/약칭 허용.
+// findLaws가 관련도 정렬은 해도 매칭이 전혀 다른 법령일 수 있어 최종 방어선으로 사용.
+export function looseMatchLawName(target: string, official: string): boolean {
+  const normalize = (s: string) => s.replace(/\s+/g, "")
+  const targetNorm = normalize(target)
+  const officialNorm = normalize(official)
+  return officialNorm === targetNorm
+    || officialNorm.startsWith(targetNorm)
+    || targetNorm.startsWith(officialNorm.replace(/(법률|법)$/, "법"))
+}
+
 // 인용 바로 뒤 "(제목)"에서 조문 제목 claim 추출 — 내용검증용.
 // 개정이력·날짜·항호 참조 괄호는 조문 제목이 아니므로 제외.
 function extractClaimTitle(after: string): string | undefined {
@@ -140,24 +165,25 @@ async function verifyOne(
   }
 
   // 1단계: 법령 검색 — findLaws가 관련도 정렬까지 처리 (민법→난민법 오매칭 방지)
+  // 앞 수식어가 남은 캡처("절도죄는 형법")도 후보를 순차 축약하며 실제 법령명을 찾는다.
   let chosen: LawInfo | undefined
+  let fallback: LawInfo | undefined   // 어떤 후보도 looseMatch 실패 시 ⚠ 메시지용 (전체 캡처 기준)
   try {
-    // searchDisplay=100: "상법"처럼 짧은 법령명이 부분매칭에 밀려 기본 20건에 안 들어올 때 대비
-    const results = await findLaws(apiClient, cite.lawName, apiKey, 5, 100)
-    if (results.length === 0) {
+    for (const cand of lawNameCandidates(cite.lawName)) {
+      // searchDisplay=100: "상법"처럼 짧은 법령명이 부분매칭에 밀려 기본 20건에 안 들어올 때 대비
+      const results = await findLaws(apiClient, cand, apiKey, 5, 100)
+      if (results.length === 0) continue
+      if (!fallback) fallback = results[0]
+      if (looseMatchLawName(cand, results[0].lawName)) {
+        chosen = results[0]
+        break
+      }
+    }
+    if (!fallback) {
       return `✗ ${inputLabel} — [NOT_FOUND] 법제처 DB에 해당 법령 없음 (법령명 오탈자 또는 존재하지 않는 법령)`
     }
-    chosen = results[0]
-
-    // 정확 일치 여부 체크 — findLaws가 정렬은 해도 매칭이 전혀 다른 법령일 수 있음
-    const normalize = (s: string) => s.replace(/\s+/g, "")
-    const targetNorm = normalize(cite.lawName)
-    const officialNorm = normalize(chosen.lawName)
-    const looseMatch = officialNorm === targetNorm
-      || officialNorm.startsWith(targetNorm)
-      || targetNorm.startsWith(officialNorm.replace(/(법률|법)$/, "법"))
-    if (!looseMatch) {
-      return `⚠ ${inputLabel} — 법제처 검색은 '${chosen.lawName}'(으)로만 매칭됨. 법령명 정확성 재확인 필요`
+    if (!chosen) {
+      return `⚠ ${inputLabel} — 법제처 검색은 '${fallback.lawName}'(으)로만 매칭됨. 법령명 정확성 재확인 필요`
     }
   } catch (e) {
     return `⚠ ${inputLabel} — 법령 검색 실패: ${e instanceof Error ? e.message : String(e)}`
