@@ -106,8 +106,11 @@ export async function getAnnexes(
       }
     }
 
-    // 4차: "규정" 타입은 licbyl과 admbyl 양쪽에 존재 가능 → admin fallback
-    if (annexList.length === 0 && /규정/.test(normalizedLawName)) {
+    // 4차: 행정규칙(고시/훈령/예규) 별표 admin fallback.
+    // "사료 등의 기준 및 규격"처럼 제목에 '고시·훈령' 등 종류 키워드가 없는 행정규칙은
+    // detectLawType이 'law'로 분류해 licbyl만 조회하고 admbyl 경로를 놓친다(#58).
+    // 앞 단계가 모두 비면 종류 무관하게 admbyl로 재조회한다.
+    if (annexList.length === 0) {
       try {
         const adminText = await apiClient.fetchApi({
           endpoint: "lawSearch.do",
