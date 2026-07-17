@@ -18,13 +18,15 @@
 
 [English](./README-EN.md)
 
-![Korean Law MCP 데모](./demo.gif)
+[![국가법령정보 MCP 활용하기 — 영상 보기](./docs/video-intro.jpg)](https://youtu.be/gmkuOqIV3dc)
 
-### 영상으로 보기
+<sub>▶ 클릭하면 유튜브에서 재생됩니다.</sub>
 
-| 소개 | Claude에 연결하기 | ChatGPT에 연결하기 |
-|:---:|:---:|:---:|
-| [<img src="https://img.youtube.com/vi/gmkuOqIV3dc/mqdefault.jpg" width="240" alt="korean-law-mcp 소개" />](https://youtu.be/gmkuOqIV3dc) | [<img src="https://img.youtube.com/vi/KaUKLOH7290/mqdefault.jpg" width="240" alt="Claude 연결 방법" />](https://youtu.be/KaUKLOH7290) | [<img src="https://img.youtube.com/vi/KCFIzervxtE/mqdefault.jpg" width="240" alt="ChatGPT 연결 방법" />](https://youtu.be/KCFIzervxtE) |
+### AI에 연결하기
+
+| Claude에 연결하기 | ChatGPT에 연결하기 |
+|:---:|:---:|
+| [![Claude에 법령MCP 연결하기](./docs/video-claude.jpg)](https://youtu.be/KaUKLOH7290) | [![GPT에 법령MCP 연결하기](./docs/video-gpt.jpg)](https://youtu.be/KCFIzervxtE) |
 
 ---
 

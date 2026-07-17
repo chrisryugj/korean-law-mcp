@@ -19,15 +19,15 @@
 
 [한국어](./README.md)
 
-![Korean Law MCP demo](./demo.gif)
+[![Korean Law MCP — watch the demo](./docs/video-intro.jpg)](https://youtu.be/gmkuOqIV3dc)
 
-### Watch
+<sub>▶ Click to play on YouTube. Narration is in Korean.</sub>
 
-| Overview | Connect to Claude | Connect to ChatGPT |
-|:---:|:---:|:---:|
-| [<img src="https://img.youtube.com/vi/gmkuOqIV3dc/mqdefault.jpg" width="240" alt="korean-law-mcp overview" />](https://youtu.be/gmkuOqIV3dc) | [<img src="https://img.youtube.com/vi/KaUKLOH7290/mqdefault.jpg" width="240" alt="Connect to Claude" />](https://youtu.be/KaUKLOH7290) | [<img src="https://img.youtube.com/vi/KCFIzervxtE/mqdefault.jpg" width="240" alt="Connect to ChatGPT" />](https://youtu.be/KCFIzervxtE) |
+### Connect it to your AI
 
-> Narration is in Korean.
+| Connect to Claude | Connect to ChatGPT |
+|:---:|:---:|
+| [![Connect to Claude](./docs/video-claude.jpg)](https://youtu.be/KaUKLOH7290) | [![Connect to ChatGPT](./docs/video-gpt.jpg)](https://youtu.be/KCFIzervxtE) |
 
 ---
 
