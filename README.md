@@ -49,6 +49,12 @@ korean-law "광진구 주차장 조례" → ordinance_radar(ordinanceName="...")
 - **개정 대조**: 각 상위법의 현행 시행일 vs 조례 시행일을 대조해 정비 검토 대상을 자동 플래그, 후속 확인용 MST 동봉
 - 법제처 자치법규 연계 API(lnkOrd)는 커버리지가 낮아 미사용 — 조례 본문 표준 표기 파싱으로 대체
 
+### + v4.7.1~4.7.4 — 검색 정확도·인용 검증 패치 (현행 4.7.4)
+
+- **v4.7.4**: `search_law` 오법령 반환 차단 — 「인공지능 발전과 신뢰 기반 조성 등에 관한 기본법」의 통칭 "인공지능법"이 정식 제명의 부분문자열이 아니라 검색 0건 → 확장쿼리("AI법")에 법제처가 **검색어를 무시한 무관 법령 50건**을 반환하던 문제. 약칭 등록 + `hasRelatedHit` 가드(쿼리와 포함관계인 결과가 없으면 채택하지 않음)
+- **v4.7.2**: `verify_citations`가 수식어 앞 법령명("절도죄는 형법 제329조…")에서 `PARTIAL_VERIFIED`로 저하돼 **환각을 놓치던** 문제 수정 (#55) + hono 보안 패치(HIGH 5건 해소, #54)
+- **v4.7.1**: `legal_research`가 `scenario` 값을 `task`에 잘못 받아도 재배치해 툴콜 실패 제거 + `ordinance_radar` `query` 별칭 추가 (PlayMCP 심사 피드백)
+
 ### + v4.6.1~4.6.6 — 운영 안정화 묶음
 
 - **v4.6.6**: 핸드셰이크(initialize/tools/list)를 rate limit에서 제외 — claude.ai 공유 egress IP가 429를 맞아 "간헐적 도구 못 찾음"이 되던 근본원인 해결 + `get_ordinance` id 별칭 수용 + `get_article_history` 날짜 미지정 시 전체기간 자동적용

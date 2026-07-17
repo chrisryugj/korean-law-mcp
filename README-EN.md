@@ -40,6 +40,12 @@
 - The official ordinance-linkage API (lnkOrd) has poor coverage, so this parses the standard citation format in ordinance text instead.
 - Also in this release: JSON-RPC batch requests now count each `tools/call` against rate/fallback quotas (amplification fix, per-request cap 20 via `MCP_MAX_BATCH_CALLS`), clean graceful shutdown, and exact-match-first law resolution in `get_article_history`.
 
+### + v4.7.1–v4.7.4 — Search accuracy & citation-verification patches (current: 4.7.4)
+
+- **v4.7.4**: Stop `search_law` from returning the wrong statute. The common name "인공지능법" isn't a substring of the official title 「인공지능 발전과 신뢰 기반 조성 등에 관한 기본법」, so the LIKE search returned 0 hits and the expanded query ("AI법") got back **50 unrelated statutes with the query ignored**. Registers the aliases and adds a `hasRelatedHit` guard: if no result's title or alias overlaps the query, the response is rejected instead of accepted.
+- **v4.7.2**: `verify_citations` degraded to `PARTIAL_VERIFIED` — and thus **missed hallucinations** — when a modifier preceded the statute name ("절도죄는 형법 제329조…"). Fixed by retrying `findLaws` while progressively trimming leading words (#55). Also patches hono (5 HIGH advisories, #54).
+- **v4.7.1**: `legal_research` now absorbs a `scenario` value mistakenly passed as `task` instead of failing the tool call, and `ordinance_radar` accepts a `query` alias (PlayMCP review feedback).
+
 ## v4.6.0 — Citation verification goes deeper (content) + cloud anti-bot
 
 - **`verify_citations` content check**: Beyond confirming an article exists, it now catches content hallucinations like `민법 제750조(계약해제)` — a real article (§750) tagged with the wrong title. It compares the cited article title against the actual one (`[CONTENT_MISMATCH]`) using LexDiff's `citation-content-matcher` (normalized common substring + character bigram Jaccard). Same for `legal_analysis(mode=verify_citations)`.

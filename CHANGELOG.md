@@ -1,10 +1,55 @@
 # Changelog
 
+## [4.7.4] - 2026-07-15
+
+### Fixed
+
+- **`search_law` 오법령 확장검색 차단 + 인공지능기본법 약칭 등록**: 「인공지능 발전과 신뢰 기반 조성 등에 관한 기본법」의 통칭 "인공지능법"이 정식 제명의 부분문자열이 아니라 LIKE 검색이 0건이 되고, 키워드 확장이 만든 "AI법" 쿼리에 법제처가 **검색어를 무시한 가나다순 무관 법령 50건**을 반환 → LexDiff fast-path가 첫 항목(가맹사업법)을 집어가던 사고의 근원. 약칭(인공지능법/인공지능기본법/AI법/ai기본법) 등록 (`src/lib/search-normalizer.ts`)
+- **`hasRelatedHit` 가드**: 확장쿼리 결과에 법령명·약칭이 쿼리와 포함관계인 항목이 하나도 없으면(= API가 쿼리를 무시한 응답) 채택하지 않고 다음 확장쿼리·폴백으로 진행 (`src/tools/search.ts`). 약칭 해석 4종 + `hasRelatedHit` 4종 테스트 추가
+
+> 이 변경의 커밋 메시지에는 `v4.6.7`로 적혀 있으나 4.6.7은 발행된 적이 없으며, 실제로는 4.7.4로 배포되었습니다.
+
 ## [4.7.3] - 2026-07-14
 
 ### Fixed
 
 - **행정규칙(고시) 별표 조회 복구 (#58)**: `get_annexes`가 「사료 등의 기준 및 규격」처럼 제목에 '고시·훈령·예규' 등 종류 키워드가 없는 행정규칙 별표를 `NOT_FOUND`로 반환하던 문제 수정. `detectLawType`이 이런 이름을 `law`로 분류해 `licbyl`(0건)만 조회하고 `admbyl` 경로를 놓치던 것이 원인. admin(admbyl) fallback을 기존 `/규정/` 이름 제한에서 **모든 미매칭 케이스**로 일반화해, `search_admin_rule`로 검색되는 행정규칙이면 별표(예: 별표16 「사료 내 유해물질의 범위 및 허용기준」)도 정상 추출된다 (`src/tools/annex.ts`)
+
+## [4.7.2] - 2026-07-11
+
+### Fixed
+
+- **`verify_citations` 수식어 앞 법령명 재시도 (#55)**: 법령명 앞에 수식어가 붙은 완전문장("절도죄는 형법 제329조…")에서 조문검증이 `⚠ PARTIAL_VERIFIED`로 저하되어 **환각(없는 조문·제목 불일치)이 탐지되지 않던** 문제 수정. `looseMatch` 실패 시 앞 어절을 순차 축약하며 `findLaws`를 재시도하되, 다어절 법령명(「전자상거래 등에서의 소비자보호에 관한 법률」)은 전체 후보를 먼저 두어 보존 (`src/tools/verify-citations.ts`)
+
+### Security
+
+- **hono 4.12.22 → 4.12.29**: `npm audit` HIGH 5건 해소. `@modelcontextprotocol/sdk`의 전이 의존성이라 `overrides`로 고정 (#54)
+
+## [4.7.1] - 2026-07-08
+
+### Fixed
+
+PlayMCP 심사 피드백 대응.
+
+- **`legal_research` task 오인 흡수**: LLM이 `scenario` 값(`penalty` 등)을 `task`에 잘못 넣어도 `scenario`로 재배치하고 호환 task로 승격해 툴콜 실패를 제거(의도 보존). 미지의 task 값은 `full_research`로 폴백. 실행 경로·API 호출은 불변 (`src/tools/legal-research.ts`)
+- **`ordinance_radar` query 별칭**: `query` 파라미터 별칭을 추가해 `search_law` 등 다른 도구와 규약을 통일 — 자연어 조례명으로 호출 시 실패하던 문제 해소 (`src/tools/ordinance-radar.ts`)
+
+## [4.7.0] - 2026-07-07
+
+### Added
+
+- **`ordinance_radar` — 조례 정비 레이더**: 조례 제1조(목적)의 「」 인용에서 근거 상위법령(법률·시행령·시행규칙, "같은 법" 축약 포함)을 추출한 뒤 각 상위법의 현행 시행일과 조례 시행일을 대조해 **정비 검토 대상을 자동 플래그**. 법제처 자치법규 연계 API(lnkOrd)는 커버리지 부족(주차장 조례 0건)으로 미사용하고 본문 표준 표기 파싱으로 대체. 목적 조문만 스코핑해 별표의 무관 인용(공직선거법 등) 과잉경보를 배제(32 → 3건). `V3_EXPOSED` 10번째 직노출 도구 (`src/tools/ordinance-radar.ts`)
+
+### Security
+
+- **JSON-RPC 배치 증폭 차단**: 배치의 `tools/call`을 개수만큼 rate limit·폴백 쿼터에 계수 — 단일 POST에 수백 개를 담아 서버 `LAW_OC` 쿼터를 소진시키는 증폭 벡터를 차단. 요청당 `tools/call` 상한 20 (`MCP_MAX_BATCH_CALLS`) (`src/server/http-server.ts`)
+
+### Fixed
+
+- **graceful shutdown**: idle keep-alive 연결을 끊지 않아 매 배포마다 10초 대기 후 `exit(1)`로 기록되던 문제 → `closeIdleConnections()` + `exit(0)` (`src/server/http-server.ts`)
+- **`get_article_history` lawName 정확매칭 우선**: 검색 첫 결과를 무조건 채택해 '상법' 입력 시 가나다순 앞선 타법을 오조회하던 문제 수정
+- **`get_ordinance` id 별칭**: id 별칭으로 호출할 때 다음 단계 힌트가 `ordinSeq="undefined"`로 출력되던 버그 수정
+- **`maskSensitiveUrl` 대소문자 무시(`gi`)**: API 키 마스킹 회귀 방지 (`src/lib/fetch-with-retry.ts`)
 
 ## [4.6.5] - 2026-07-06
 
