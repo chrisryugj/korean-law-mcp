@@ -57,7 +57,13 @@ export async function searchHistoricalLaw(
       };
     }
 
-    let output = `${args.lawName} 연혁 (총 ${histories.length}개 버전):\n\n`;
+    // lsHistory는 서버측 총계를 제공하지 않아 "총 N개"로 단정할 수 없다.
+    // display 상한에 걸린 경우(정확히 상한만큼 조회) 이전 연혁이 더 있을 수 있음을 병기.
+    const displayCap = args.display || 50;
+    const capNote = histories.length >= displayCap
+      ? ` — display 상한(${displayCap}) 도달, 조회 범위 밖 연혁이 더 있을 수 있음`
+      : "";
+    let output = `${args.lawName} 연혁 (조회된 ${histories.length}개 버전${capNote}):\n\n`;
 
     for (const h of histories) {
       const efDate = formatDateDot(h.efYd);
