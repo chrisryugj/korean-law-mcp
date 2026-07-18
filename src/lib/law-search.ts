@@ -9,12 +9,37 @@
 import type { LawApiClient } from "./api-client.js"
 import { lawCache } from "./cache.js"
 import { extractTag } from "./xml-parser.js"
+import { normalizeLawSearchText, resolveLawAlias } from "./search-normalizer.js"
 
 export interface LawInfo {
   lawName: string
   lawId: string
   mst: string
   lawType: string
+}
+
+// 후보 법령명과 법제처 공식 법령명의 느슨한 일치 — 공백 무시 + 접두/약칭 허용.
+// findLaws가 관련도 정렬은 해도 매칭이 전혀 다른 법령일 수 있어 최종 방어선으로 사용.
+// (verify-citations에서 쓰던 것을 lib로 승격 — applicable_law/impact_map 가드 공용)
+export function looseMatchLawName(target: string, official: string): boolean {
+  const normalize = (s: string) => s.replace(/\s+/g, "")
+  const targetNorm = normalize(target)
+  const officialNorm = normalize(official)
+  return officialNorm === targetNorm
+    || officialNorm.startsWith(targetNorm)
+    || targetNorm.startsWith(officialNorm.replace(/(법률|법)$/, "법"))
+}
+
+/**
+ * findLaws 결과 1위가 요청한 법령명과 실제로 관련 있는지 최종 확인.
+ * 법제처 LIKE 검색은 관련 법령이 하나도 없어도 부분매칭 목록을 돌려주므로,
+ * laws[0]을 맹신하면 「상법」 요청에 무관한 법의 분석을 확신형으로 내보내게 된다.
+ * 별칭 입력("화관법"→화학물질관리법)은 canonical 해소 후에도 대조한다.
+ */
+export function resolvedLawMatches(requested: string, officialName: string): boolean {
+  if (looseMatchLawName(requested, officialName)) return true
+  const canonical = resolveLawAlias(normalizeLawSearchText(requested)).canonical
+  return canonical !== requested && looseMatchLawName(canonical, officialName)
 }
 
 /** 법령명이 아닌 부가 키워드 제거 (법제처 lawSearch API는 법령명 검색이므로) */
@@ -64,15 +89,18 @@ export function scoreLawRelevance(lawName: string, query: string, queryWords: st
  * 1차: 원본 쿼리 → 2차: 부가키워드 제거 → 3차: 법령명 패턴 직접 추출
  * 이후 scoreLawRelevance로 정렬.
  *
- * @param searchDisplay 법제처 API display 파라미터 — 짧은 법령명("상법"은 100개 중 34번째)
- *                      정확 매칭 찾으려면 크게(100+). 기본 20은 체인 도구용.
+ * @param searchDisplay 법제처 API display 파라미터. 기본 100(API 상한) —
+ *                      법제처는 LIKE 부분검색+가나다순이라 짧은 법령명("상법"은 100개 중 34번째)은
+ *                      조회량이 작으면 아예 도착하지 못해 관련도 정렬이 입력 자체를 받지 못한다.
+ *                      (종전 기본 20은 applicable_law가 「상법」 대신 무관한 법을 잡는 원인이었음.
+ *                      요청 비용은 20이든 100이든 동일 1회.)
  */
 export async function findLaws(
   apiClient: LawApiClient,
   query: string,
   apiKey?: string,
   max = 3,
-  searchDisplay = 20
+  searchDisplay = 100
 ): Promise<LawInfo[]> {
   const cacheKey = `law-search:${query}:${max}:${searchDisplay}`
   const cached = lawCache.get<LawInfo[]>(cacheKey)

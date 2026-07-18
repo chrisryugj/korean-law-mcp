@@ -19,7 +19,7 @@ import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError, notFoundResponse } from "../lib/errors.js"
-import { findLaws } from "../lib/law-search.js"
+import { findLaws, resolvedLawMatches } from "../lib/law-search.js"
 import { fetchHistoricalVersionsFull, type HistoricalVersion } from "../lib/historical-utils.js"
 import { buildJO } from "../lib/law-parser.js"
 import { cleanHtml } from "../lib/article-parser.js"
@@ -147,6 +147,19 @@ export async function applicableLaw(
       ])
     }
     const law = laws[0]
+
+    // 가드: 법제처 LIKE 검색은 의도한 법령이 없어도 부분매칭 목록을 돌려준다.
+    // laws[0]을 맹신하면 무관한 법의 "행위시법 판단"을 확신형으로 내보내게 되므로
+    // (행위시법은 법적 오답 중 최고 위험), 이름이 실제로 맞을 때만 진행한다.
+    if (!resolvedLawMatches(input.lawName, law.lawName)) {
+      return notFoundResponse(
+        `'${input.lawName}' 법령을 정확히 찾지 못했습니다. 검색 최상위는 '${law.lawName}'이지만 요청한 법령과 다를 수 있습니다.`,
+        [
+          "search_law로 정식 법령명을 확인한 뒤 그 이름으로 다시 호출하세요.",
+          `의도한 법령이 '${law.lawName}'이 맞다면 그 정식 명칭으로 재호출하세요.`,
+        ]
+      )
+    }
 
     // 2. 연혁 → 기준일 시행 버전 특정 (versions는 시행일 내림차순)
     const { versions } = await fetchHistoricalVersionsFull(apiClient, law.lawName, input.apiKey)

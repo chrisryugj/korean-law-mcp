@@ -18,7 +18,7 @@
 import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 import { buildJO } from "../lib/law-parser.js"
-import { findLaws, type LawInfo } from "../lib/law-search.js"
+import { findLaws, looseMatchLawName, type LawInfo } from "../lib/law-search.js"
 import { parseHangNumber } from "../lib/article-parser.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError } from "../lib/errors.js"
@@ -68,16 +68,9 @@ export function lawNameCandidates(lawName: string): string[] {
   return candidates.length > 0 ? candidates : [lawName]
 }
 
-// 후보 법령명과 법제처 공식 법령명의 느슨한 일치 — 공백 무시 + 접두/약칭 허용.
-// findLaws가 관련도 정렬은 해도 매칭이 전혀 다른 법령일 수 있어 최종 방어선으로 사용.
-export function looseMatchLawName(target: string, official: string): boolean {
-  const normalize = (s: string) => s.replace(/\s+/g, "")
-  const targetNorm = normalize(target)
-  const officialNorm = normalize(official)
-  return officialNorm === targetNorm
-    || officialNorm.startsWith(targetNorm)
-    || targetNorm.startsWith(officialNorm.replace(/(법률|법)$/, "법"))
-}
+// looseMatchLawName은 lib/law-search로 승격됨 (applicable_law/impact_map 가드와 공용).
+// 기존 import 경로 호환을 위해 재수출.
+export { looseMatchLawName }
 
 // 인용 바로 뒤 "(제목)"에서 조문 제목 claim 추출 — 내용검증용.
 // 개정이력·날짜·항호 참조 괄호는 조문 제목이 아니므로 제외.
