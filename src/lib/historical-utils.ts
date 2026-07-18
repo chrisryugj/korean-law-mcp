@@ -98,14 +98,18 @@ export async function fetchHistoricalVersionsFull(
     if (page === 1) totalCount = parseTotalCount(html)
     const pageRows = parseHistoryRows(html, normalizedTarget, targetHasDecree)
     fetchedPages = page
-
-    if (pageRows.length === 0) break
     allVersions.push(...pageRows)
 
-    // 첫 페이지에 totalCount 다 들어왔으면 종료
-    if (totalCount > 0 && allVersions.length >= totalCount) break
-    // pageSize보다 적게 왔으면 끝
-    if (pageRows.length < pageSize) break
+    // 종료 판정은 원시 총계(totalCount) 기준이어야 한다. pageRows는 대상 법령명으로
+    // 필터링된 부분집합이라 "filtered < pageSize" 비교는 원시 행이 다음 페이지에
+    // 남아 있어도 1페이지에서 끊는다 — 본법+시행령·규칙 연혁 합계가 500행을 넘는
+    // 법령(소득세법류)에서 옛 본법 버전이 통째로 누락되어 applicable_law의
+    // 행위시법 버전 특정이 최신 쪽으로 어긋나던 원인.
+    if (totalCount > 0) {
+      if (page * pageSize >= totalCount) break   // 원시 총계 기준 마지막 페이지
+    } else if (pageRows.length === 0) {
+      break   // 총계 파싱 실패 시 보수적 종료 (무한루프 방지)
+    }
     page++
   }
 

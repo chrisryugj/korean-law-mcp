@@ -132,7 +132,10 @@ export function formatArticleUnit(unit: {
  * 법제처 API는 항번호를 원숫자(①②③…)로 돌려주는 경우가 많아 일반 숫자 추출만 하면 NaN.
  * 원숫자 ①=1 … ⑳=20 매핑 + fallback으로 일반 숫자 추출.
  */
-const CIRCLED_DIGITS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
+// ①~⑳(U+2460~) 뒤로 ㉑~㉟(U+3251~)·㊱~㊿(U+32B1~)는 다른 유니코드 블록 —
+// ⑳에서 끊으면 제21항 이상의 실존 인용이 NaN이 되어 verify_citations가
+// "존재하지 않는 항"([HALLUCINATION_DETECTED])으로 오판한다.
+const CIRCLED_DIGITS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳㉑㉒㉓㉔㉕㉖㉗㉘㉙㉚㉛㉜㉝㉞㉟㊱㊲㊳㊴㊵㊶㊷㊸㊹㊺㊻㊼㊽㊾㊿"
 
 export function parseHangNumber(raw: unknown): number {
   const s = String(raw ?? "").trim()
