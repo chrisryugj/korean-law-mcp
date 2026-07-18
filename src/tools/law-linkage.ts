@@ -28,7 +28,9 @@ export const LinkedOrdinanceArticlesSchema = baseLinkageSchema.extend({
   query: z.string().describe("법령명 (예: '국민건강보험법')")
 })
 export const DelegatedLawsSchema = baseLinkageSchema.extend({
-  query: z.string().describe("부처명 (예: '보건복지부')")
+  // 실측: lnkDep은 서버측 검색 필터가 없다(query 무시, 전체 덤프+페이징만).
+  // 조회 페이지 내 클라이언트 필터만 가능 — 법령 기준 연계는 get_linked_ordinances 권장.
+  query: z.string().describe("필터 키워드(법령명 등) — ⚠️ 법제처가 이 목록의 서버측 검색을 지원하지 않아 조회 페이지 내 부분 필터만 됩니다. 법령 기준 자치법규 연계는 get_linked_ordinances 사용 권장")
 })
 export const LinkedLawsFromOrdinanceSchema = baseLinkageSchema.extend({
   query: z.string().describe("자치법규명 (예: '서울특별시 주차장 설치 및 관리 조례')")
@@ -37,7 +39,10 @@ export const LinkedLawsFromOrdinanceSchema = baseLinkageSchema.extend({
 // === 범용 XML 파서 (응답 구조 미확정 대응) ===
 
 function parseLinkageXML(xml: string, rootTag: string, itemTag: string) {
-  const rootRegex = new RegExp(`<${rootTag}[^>]*>([\\s\\S]*?)<\\/${rootTag}>`)
+  // 루트 태그는 대소문자 무시로 매칭 — 실측상 lnkDepSearch·lnkOrdJoSearch처럼
+  // 소문자로 시작해, 대문자 시작을 가정한 종전 코드는 3/4 타깃에서 루트 매칭에
+  // 실패해 매 호출 0건(NOT_FOUND)이었다.
+  const rootRegex = new RegExp(`<${rootTag}[^>]*>([\\s\\S]*?)<\\/${rootTag}>`, "i")
   const rootMatch = xml.match(rootRegex)
   if (!rootMatch) return { totalCnt: 0, page: 1, items: [] as Record<string, string>[] }
 
@@ -77,6 +82,8 @@ interface LinkageConfig {
   fallbackRoot: string
   title: string
   emptyMsg: string
+  /** 서버가 query 필터를 지원하지 않는 전체 덤프 타깃 (실측: lnkDep 총 10만+건, query 무시) */
+  serverFilterless?: boolean
 }
 
 type LinkageInput = z.infer<typeof baseLinkageSchema>
@@ -86,7 +93,12 @@ async function handleLinkage(apiClient: LawApiClient, input: LinkageInput, cfg: 
     const xml = await apiClient.fetchApi({
       endpoint: "lawSearch.do",
       target: cfg.target,
-      extraParams: { query: String(input.query), display: String(input.display || 20), page: String(input.page || 1) },
+      extraParams: {
+        query: String(input.query),
+        // 필터 미지원 타깃은 클라이언트 필터 풀을 최대로 (API 상한 100)
+        display: cfg.serverFilterless ? "100" : String(input.display || 20),
+        page: String(input.page || 1),
+      },
       apiKey: input.apiKey,
     })
 
@@ -100,6 +112,30 @@ async function handleLinkage(apiClient: LawApiClient, input: LinkageInput, cfg: 
         content: [{ type: "text", text: truncateResponse(`[NOT_FOUND] '${input.query}' ${cfg.emptyMsg}\n⚠️ LLM은 연계 정보를 추측/생성하지 마세요.`) }],
         isError: true
       }
+    }
+
+    if (cfg.serverFilterless) {
+      // 서버가 query를 무시하고 전체 목록을 돌려주는 타깃 — 조회분을 그대로 내보내면
+      // 무관한 행들이 "검색 결과"로 위장된다. 조회 페이지 내 클라이언트 필터 + 한계 명시.
+      const qKey = String(input.query).replace(/\s+/g, "")
+      const fetched = result.items.length
+      const matched = qKey
+        ? result.items.filter(it => Object.values(it).some(v => v.replace(/\s+/g, "").includes(qKey)))
+        : result.items
+
+      const scopeNote = `⚠️ 법제처가 이 목록(서버 전체 ${result.totalCnt}건)의 검색 필터를 지원하지 않아, 조회한 ${result.page}페이지(${fetched}건) 안에서만 '${input.query}'를 필터했습니다 — 전수 결과가 아닙니다.\n` +
+        `💡 법령 기준 자치법규 연계는 서버 필터가 지원되는 get_linked_ordinances(query="법령명")를 사용하세요.`
+
+      if (matched.length === 0) {
+        return {
+          content: [{ type: "text", text: truncateResponse(`[NOT_FOUND] 조회한 ${result.page}페이지(${fetched}건) 내 '${input.query}' 매칭 없음.\n${scopeNote}`) }],
+          isError: true
+        }
+      }
+      let output = `${cfg.title} (조회 ${result.page}페이지 ${fetched}건 중 '${input.query}' 매칭 ${matched.length}건)\n\n`
+      output += formatItems(matched)
+      output += `\n\n${scopeNote}`
+      return { content: [{ type: "text", text: truncateResponse(output) }] }
     }
 
     let output = `${cfg.title} (총 ${result.totalCnt}건, ${result.page}페이지)\n`
@@ -121,18 +157,22 @@ export const getLinkedOrdinances = (apiClient: LawApiClient, input: LinkageInput
 
 export const getLinkedOrdinanceArticles = (apiClient: LawApiClient, input: LinkageInput) =>
   handleLinkage(apiClient, input, {
-    target: "lnkLsOrdJo", primaryRoot: "LawSearch", fallbackRoot: "LnkLsOrdJoSearch",
+    // 실측 루트는 lnkOrdJoSearch (LnkLsOrdJoSearch 아님 — 이름 자체가 달랐다)
+    target: "lnkLsOrdJo", primaryRoot: "lnkOrdJoSearch", fallbackRoot: "LawSearch",
     title: "법령-자치법규 조문 연계", emptyMsg: "조문 연계 결과가 없습니다."
   })
 
 export const getDelegatedLaws = (apiClient: LawApiClient, input: LinkageInput) =>
   handleLinkage(apiClient, input, {
-    target: "lnkDep", primaryRoot: "LawSearch", fallbackRoot: "LnkDepSearch",
-    title: "위임법령 목록", emptyMsg: "위임법령이 없습니다."
+    // 실측 루트는 lnkDepSearch — 종전 대문자 가정(LnkDepSearch)으로 매 호출 0건이었다
+    target: "lnkDep", primaryRoot: "lnkDepSearch", fallbackRoot: "LawSearch",
+    title: "위임 연계 자치법규 목록", emptyMsg: "위임 연계 자치법규가 없습니다.",
+    serverFilterless: true
   })
 
 export const getLinkedLawsFromOrdinance = (apiClient: LawApiClient, input: LinkageInput) =>
   handleLinkage(apiClient, input, {
-    target: "lnkOrd", primaryRoot: "LawSearch", fallbackRoot: "LnkOrdSearch",
+    // 실측 루트는 OrdinSearch (LnkOrdSearch 아님)
+    target: "lnkOrd", primaryRoot: "OrdinSearch", fallbackRoot: "LawSearch",
     title: "자치법규 → 상위법령", emptyMsg: "상위법령이 없습니다."
   })
