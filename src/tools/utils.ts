@@ -8,6 +8,7 @@ import type { LawApiClient } from "../lib/api-client.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { buildJO, buildOrdinanceJO, formatJO } from "../lib/law-parser.js"
 import { formatToolError } from "../lib/errors.js"
+import { extractTag } from "../lib/xml-parser.js"
 
 export const ParseJoCodeSchema = z.object({
   joText: z.string().describe("변환할 조문 번호 (예: '제38조', '10조의2', '003800', '010000')"),
@@ -69,7 +70,9 @@ export async function getLawAbbreviations(
   input: GetLawAbbreviationsInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const extraParams: Record<string, string> = {}
+    const extraParams: Record<string, string> = {
+      display: "100", // 최대 100개 — 미전달 시 법제처 기본 20건만 조회됨
+    }
     if (input.stdDt) extraParams.stdDt = String(input.stdDt)
     if (input.endDt) extraParams.endDt = String(input.endDt)
 
@@ -84,7 +87,9 @@ export async function getLawAbbreviations(
     const parser = new DOMParser()
     const doc = parser.parseFromString(xmlText, "text/xml")
 
-    const items = doc.getElementsByTagName("lsAbrv")
+    // 실제 응답의 항목 태그는 <law>다 (<lsAbrv>는 target명일 뿐 요소로 존재하지 않음).
+    // 종전엔 lsAbrv를 찾다 0건 → 매 호출 "약칭 데이터가 없습니다" 오류만 반환했다.
+    const items = doc.getElementsByTagName("law")
     if (items.length === 0) {
       return {
         content: [{ type: "text", text: "약칭 데이터가 없습니다." }],
@@ -92,13 +97,19 @@ export async function getLawAbbreviations(
       }
     }
 
-    let resultText = `법령 약칭 목록 (총 ${items.length}건):\n\n`
+    // "총 N건"은 법제처 totalCnt(실측 2,600건+) — 조회 건수를 총계로 쓰면 잘림이 전량으로 위장된다
+    const totalCnt = Math.max(parseInt(extractTag(xmlText, "totalCnt") || "0", 10) || 0, items.length)
+
+    let resultText = `법령 약칭 목록 (총 ${totalCnt}건`
+    if (totalCnt > items.length) {
+      resultText += ` 중 ${items.length}건 조회 — 기간(stdDt/endDt)으로 좁혀 재조회 가능`
+    }
+    resultText += `):\n\n`
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i]
-      const lawName = item.getElementsByTagName("법령명")[0]?.textContent || ""
-      const abbr = item.getElementsByTagName("약칭명")[0]?.textContent
-        || item.getElementsByTagName("약칭")[0]?.textContent || ""
+      const lawName = item.getElementsByTagName("법령명한글")[0]?.textContent || ""
+      const abbr = item.getElementsByTagName("법령약칭명")[0]?.textContent || ""
       const lawId = item.getElementsByTagName("법령ID")[0]?.textContent || ""
 
       if (lawName || abbr) {
