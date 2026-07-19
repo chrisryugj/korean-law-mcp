@@ -54,7 +54,9 @@ function parseHistoryRows(html: string, normalizedTarget: string, targetHasDecre
       if (dm) ancYd = `${dm[1]}${dm[2].padStart(2, "0")}${dm[3].padStart(2, "0")}`
     }
 
-    const rrClsMatch = row.match(/(제정|일부개정|전부개정|폐지|타법개정|타법폐지|일괄개정|일괄폐지)/)
+    // "폐지제정"(구법 폐지 + 동명 신법 제정, 1962 세제개편기 등)을 대안 목록 앞에 —
+    // 뒤에 두면 "폐지"가 먼저 걸려 재제정판이 "폐지"로 오표시된다(법적으로 오독 유발).
+    const rrClsMatch = row.match(/(폐지제정|제정|일부개정|전부개정|타법개정|타법폐지|일괄개정|일괄폐지|폐지)/)
     const rrCls = rrClsMatch?.[1] || ""
 
     out.push({ mst, efYd, ancNo, ancYd, lawNm, rrCls })

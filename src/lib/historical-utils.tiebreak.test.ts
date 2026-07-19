@@ -30,6 +30,34 @@ describe("fetchHistoricalVersionsFull — 동일 시행일 tie-break", () => {
     expect(r.versions.map(v => v.mst)).toEqual(["98343", "131405"])
   })
 
+  it("'폐지제정' 행이 '폐지'로 오분류되지 않는다", async () => {
+    // 지방세법 제827호(1961.12.8. 폐지제정, 시행 1962.1.1.) 유형 — 구법 폐지 +
+    // 동명 신법 제정. "폐지"로 표시되면 유효한 재제정판을 폐지된 법으로 오독하게 한다.
+    const html = page(1, [row("지방세법", "52908", "19620101", "827", "1961.12.8", "폐지제정")])
+    const client = {
+      fetchApi: async () => html,
+    } as unknown as LawApiClient
+
+    const r = await fetchHistoricalVersionsFull(client, "지방세법", undefined, 500)
+    expect(r.versions[0].rrCls).toBe("폐지제정")
+  })
+
+  it("같은 날 폐지(구법)와 제정(신법)이 겹치면 신법이 앞선다 — 근로기준법 1997 유형", async () => {
+    // 1997.3.13. 구 근로기준법 폐지(제5305호) + 새 근로기준법 제정(제5309호) 동시.
+    // tie-break가 없거나 역전되면 폐지된 구법 레코드를 '시행 중'으로 내놓는다.
+    const html = page(2, [
+      row("근로기준법", "4974", "19970313", "5305", "1997.3.13", "폐지"),
+      row("근로기준법", "53681", "19970313", "5309", "1997.3.13", "제정"),
+    ])
+    const client = {
+      fetchApi: async () => html,
+    } as unknown as LawApiClient
+
+    const r = await fetchHistoricalVersionsFull(client, "근로기준법", undefined, 500)
+    expect(r.versions.map(v => v.mst)).toEqual(["53681", "4974"])
+    expect(r.versions[0].rrCls).toBe("제정")
+  })
+
   it("시행일이 다르면 시행일 내림차순이 우선한다", async () => {
     const html = page(2, [
       row("소득세법", "100", "20100101", "9999", "2010.01.01", "일부개정"),
