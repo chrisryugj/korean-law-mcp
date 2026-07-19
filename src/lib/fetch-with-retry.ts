@@ -25,6 +25,13 @@ export interface FetchWithRetryOptions extends RequestInit {
   retryDelay?: number
   /** HTTP status codes to retry on (default: [429, 503, 504]) */
   retryOn?: number[]
+  /**
+   * 정상 응답이 HTML인 요청(예: DRF type=HTML — lsHistory 연혁 목록)에 true.
+   * 기본(false)은 "200인데 HTML = 점검 페이지"로 보고 재시도하는데, HTML이
+   * 정상인 엔드포인트에선 매 호출이 재시도 소진 + 지연(요청 4배 증폭)이 된다.
+   * true여도 빈 본문은 여전히 일시 장애로 재시도한다.
+   */
+  allowHtmlBody?: boolean
 }
 
 const DEFAULT_TIMEOUT = 30000
@@ -76,6 +83,7 @@ export async function fetchWithRetry(
     retries = DEFAULT_RETRIES,
     retryDelay = DEFAULT_RETRY_DELAY,
     retryOn = DEFAULT_RETRY_ON,
+    allowHtmlBody = false,
     ...fetchOptions
   } = options
 
@@ -115,7 +123,7 @@ export async function fetchWithRetry(
           try { bodyText = await response.clone().text() } catch { /* clone 실패 시 정상 처리 */ }
           if (bodyText !== null) {
             const bad = detectBadBody(bodyText)
-            if (bad) {
+            if (bad === "empty" || (bad === "html" && !allowHtmlBody)) {
               lastError = new Error(
                 `법제처 API 비정상 응답(${bad === "empty" ? "빈 본문" : "HTML 페이지"}) - ${maskSensitiveUrl(url)}`
               )
