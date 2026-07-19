@@ -44,11 +44,14 @@ function parseHistoryRows(html: string, normalizedTarget: string, targetHasDecre
     const ancNoMatch = row.match(/제\s*(\d+)\s*호/)
     const ancNo = ancNoMatch?.[1] || ""
 
-    const dateCells = row.match(/<td[^>]*>(\d{4}[.\-]?\d{2}[.\-]?\d{2})<\/td>/g) || []
+    // 실측 lsHistory 날짜 셀은 0패딩이 없다("2010.1.1"·"2009.12.31" 혼재).
+    // 월·일을 \d{2}로만 받으면 한 자리 월·일 행의 공포일자가 통째로 비어("")
+    // 동일 시행일 tie-break가 역전된다 (골드셋 G21이 잡은 결함).
+    const dateCells = row.match(/<td[^>]*>(\d{4}[.\-]?\s*\d{1,2}[.\-]?\s*\d{1,2})\.?<\/td>/g) || []
     let ancYd = ""
     if (dateCells[0]) {
-      const dm = dateCells[0].match(/(\d{4})[.\-]?(\d{2})[.\-]?(\d{2})/)
-      if (dm) ancYd = `${dm[1]}${dm[2]}${dm[3]}`
+      const dm = dateCells[0].match(/(\d{4})[.\-]?\s*(\d{1,2})[.\-]?\s*(\d{1,2})/)
+      if (dm) ancYd = `${dm[1]}${dm[2].padStart(2, "0")}${dm[3].padStart(2, "0")}`
     }
 
     const rrClsMatch = row.match(/(제정|일부개정|전부개정|폐지|타법개정|타법폐지|일괄개정|일괄폐지)/)
