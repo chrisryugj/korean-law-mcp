@@ -13,9 +13,60 @@ export const GetLawTreeSchema = z.object({
   mst: z.string().optional().describe("법령일련번호"),
   lawId: z.string().optional().describe("법령ID"),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달")
+}).refine(data => data.mst || data.lawId, {
+  // 빈 입력이 그대로 API까지 가서 13초 뒤 "Unexpected end of JSON input"으로
+  // 죽던 것 방지 — 형제 도구(get_three_tier)와 동일한 가드
+  message: "mst 또는 lawId 중 하나는 필수입니다"
 })
 
 export type GetLawTreeInput = z.infer<typeof GetLawTreeSchema>
+
+/**
+ * get_three_tier 텍스트 출력에서 트리 구조 추출.
+ * 실제 출력 형식(실측): "법령명: X" 헤더, "---" 구분선 사이의 "제N조 …" 법률 조문,
+ * "[시행령] …제N조의M (제목)" / "[시행규칙] …" 위임 라인.
+ * (종전 코드는 존재하지 않는 "법률명:"·"법률 조항"·"시행령 조항" 헤더를 찾아
+ *  유효 입력에도 빈 트리를 반환했다.)
+ */
+export function parseThreeTierText(text: string): {
+  lawName: string
+  law: string[]
+  decree: string[]
+  rule: string[]
+} {
+  const lines = text.split("\n")
+  let lawName = ""
+  const law: string[] = []
+  const decree: string[] = []
+  const rule: string[] = []
+  const seen = { law: new Set<string>(), decree: new Set<string>(), rule: new Set<string>() }
+
+  const pushUnique = (bucket: string[], set: Set<string>, article: string) => {
+    if (!set.has(article)) { set.add(article); bucket.push(article) }
+  }
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+
+    const nameMatch = trimmed.match(/^법(?:령|률)명:\s*(.+)$/)
+    if (nameMatch) { lawName = nameMatch[1].trim(); continue }
+
+    const articleRe = /제\d+조(?:의\d+)?/
+    if (trimmed.startsWith("[시행령]")) {
+      const m = trimmed.match(articleRe)
+      if (m) pushUnique(decree, seen.decree, m[0])
+    } else if (trimmed.startsWith("[시행규칙]")) {
+      const m = trimmed.match(articleRe)
+      if (m) pushUnique(rule, seen.rule, m[0])
+    } else if (/^제\d+조(의\d+)?(\s|$)/.test(trimmed)) {
+      // 법률 조문 헤더 라인 ("제4조 제4조(내국세등의 부과ㆍ징수)" 형태)
+      const m = trimmed.match(articleRe)
+      if (m) pushUnique(law, seen.law, m[0])
+    }
+  }
+  return { lawName, law, decree, rule }
+}
 
 export async function getLawTree(
   apiClient: LawApiClient,
@@ -35,40 +86,19 @@ export async function getLawTree(
     }
 
     const text = result.content[0].text
+    const parsed = parseThreeTierText(text)
+    const lawName = parsed.lawName
+    const structure = { law: parsed.law, decree: parsed.decree, rule: parsed.rule }
 
-    // Parse the three-tier result to extract law structure
-    // The result contains sections like "법률 조항", "시행령 조항", "시행규칙 조항"
-    const lines = text.split('\n')
-
-    let lawName = ""
-    let currentSection = ""
-    const structure: {
-      law: Array<string>
-      decree: Array<string>
-      rule: Array<string>
-    } = {
-      law: [],
-      decree: [],
-      rule: []
-    }
-
-    for (const line of lines) {
-      if (line.includes('법률명:')) {
-        lawName = line.replace('법률명:', '').trim()
-      } else if (line.includes('법률 조항')) {
-        currentSection = "law"
-      } else if (line.includes('시행령 조항')) {
-        currentSection = "decree"
-      } else if (line.includes('시행규칙 조항')) {
-        currentSection = "rule"
-      } else if (line.trim() && currentSection) {
-        // Extract article references
-        const articleMatch = line.match(/제\d+조(의\d+)?/)
-        if (articleMatch) {
-          if (currentSection === "law") structure.law.push(articleMatch[0])
-          else if (currentSection === "decree") structure.decree.push(articleMatch[0])
-          else if (currentSection === "rule") structure.rule.push(articleMatch[0])
-        }
+    if (structure.law.length === 0 && structure.decree.length === 0 && structure.rule.length === 0) {
+      // 위임조문 데이터가 없거나 형식이 예상과 다른 경우 — 빈 껍데기 트리를
+      // 정상 결과처럼 내보내지 않는다
+      return {
+        content: [{
+          type: "text",
+          text: `[NOT_FOUND] ${lawName || "해당 법령"}의 위임조문 트리를 구성할 데이터가 없습니다.\n⚠️ LLM은 법령 체계를 추측하지 마세요. get_three_tier로 원본 위임조문을 직접 확인하세요.`,
+        }],
+        isError: true,
       }
     }
 
