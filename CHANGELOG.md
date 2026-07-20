@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.7.5] - 2026-07-21
+
+### Fixed
+
+- **`get_law_abbreviations` 완전 복구 (#61)**: 항목 태그를 존재하지 않는 `<lsAbrv>`로 찾아 **매 호출 "약칭 데이터가 없습니다"로 실패**하던 것 수정. 실제 `lawSearch.do?target=lsAbrv` 응답의 항목 태그는 `<law>`, 필드는 `법령명한글`/`법령약칭명`이다. `display=100` 전달 + 총계를 응답 `totalCnt`로 정직 표기(조회분을 총계로 위장하지 않음) (`src/tools/utils.ts`)
+- **연계 3종 루트 태그 + `get_law_tree` 파서 복구 (#62)**: `lnkLsOrdJo`/`lnkDep`/`lnkOrd`의 실제 응답 루트가 `lnkOrdJoSearch`/`lnkDepSearch`/`OrdinSearch`인데 대문자 루트(`LnkLsOrdJoSearch` 등)를 가정해 **항상 0건(NOT_FOUND)**. 루트 매칭을 대소문자 무시로 변경. `lnkDep`은 법제처가 서버 검색 필터를 지원하지 않아(전체 덤프) 조회 페이지 내 클라이언트 필터 + "전수 아님" 한계 명시로 전환하고 `get_linked_ordinances` 사용을 안내. `get_law_tree`는 `get_three_tier` 실제 출력(`법령명:` 헤더 + `[시행령]`/`[시행규칙]` 인라인 마커) 기준으로 파서 재작성, 빈 입력은 스키마에서 거부, 데이터 없으면 빈 트리 대신 NOT_FOUND (`src/tools/law-linkage.ts`, `src/tools/law-tree.ts`)
+
 ## [4.7.4] - 2026-07-15
 
 ### Fixed
