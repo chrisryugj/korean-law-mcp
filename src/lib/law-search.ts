@@ -15,6 +15,8 @@ export interface LawInfo {
   lawId: string
   mst: string
   lawType: string
+  status?: string        // 현행연혁코드: "현행" | "연혁"(폐지·과거본). eflaw 검색 시에만 채워짐
+  effectiveDate?: string // 시행일자 (YYYYMMDD)
 }
 
 /** 법령명이 아닌 부가 키워드 제거 (법제처 lawSearch API는 법령명 검색이므로) */
@@ -38,6 +40,8 @@ export function parseLawXml(xmlText: string, max: number): LawInfo[] {
       lawId: extractTag(content, "법령ID"),
       mst: extractTag(content, "법령일련번호"),
       lawType: extractTag(content, "법령구분명"),
+      status: extractTag(content, "현행연혁코드") || undefined,
+      effectiveDate: extractTag(content, "시행일자") || undefined,
     })
   }
   return results
@@ -138,4 +142,38 @@ export async function findLaws(
   }
 
   return final
+}
+
+/**
+ * eflaw 검색 결과(연혁 포함)에서 질의명과 일치하는 '폐지(연혁)' 법령의 최신본을 고른다.
+ *
+ * 순수 함수(테스트 용이) — findRepealedLaw가 네트워크 후 이 로직으로 판정.
+ * 현행(target=law)에서 못 찾은 인용이 '지어낸 법령'인지 '폐지된 법령'인지 가른다.
+ * 매칭은 공백무시 완전일치 또는 접두(약칭)만 허용해 엉뚱한 법령 흡수를 막는다.
+ */
+export function pickRepealed(rows: LawInfo[], query: string): LawInfo | undefined {
+  const norm = (s: string) => s.replace(/\s+/g, "")
+  const q = norm(query)
+  return rows
+    .filter((r) => r.status === "연혁"
+      && (norm(r.lawName) === q || norm(r.lawName).startsWith(q)))
+    .sort((a, b) => (b.effectiveDate || "").localeCompare(a.effectiveDate || ""))[0]
+}
+
+/**
+ * 폐지(연혁) 법령 조회 — target=eflaw로 과거·폐지본을 검색해 최신 연혁본을 반환.
+ * 현행 검색이 0건일 때만 보조로 호출(환각 vs 폐지 구분용). 실패 시 undefined.
+ */
+export async function findRepealedLaw(
+  apiClient: LawApiClient,
+  query: string,
+  apiKey?: string
+): Promise<LawInfo | undefined> {
+  let xmlText: string
+  try {
+    xmlText = await apiClient.searchLaw(query, apiKey, 30, "eflaw")
+  } catch {
+    return undefined  // eflaw 조회 실패는 조용히 폴백(기존 NOT_FOUND 경로 유지)
+  }
+  return pickRepealed(parseLawXml(xmlText, 100), query)
 }

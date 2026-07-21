@@ -18,7 +18,7 @@
 import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 import { buildJO } from "../lib/law-parser.js"
-import { findLaws, type LawInfo } from "../lib/law-search.js"
+import { findLaws, findRepealedLaw, type LawInfo } from "../lib/law-search.js"
 import { parseHangNumber } from "../lib/article-parser.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError } from "../lib/errors.js"
@@ -145,6 +145,12 @@ function parseCitations(text: string, maxCitations: number): ParsedCitation[] {
   return citations
 }
 
+// "20220325" → "2022-03-25". 형식 이상이면 원본 그대로.
+function formatYmd(ymd?: string): string {
+  if (!ymd || !/^\d{8}$/.test(ymd)) return ymd || ""
+  return `${ymd.slice(0, 4)}-${ymd.slice(4, 6)}-${ymd.slice(6, 8)}`
+}
+
 function formatCitationLabel(c: ParsedCitation, officialName?: string): string {
   const name = officialName || c.lawName || "(법령명 미지정)"
   let label = `${name} ${c.displayArticle}`
@@ -180,6 +186,15 @@ async function verifyOne(
       }
     }
     if (!fallback) {
+      // 현행(target=law)에 없음 → 폐지된 법령인지 연혁(eflaw)에서 확인.
+      // '지어낸 인용(환각)'과 '실존했으나 폐지된 법령'을 구분(존재≠생존).
+      for (const cand of lawNameCandidates(cite.lawName)) {
+        const repealed = await findRepealedLaw(apiClient, cand, apiKey)
+        if (repealed) {
+          const d = formatYmd(repealed.effectiveDate)
+          return `⌛ ${formatCitationLabel(cite, repealed.lawName)} — [REPEALED] 「${repealed.lawName}」은(는) 폐지된 법령입니다(연혁${d ? `, 최종시행 ${d}` : ""}). 실존했으나 현행 법령이 아님 — 후속·대체 법령 확인 필요`
+        }
+      }
       return `✗ ${inputLabel} — [NOT_FOUND] 법제처 DB에 해당 법령 없음 (법령명 오탈자 또는 존재하지 않는 법령)`
     }
     if (!chosen) {
@@ -277,16 +292,22 @@ export async function verifyCitations(
     const okCount = results.filter((r) => r.startsWith("✓")).length
     const failCount = results.filter((r) => r.startsWith("✗")).length
     const warnCount = results.filter((r) => r.startsWith("⚠")).length
+    const repealedCount = results.filter((r) => r.startsWith("⌛")).length
 
-    // 환각 감지 시 isError=true로 LLM이 "검증 통과"로 오인하지 못하게 차단
+    // 환각 감지 시 isError=true로 LLM이 "검증 통과"로 오인하지 못하게 차단.
+    // 폐지 법령(⌛)은 실존했으므로 환각이 아님 — failCount에 포함되지 않는다.
     const hasHallucination = failCount > 0
 
     const headerMarker = hasHallucination
       ? "[HALLUCINATION_DETECTED] "
-      : warnCount > 0 ? "[PARTIAL_VERIFIED] " : "[VERIFIED] "
-    let output = `${headerMarker}== 인용 검증 결과 ==\n총 ${citations.length}건 | ✓ ${okCount} 실존 | ✗ ${failCount} 오류 | ⚠ ${warnCount} 확인필요\n\n`
+      : repealedCount > 0 ? "[REPEALED_REFERENCE] "
+        : warnCount > 0 ? "[PARTIAL_VERIFIED] " : "[VERIFIED] "
+    let output = `${headerMarker}== 인용 검증 결과 ==\n총 ${citations.length}건 | ✓ ${okCount} 실존 | ✗ ${failCount} 오류 | ⌛ ${repealedCount} 폐지 | ⚠ ${warnCount} 확인필요\n\n`
     for (const line of results) {
       output += `${line}\n`
+    }
+    if (repealedCount > 0) {
+      output += `\n⌛ [REPEALED_REFERENCE] ${repealedCount}건은 폐지된 법령(연혁) 인용입니다. 실존했던 법령이라 '환각'은 아니지만 현행이 아니므로, 후속·대체 법령으로 갱신이 필요한지 확인하세요.\n`
     }
     if (hasHallucination) {
       output += `\n⚠️ [HALLUCINATION_DETECTED] ${failCount}건 인용이 법제처 DB에 실존하지 않거나 인용 내용(조문 제목)이 실제와 불일치합니다.\n`
