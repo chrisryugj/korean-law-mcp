@@ -1,5 +1,21 @@
 # Changelog
 
+## [4.8.0] - 2026-07-22
+
+외부 기여 PR 5건 반영 — 행위시법 판단·연혁 파싱·검색 리졸버·재시도·폐지 법령 처리 정확도 개선. 로컬 회귀 106건 통과.
+
+### Fixed
+
+- **DRF 간헐 404 재시도 + `type=HTML` 정상응답 재시도 증폭 제거 (#63, @zzocrypto)**: 유효한 `mst`+`jo` 조회가 간헐적으로 404를 반환하고 동일 파라미터 재시도 시 성공하는데, `fetchWithRetry` 기본 재시도 대상(`[429,503,504]`)에 404가 빠져 1차 실패가 "조문 부재"로 오답되던 것 — DRF 호출 전체에 `[404,429,503,504]` 적용(소진 후에만 실패). 또 `lsHistory` 등 `type=HTML` 정상응답이 HTML-본문 감지 재시도에 걸려 대형 연혁(소득세법류)에서 ~40s까지 늘어지던 것을 `allowHtmlBody`로 제외(HTML 에러페이지 감지는 유지) — ~40s→~4s (`src/lib/fetch-with-retry.ts`, `src/lib/api-client.ts`)
+- **분리시행 법령의 적용 버전 오특정 등 행위시법 6건 (#64, @zzocrypto)**: 조항별 시행일이 나뉘는 법령(중대재해처벌법 50인 미만 3년 유예 등)에서 `applicable_law`가 잘못된 버전을 "기준일 시행 중"으로 특정하던 것을 eflaw 범위검색 시행 슬라이스 보정(`fetchEffectiveSlices`)으로 수정. 동일 시행일 tie-break(공포일·공포번호 내림차순), 적용 버전 자신의 부칙 발췌, 무패딩 날짜("2010.1.1") 파싱, '폐지제정' 오분류, jo 지정 시 조문번호 검증 포함. eflaw 실패 시 기존 lsHistory 결과 유지(보수적 폴백) (`src/tools/applicable-law.ts`, `src/lib/historical-utils.ts`)
+- **연혁 페이징 조기종료·NaN 정렬·조문 출력 훼손·제21항+ 미지원 (#65, @zzocrypto)**: 연혁 수집 종료를 필터 후 행수 대신 **원시 총계(totalCount) 기준**으로 변경(500행 초과 법령의 옛 본법 버전 누락 방지), `time_travel` 버전선택 정렬의 빈 시행일 NaN 폴백, `get_historical_law`의 `[object Object]`·`N/A` 출력을 `safeText` 평탄화로, 원숫자 매핑을 ①~⑳에서 ㉑~㊿까지 확장(제21항+ 인용을 "존재않는 항"으로 오판하던 것 수정) (`src/lib/historical-utils.ts`, `src/lib/article-parser.ts`, `src/tools/historical-law.ts`, `src/tools/scenarios/time-travel.ts`)
+  - 병합 시 보강: `parseTotalCount`가 콤마 표기(`<strong>1,696</strong>`)도 파싱하도록 방어 — #65가 totalCount를 페이징 종료 1차 기준으로 승격했는데 `\d+`로만 잡으면 "1,696"이 "1"로 끊겨 대형 법령이 오히려 1페이지에서 조기 종료되는 역행을 막음
+- **`findLaws` 기본 조회 20이 관련도 정렬을 굶겨 무관 법령을 반환 (#66, @zzocrypto)**: `applicable_law(lawName="상법")` 같은 호출이 전혀 무관한 법령 분석을 확신형으로 출력하던 것 — 법제처 LIKE+가나다순 검색에서 정확매칭이 앞 20건에 없어 무관 부분매칭 1위를 `laws[0]`로 신뢰하던 문제. 기본 `searchDisplay` 20→100(비용 동일 1콜), `looseMatchLawName` lib 승격, 별칭 canonical 해소 대조(`resolvedLawMatches`), `applicable_law`·`impact_map`에 무관 1위 차단 가드(NOT_FOUND + 정식명 재확인 안내) (`src/lib/law-search.ts`, `src/tools/applicable-law.ts`, `src/tools/impact-map.ts`)
+
+### Changed
+
+- **폐지 법령 인용을 '환각'으로 오탐하지 않도록 REPEALED 분리 보고 (#67, @yabooung)**: `verify_citations`가 현행 검색만 써서 폐지 법령 인용(예 「국유재산관리특별회계법 제6조」, 2007 폐지)을 검색 0건→`[HALLUCINATION_DETECTED]`(isError:true)로 낙인하던 것 — 현행 0건일 때만 `target=eflaw` 1회 폴백해 `현행연혁코드="연혁"`이면 `⌛ [REPEALED_REFERENCE]`로 분리 보고(폐지 건은 `failCount` 미포함 → `isError` 불변). 정상(`✓`)·진짜 환각(`✗`) 판정은 불변, 정상 인용 추가 비용 0 (`src/tools/verify-citations.ts`, `src/lib/law-search.ts`)
+
 ## [4.7.5] - 2026-07-21
 
 ### Fixed
