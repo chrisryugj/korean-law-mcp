@@ -59,8 +59,12 @@ function parseHistoryRows(html: string, normalizedTarget: string, targetHasDecre
 }
 
 function parseTotalCount(html: string): number {
-  const m = html.match(/<strong>(\d+)<\/strong>\s*건/)
-  return m ? parseInt(m[1], 10) : 0
+  // 총계가 콤마 표기(예: <strong>1,696</strong> 건)로 와도 파싱한다. 이 값은
+  // 페이징 종료의 1차 기준이라(위 fetchHistoricalVersionsFull), \d+ 로만 잡으면
+  // "1,696"이 "1"로 끊겨 totalCount=1 → 대형 법령 연혁이 1페이지에서 조기 종료되는
+  // 역행이 생긴다(정확히 이 함수가 고치려던 케이스).
+  const m = html.match(/<strong>([\d,]+)<\/strong>\s*건/)
+  return m ? parseInt(m[1].replace(/,/g, ""), 10) : 0
 }
 
 /**

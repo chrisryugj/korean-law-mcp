@@ -61,4 +61,25 @@ describe("fetchHistoricalVersionsFull — 페이징 종료 판정", () => {
     expect(calls).toBeLessThanOrEqual(2)
     expect(r.versions).toHaveLength(1)
   })
+
+  // 회귀: 총계가 콤마 표기(1,696)로 오면 \d+ 가 "1"만 잡아 totalCount=1 →
+  // page*pageSize>=1 이 1페이지 후 참이 되어, 정작 이 함수가 고치려던 대형 법령이
+  // 오히려 1페이지에서 조기 종료(역행). 콤마를 제거하고 파싱해야 한다.
+  it("콤마 표기 총계(1,696 건)도 파싱해 대형 연혁을 끝까지 훑는다", async () => {
+    const withComma = (rows: string[]) =>
+      `<html><body><strong>1,696</strong> 건<table>${rows.join("\n")}</table></body></html>`
+    const page1 = withComma([row("소득세법", 900, "20200101"), row("소득세법", 899, "20190101")])
+    const page2 = withComma([row("소득세법", 800, "20100101"), row("소득세법", 799, "20090101")])
+    const served: string[] = []
+    const client = {
+      fetchApi: async (p: { extraParams: Record<string, string> }) => {
+        served.push(p.extraParams.page)
+        return p.extraParams.page === "1" ? page1 : page2
+      },
+    } as unknown as LawApiClient
+
+    const r = await fetchHistoricalVersionsFull(client, "소득세법", undefined, 1000)
+    expect(served).toEqual(["1", "2"])                   // 콤마 미파싱이면 1페이지에서 끊겨 "2" 없음
+    expect(r.versions.map(v => v.mst)).toContain("800")  // 옛 본법 버전 도달
+  })
 })
