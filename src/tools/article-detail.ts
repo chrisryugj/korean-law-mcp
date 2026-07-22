@@ -6,7 +6,7 @@ import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { buildJO } from "../lib/law-parser.js"
-import { cleanHtml } from "../lib/article-parser.js"
+import { cleanHtml, flattenContent } from "../lib/article-parser.js"
 import { formatToolError } from "../lib/errors.js"
 import { toArray } from "../lib/xml-parser.js"
 
@@ -97,10 +97,13 @@ export async function getArticleDetail(
       if (joTitle) resultText += ` ${joTitle}`
       resultText += `\n`
 
-      // 조문내용
+      // 조문내용 — JSON API는 문자열 또는 (중첩)배열로 반환한다.
+      // String(배열)은 콤마로 뭉개지고 중첩 항목은 [object Object]가 되어
+      // 같은 조문을 get_law_text와 다르게(훼손된 채) 출력하던 결함.
+      // 형제 도구들처럼 flattenContent로 평탄화한다.
       if (unit.조문내용) {
-        const content = typeof unit.조문내용 === "string" ? unit.조문내용 : String(unit.조문내용)
-        resultText += `${cleanHtml(content)}\n`
+        const content = flattenContent(unit.조문내용)
+        if (content) resultText += `${cleanHtml(content)}\n`
       }
 
       // 항 내용

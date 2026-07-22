@@ -102,7 +102,7 @@ function diffArticles(
 }
 
 /** efYd <= targetDate 중 가장 큰 (해당 시점 시행 버전) */
-function pickVersion(versions: HistoricalVersion[], targetDate: string): HistoricalVersion | undefined {
+export function pickVersion(versions: HistoricalVersion[], targetDate: string): HistoricalVersion | undefined {
   const target = parseInt(targetDate, 10)
   if (isNaN(target)) return undefined
   const eligible = versions.filter(v => {
@@ -110,7 +110,10 @@ function pickVersion(versions: HistoricalVersion[], targetDate: string): Histori
     return !isNaN(ef) && ef <= target
   })
   if (eligible.length === 0) return undefined
-  eligible.sort((a, b) => parseInt(b.efYd, 10) - parseInt(a.efYd, 10))
+  // 필터는 빈 efYd를 0으로 취급해 통과시키므로 정렬도 같은 폴백을 써야 한다.
+  // parseInt("")는 NaN → 비교자가 NaN을 반환하면 정렬 순서가 비결정적이 되어
+  // "해당 시점 시행 버전"이 아닌 엉뚱한 버전이 뽑힐 수 있다.
+  eligible.sort((a, b) => parseInt(b.efYd || "0", 10) - parseInt(a.efYd || "0", 10))
   return eligible[0]
 }
 
