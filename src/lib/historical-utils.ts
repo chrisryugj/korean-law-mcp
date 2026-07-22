@@ -3,6 +3,7 @@
  * (tools/historical-law.ts는 포맷팅된 텍스트만 반환하므로 별도 추출)
  */
 import type { LawApiClient } from "./api-client.js"
+import { extractTag } from "./xml-parser.js"
 
 export interface HistoricalVersion {
   mst: string
@@ -43,14 +44,19 @@ function parseHistoryRows(html: string, normalizedTarget: string, targetHasDecre
     const ancNoMatch = row.match(/제\s*(\d+)\s*호/)
     const ancNo = ancNoMatch?.[1] || ""
 
-    const dateCells = row.match(/<td[^>]*>(\d{4}[.\-]?\d{2}[.\-]?\d{2})<\/td>/g) || []
+    // 실측 lsHistory 날짜 셀은 0패딩이 없다("2010.1.1"·"2009.12.31" 혼재).
+    // 월·일을 \d{2}로만 받으면 한 자리 월·일 행의 공포일자가 통째로 비어("")
+    // 동일 시행일 tie-break가 역전된다 (골드셋 G21이 잡은 결함).
+    const dateCells = row.match(/<td[^>]*>(\d{4}[.\-]?\s*\d{1,2}[.\-]?\s*\d{1,2})\.?<\/td>/g) || []
     let ancYd = ""
     if (dateCells[0]) {
-      const dm = dateCells[0].match(/(\d{4})[.\-]?(\d{2})[.\-]?(\d{2})/)
-      if (dm) ancYd = `${dm[1]}${dm[2]}${dm[3]}`
+      const dm = dateCells[0].match(/(\d{4})[.\-]?\s*(\d{1,2})[.\-]?\s*(\d{1,2})/)
+      if (dm) ancYd = `${dm[1]}${dm[2].padStart(2, "0")}${dm[3].padStart(2, "0")}`
     }
 
-    const rrClsMatch = row.match(/(제정|일부개정|전부개정|폐지|타법개정|타법폐지|일괄개정|일괄폐지)/)
+    // "폐지제정"(구법 폐지 + 동명 신법 제정, 1962 세제개편기 등)을 대안 목록 앞에 —
+    // 뒤에 두면 "폐지"가 먼저 걸려 재제정판이 "폐지"로 오표시된다(법적으로 오독 유발).
+    const rrClsMatch = row.match(/(폐지제정|제정|일부개정|전부개정|타법개정|타법폐지|일괄개정|일괄폐지|폐지)/)
     const rrCls = rrClsMatch?.[1] || ""
 
     out.push({ mst, efYd, ancNo, ancYd, lawNm, rrCls })
@@ -125,8 +131,75 @@ export async function fetchHistoricalVersionsFull(
     return true
   })
 
-  unique.sort((a, b) => parseInt(b.efYd || "0", 10) - parseInt(a.efYd || "0", 10))
+  // 시행일 내림차순. 동일 시행일에 복수 공포본(세법류 매년 1.1. 시행에 흔함)이 있으면
+  // 나중 공포본이 앞선 공포본을 반영·개정한 통합본이므로 공포일·공포번호 내림차순 tie-break.
+  // (tie-break 없이는 페이지 수집 순서라는 우연에 따라 아무 MST나 잡힌다.)
+  unique.sort((a, b) =>
+    parseInt(b.efYd || "0", 10) - parseInt(a.efYd || "0", 10) ||
+    parseInt(b.ancYd || "0", 10) - parseInt(a.ancYd || "0", 10) ||
+    parseInt(b.ancNo || "0", 10) - parseInt(a.ancNo || "0", 10))
   return { versions: unique, totalCount, fetchedPages }
+}
+
+/** eflaw 검색의 시행 슬라이스 한 건 (HistoricalVersion과 동일 형상) */
+export type EffectiveSlice = HistoricalVersion
+
+const SLICE_LAW_RE = /<law[^>]*>([\s\S]*?)<\/law>/g
+
+/**
+ * eflaw(시행일 기준) 검색 XML → 대상 법령의 시행 슬라이스 목록 (시행일·공포일·공포번호 내림차순).
+ * lsHistory는 공포단위 1행이라 한 공포본의 조항별 분리시행(단계 시행일)이 보이지 않는다 —
+ * 예: 소득세법 법률 제9897호는 시행일이 4개(2009.12.31./2010.1.1./2010.4.1./2010.7.1.)인데
+ * lsHistory엔 2010.1.1. 한 행뿐. eflaw는 슬라이스마다 한 행씩 반환한다.
+ */
+export function parseEffectiveSlices(xmlText: string, lawName: string): EffectiveSlice[] {
+  const normalizedTarget = lawName.replace(/\s/g, "")
+  const out: EffectiveSlice[] = []
+  let m
+  while ((m = SLICE_LAW_RE.exec(xmlText)) !== null) {
+    const c = m[1]
+    const lawNm = extractTag(c, "법령명한글")
+    if (!lawNm || lawNm.replace(/\s/g, "") !== normalizedTarget) continue
+    const efYd = extractTag(c, "시행일자")
+    const mst = extractTag(c, "법령일련번호")
+    if (!/^\d{8}$/.test(efYd) || !mst) continue
+    const ancNoRaw = extractTag(c, "공포번호")
+    out.push({
+      mst,
+      efYd,
+      // eflaw 공포번호는 0패딩("09897") — lsHistory 표기와 맞춰 정수화
+      ancNo: ancNoRaw ? String(parseInt(ancNoRaw, 10)) : "",
+      ancYd: extractTag(c, "공포일자"),
+      lawNm,
+      rrCls: extractTag(c, "제개정구분명"),
+    })
+  }
+  out.sort((a, b) =>
+    parseInt(b.efYd || "0", 10) - parseInt(a.efYd || "0", 10) ||
+    parseInt(b.ancYd || "0", 10) - parseInt(a.ancYd || "0", 10) ||
+    parseInt(b.ancNo || "0", 10) - parseInt(a.ancNo || "0", 10))
+  return out
+}
+
+/**
+ * fromYmd~toYmd 구간에 시행일이 있는 대상 법령의 슬라이스 조회 (eflaw efYd 범위 검색).
+ * applicable_law의 분리시행 보정용 — 실패는 호출부에서 보수적으로 무시한다.
+ */
+export async function fetchEffectiveSlices(
+  apiClient: LawApiClient,
+  lawName: string,
+  fromYmd: string,
+  toYmd: string,
+  apiKey?: string
+): Promise<EffectiveSlice[]> {
+  const xml = await apiClient.fetchApi({
+    endpoint: "lawSearch.do",
+    target: "eflaw",
+    type: "XML",
+    extraParams: { query: lawName, display: "100", efYd: `${fromYmd}~${toYmd}` },
+    apiKey,
+  })
+  return parseEffectiveSlices(xml, lawName)
 }
 
 /** @deprecated Use fetchHistoricalVersionsFull. 단일 페이지(legacy 호환용). */
