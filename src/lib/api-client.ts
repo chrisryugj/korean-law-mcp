@@ -4,6 +4,12 @@
 
 import { normalizeLawSearchText, resolveLawAlias } from "./search-normalizer.js"
 import { fetchWithRetry } from "./fetch-with-retry.js"
+
+// 법제처 DRF는 정상 파라미터에도 연속 호출 버스트에 간헐 404를 낸다
+// (2026-07-19 행위시법 골드셋 R1에서 19콜 중 10콜 관측, 수초 내 자연 회복 —
+// lsHistory 페이징 연속 조회에서 특히 빈발). DRF 엔드포인트는 고정이라
+// 영구 404가 사실상 없으므로 404를 재시도 대상에 포함한다.
+const DRF_RETRY = { retryOn: [404, 429, 503, 504] }
 import { requestContext } from "./session-state.js"
 import { getLawApiBaseUrl } from "./law-url-config.js"
 
@@ -90,7 +96,7 @@ export class LawApiClient {
     if (display && display > 0) params.append("display", String(display))
 
     const url = `${LAW_API_BASE}/lawSearch.do?${params.toString()}`
-    const response = await fetchWithRetry(url)
+    const response = await fetchWithRetry(url, DRF_RETRY)
     await this.throwIfError(response, "searchLaw")
 
     const text = await response.text()
@@ -121,7 +127,7 @@ export class LawApiClient {
     if (params.efYd) apiParams.append("efYd", String(params.efYd))
 
     const url = `${LAW_API_BASE}/lawService.do?${apiParams.toString()}`
-    const response = await fetchWithRetry(url)
+    const response = await fetchWithRetry(url, DRF_RETRY)
     await this.throwIfError(response, "getLawText")
 
     const text = await response.text()
@@ -155,7 +161,7 @@ export class LawApiClient {
     if (params.ln) apiParams.append("LN", String(params.ln))
 
     const url = `${LAW_API_BASE}/lawService.do?${apiParams.toString()}`
-    const response = await fetchWithRetry(url)
+    const response = await fetchWithRetry(url, DRF_RETRY)
     await this.throwIfError(response, "compareOldNew")
 
     return await response.text()
@@ -181,7 +187,7 @@ export class LawApiClient {
     if (params.lawId) apiParams.append("ID", String(params.lawId))
 
     const url = `${LAW_API_BASE}/lawService.do?${apiParams.toString()}`
-    const response = await fetchWithRetry(url)
+    const response = await fetchWithRetry(url, DRF_RETRY)
     await this.throwIfError(response, "getThreeTier")
 
     return await response.text()
@@ -205,7 +211,7 @@ export class LawApiClient {
     if (params.knd) apiParams.append("knd", params.knd)
 
     const url = `${LAW_API_BASE}/lawSearch.do?${apiParams.toString()}`
-    const response = await fetchWithRetry(url)
+    const response = await fetchWithRetry(url, DRF_RETRY)
     await this.throwIfError(response, "searchAdminRule")
 
     return await response.text()
@@ -223,7 +229,7 @@ export class LawApiClient {
     })
 
     const url = `${LAW_API_BASE}/lawService.do?${apiParams.toString()}`
-    const response = await fetchWithRetry(url)
+    const response = await fetchWithRetry(url, DRF_RETRY)
     await this.throwIfError(response, "getAdminRule")
 
     const text = await response.text()
@@ -265,7 +271,7 @@ export class LawApiClient {
     }
 
     const url = `${LAW_API_BASE}/lawSearch.do?${apiParams.toString()}`
-    const response = await fetchWithRetry(url)
+    const response = await fetchWithRetry(url, DRF_RETRY)
     await this.throwIfError(response, "getAnnexes")
 
     return await response.text()
@@ -312,7 +318,7 @@ export class LawApiClient {
     })
 
     const url = `${LAW_API_BASE}/lawSearch.do?${apiParams.toString()}`
-    const response = await fetchWithRetry(url)
+    const response = await fetchWithRetry(url, DRF_RETRY)
     await this.throwIfError(response, "searchOrdinance")
 
     return await response.text()
@@ -331,7 +337,7 @@ export class LawApiClient {
     if (jo) apiParams.append("JO", jo)
 
     const url = `${LAW_API_BASE}/lawService.do?${apiParams.toString()}`
-    const response = await fetchWithRetry(url)
+    const response = await fetchWithRetry(url, DRF_RETRY)
     await this.throwIfError(response, "getOrdinance")
 
     const text = await response.text()
@@ -368,7 +374,7 @@ export class LawApiClient {
     if (params.page) apiParams.append("page", params.page.toString())
 
     const url = `${LAW_API_BASE}/lawSearch.do?${apiParams.toString()}`
-    const response = await fetchWithRetry(url)
+    const response = await fetchWithRetry(url, DRF_RETRY)
     await this.throwIfError(response, "getArticleHistory")
 
     return await response.text()
@@ -398,7 +404,12 @@ export class LawApiClient {
     }
 
     const url = `${LAW_API_BASE}/${params.endpoint}?${apiParams.toString()}`
-    const response = await fetchWithRetry(url)
+    // type=HTML(lsHistory 등)은 HTML 본문이 정상 — 빈본문/HTML 재시도 휴리스틱이
+    // 정상 응답마다 재시도를 소진(요청 4배 증폭 + ~7s 지연)하지 않도록 허용 플래그
+    const response = await fetchWithRetry(
+      url,
+      params.type === "HTML" ? { ...DRF_RETRY, allowHtmlBody: true } : DRF_RETRY
+    )
     await this.throwIfError(response, `fetchApi(${params.target})`)
 
     const text = await response.text()
@@ -432,7 +443,7 @@ export class LawApiClient {
     if (params.page) apiParams.append("page", params.page.toString())
 
     const url = `${LAW_API_BASE}/lawSearch.do?${apiParams.toString()}`
-    const response = await fetchWithRetry(url)
+    const response = await fetchWithRetry(url, DRF_RETRY)
     await this.throwIfError(response, "getLawHistory")
 
     return await response.text()
