@@ -19,8 +19,8 @@ import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError, notFoundResponse } from "../lib/errors.js"
-import { findLaws } from "../lib/law-search.js"
-import { fetchHistoricalVersionsFull, type HistoricalVersion } from "../lib/historical-utils.js"
+import { findLaws, resolvedLawMatches } from "../lib/law-search.js"
+import { fetchHistoricalVersionsFull, fetchEffectiveSlices, type HistoricalVersion } from "../lib/historical-utils.js"
 import { buildJO } from "../lib/law-parser.js"
 import { cleanHtml } from "../lib/article-parser.js"
 import { toArray } from "../lib/xml-parser.js"
@@ -54,12 +54,22 @@ function fmtYmd(ymd: string): string {
   return `${ymd.slice(0, 4)}.${parseInt(ymd.slice(4, 6), 10)}.${parseInt(ymd.slice(6, 8), 10)}.`
 }
 
-/** eflaw JSON에서 조문 본문 추출 (항·호 평탄화) */
-function extractJoText(jsonText: string): string {
+/** eflaw JSON에서 조문 본문 추출 (항·호 평탄화). joCode 지정 시 조문번호·가지번호 일치 검증 */
+function extractJoText(jsonText: string, joCode?: string): string {
   try {
     const json = JSON.parse(jsonText)
     const units = toArray<any>(json?.법령?.조문?.조문단위)
-    const found = units.find((u: any) => u?.조문여부 === "조문")
+    // JO 파라미터가 무시된 열화 응답에서 첫 조문(제1조 등)을 요청 조문이라며
+    // 확신 출력하는 것 방지 — 요청한 조문번호와 실제로 일치할 때만 채택
+    const wantNum = joCode ? parseInt(joCode.slice(0, 4), 10) : undefined
+    const wantBranch = joCode ? parseInt(joCode.slice(4, 6), 10) || 0 : 0
+    const found = units.find((u: any) => {
+      if (u?.조문여부 !== "조문") return false
+      if (wantNum === undefined) return true
+      const num = parseInt(String(u?.조문번호 ?? ""), 10)
+      const branch = parseInt(String(u?.조문가지번호 ?? "0"), 10) || 0
+      return num === wantNum && branch === wantBranch
+    })
     if (!found) return ""
     const parts: string[] = []
     parts.push(cleanHtml(String(found.조문내용 || "")))
@@ -85,8 +95,8 @@ function flattenAddendum(content: unknown): string[] {
   return [cleanHtml(String(content)).trim()].filter(Boolean)
 }
 
-/** 경과규정·적용례 신호 패턴 */
-const TRANSITION_RE = /적용례|경과조치|종전의\s*규정|시행\s*전에?\s*|행위에\s*대하여|예에\s*따른다|불구하고.*적용/
+/** 경과규정·적용례 신호 패턴 ("시행 당시"는 유예·경과 단서의 상투 표현 — 중대재해법 부칙 등) */
+const TRANSITION_RE = /적용례|경과조치|종전의\s*규정|시행\s*전에?\s*|시행\s*당시|행위에\s*대하여|예에\s*따른다|불구하고.*적용/
 
 interface AddendumExcerpt {
   header: string   // "부칙 <제19158호, 2023.1.3.>"
@@ -148,6 +158,19 @@ export async function applicableLaw(
     }
     const law = laws[0]
 
+    // 가드: 법제처 LIKE 검색은 의도한 법령이 없어도 부분매칭 목록을 돌려준다.
+    // laws[0]을 맹신하면 무관한 법의 "행위시법 판단"을 확신형으로 내보내게 되므로
+    // (행위시법은 법적 오답 중 최고 위험), 이름이 실제로 맞을 때만 진행한다.
+    if (!resolvedLawMatches(input.lawName, law.lawName)) {
+      return notFoundResponse(
+        `'${input.lawName}' 법령을 정확히 찾지 못했습니다. 검색 최상위는 '${law.lawName}'이지만 요청한 법령과 다를 수 있습니다.`,
+        [
+          "search_law로 정식 법령명을 확인한 뒤 그 이름으로 다시 호출하세요.",
+          `의도한 법령이 '${law.lawName}'이 맞다면 그 정식 명칭으로 재호출하세요.`,
+        ]
+      )
+    }
+
     // 2. 연혁 → 기준일 시행 버전 특정 (versions는 시행일 내림차순)
     const { versions } = await fetchHistoricalVersionsFull(apiClient, law.lawName, input.apiKey)
     if (versions.length === 0) {
@@ -174,11 +197,31 @@ export async function applicableLaw(
       return { content: [{ type: "text", text: truncateResponse(lines.join("\n")) }] }
     }
 
+    // 분리시행 보정: lsHistory는 공포단위 1행이라 한 공포본의 조항별 시행일(단계 시행)이
+    // 보이지 않는다 — 예: 소득세법 법률 제9897호는 시행일 4개인데 lsHistory엔 2010.1.1. 한 행뿐.
+    // 기준일이 후속 시행분 이후면 옛 공포본으로 오특정되므로, eflaw(시행일 기준) 검색으로
+    // (적용버전 시행일, 기준일] 구간의 시행 슬라이스를 조회해 최신 시행분으로 보정한다.
+    let effective: HistoricalVersion = applicable
+    let staggered = false
+    try {
+      const slices = await fetchEffectiveSlices(apiClient, law.lawName, applicable.efYd, date, input.apiKey)
+      const later = slices.find(s => s.efYd > applicable.efYd && s.efYd <= date)
+      if (later) {
+        effective = later
+        staggered = true
+      }
+    } catch {
+      // 슬라이스 조회 실패는 보정 없이 lsHistory 결과로 진행 (기존 동작 보존)
+    }
+
     // 적용 버전 표시
     lines.push(`▶ 기준일에 시행 중이던 버전`)
-    const promulgation = [`제${applicable.ancNo}호`, applicable.ancYd ? fmtYmd(applicable.ancYd) : "", applicable.rrCls]
+    const promulgation = [`제${effective.ancNo}호`, effective.ancYd ? fmtYmd(effective.ancYd) : "", effective.rrCls]
       .filter(Boolean).join(", ")
-    lines.push(`  ${law.lawName} [시행 ${fmtYmd(applicable.efYd)}] [${promulgation}] (MST ${applicable.mst})`)
+    lines.push(`  ${law.lawName} [시행 ${fmtYmd(effective.efYd)}] [${promulgation}] (MST ${effective.mst})`)
+    if (staggered) {
+      lines.push(`  ↳ 분리시행 보정: 제${effective.ancNo}호는 조항별 시행일이 나뉘어(단계 시행), 기준일 기준 최신 시행분을 표시했습니다. 조항별 실제 시행일은 부칙 시행일 조문을 확인하세요.`)
+    }
     if (laterVersions.length > 0) {
       lines.push(`  ↳ 기준일 이후 현재까지 ${laterVersions.length}차례 개정·시행됨 (현행: 시행 ${fmtYmd(current?.efYd || "")})`)
     } else {
@@ -191,13 +234,13 @@ export async function applicableLaw(
       const joCode = buildJO(joDisplay)
       // eflaw는 MST 단독 조회 불가 — 해당 버전의 efYd 동반 필수 (없으면 "일치하는 법령이 없습니다")
       const [thenJson, nowJson] = await Promise.all([
-        apiClient.getLawText({ mst: applicable.mst, jo: joCode, efYd: applicable.efYd, apiKey: input.apiKey }).catch(() => ""),
-        current && current.mst !== applicable.mst
+        apiClient.getLawText({ mst: effective.mst, jo: joCode, efYd: effective.efYd, apiKey: input.apiKey }).catch(() => ""),
+        current && current.mst !== effective.mst
           ? apiClient.getLawText({ mst: current.mst, jo: joCode, efYd: current.efYd, apiKey: input.apiKey }).catch(() => "")
           : Promise.resolve(""),
       ])
-      const thenText = thenJson ? extractJoText(thenJson) : ""
-      const nowText = nowJson ? extractJoText(nowJson) : ""
+      const thenText = thenJson ? extractJoText(thenJson, joCode) : ""
+      const nowText = nowJson ? extractJoText(nowJson, joCode) : ""
 
       lines.push("")
       lines.push(`▶ 기준일 시점 조문: ${joDisplay}`)
@@ -207,7 +250,7 @@ export async function applicableLaw(
         lines.push(`  [NOT_FOUND] 해당 버전에서 ${joDisplay}를 찾지 못했습니다 (당시 미신설이거나 조회 실패). LLM은 본문을 추측하지 마세요.`)
       }
 
-      if (current && current.mst !== applicable.mst) {
+      if (current && current.mst !== effective.mst) {
         lines.push("")
         const norm = (s: string) => s.replace(/\s+/g, "")
         if (thenText && nowText) {
@@ -223,8 +266,10 @@ export async function applicableLaw(
       }
     }
 
-    // 4. 이후 개정 부칙의 적용례·경과조치 발췌
-    if (laterVersions.length > 0 && current) {
+    // 4. 부칙의 적용례·경과조치 발췌 — 이후 개정들 + 적용 버전 자신의 부칙.
+    //    laterVersions가 없어도(적용 버전 == 현행) 자기 부칙의 유예·경과조치가 핵심인
+    //    법령이 있다 (예: 중대재해법 부칙 제1조 단서의 50명 미만 3년 유예).
+    if (current) {
       try {
         const lawJson = await apiClient.fetchApi({
           endpoint: "lawService.do",
@@ -238,7 +283,7 @@ export async function applicableLaw(
         // 기준일 이후 시행 개정들의 공포번호 + 적용 버전 자신의 부칙
         const relevant = new Set<string>([
           ...laterVersions.map(v => String(parseInt(v.ancNo || "0", 10))),
-          String(parseInt(applicable.ancNo || "0", 10)),
+          String(parseInt(effective.ancNo || "0", 10)),
         ])
         const excerpts = extractTransitionExcerpts(units, relevant, joDisplay)
 
@@ -250,7 +295,7 @@ export async function applicableLaw(
             ex.lines.forEach(l => lines.push(`    ${l}`))
           }
         } else {
-          lines.push(`▶ 적용례·경과조치: 이후 개정 부칙에서 경과규정 신호 미발견 (부칙 원문 확인: get_law_text)`)
+          lines.push(`▶ 적용례·경과조치: 관련 부칙에서 경과규정 신호 미발견 (부칙 원문 확인: get_law_text)`)
         }
       } catch {
         lines.push("")

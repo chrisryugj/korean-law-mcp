@@ -9,12 +9,39 @@
 import type { LawApiClient } from "./api-client.js"
 import { lawCache } from "./cache.js"
 import { extractTag } from "./xml-parser.js"
+import { normalizeLawSearchText, resolveLawAlias } from "./search-normalizer.js"
 
 export interface LawInfo {
   lawName: string
   lawId: string
   mst: string
   lawType: string
+  status?: string        // 현행연혁코드: "현행" | "연혁"(폐지·과거본). eflaw 검색 시에만 채워짐
+  effectiveDate?: string // 시행일자 (YYYYMMDD)
+}
+
+// 후보 법령명과 법제처 공식 법령명의 느슨한 일치 — 공백 무시 + 접두/약칭 허용.
+// findLaws가 관련도 정렬은 해도 매칭이 전혀 다른 법령일 수 있어 최종 방어선으로 사용.
+// (verify-citations에서 쓰던 것을 lib로 승격 — applicable_law/impact_map 가드 공용)
+export function looseMatchLawName(target: string, official: string): boolean {
+  const normalize = (s: string) => s.replace(/\s+/g, "")
+  const targetNorm = normalize(target)
+  const officialNorm = normalize(official)
+  return officialNorm === targetNorm
+    || officialNorm.startsWith(targetNorm)
+    || targetNorm.startsWith(officialNorm.replace(/(법률|법)$/, "법"))
+}
+
+/**
+ * findLaws 결과 1위가 요청한 법령명과 실제로 관련 있는지 최종 확인.
+ * 법제처 LIKE 검색은 관련 법령이 하나도 없어도 부분매칭 목록을 돌려주므로,
+ * laws[0]을 맹신하면 「상법」 요청에 무관한 법의 분석을 확신형으로 내보내게 된다.
+ * 별칭 입력("화관법"→화학물질관리법)은 canonical 해소 후에도 대조한다.
+ */
+export function resolvedLawMatches(requested: string, officialName: string): boolean {
+  if (looseMatchLawName(requested, officialName)) return true
+  const canonical = resolveLawAlias(normalizeLawSearchText(requested)).canonical
+  return canonical !== requested && looseMatchLawName(canonical, officialName)
 }
 
 /** 법령명이 아닌 부가 키워드 제거 (법제처 lawSearch API는 법령명 검색이므로) */
@@ -38,6 +65,8 @@ export function parseLawXml(xmlText: string, max: number): LawInfo[] {
       lawId: extractTag(content, "법령ID"),
       mst: extractTag(content, "법령일련번호"),
       lawType: extractTag(content, "법령구분명"),
+      status: extractTag(content, "현행연혁코드") || undefined,
+      effectiveDate: extractTag(content, "시행일자") || undefined,
     })
   }
   return results
@@ -64,15 +93,18 @@ export function scoreLawRelevance(lawName: string, query: string, queryWords: st
  * 1차: 원본 쿼리 → 2차: 부가키워드 제거 → 3차: 법령명 패턴 직접 추출
  * 이후 scoreLawRelevance로 정렬.
  *
- * @param searchDisplay 법제처 API display 파라미터 — 짧은 법령명("상법"은 100개 중 34번째)
- *                      정확 매칭 찾으려면 크게(100+). 기본 20은 체인 도구용.
+ * @param searchDisplay 법제처 API display 파라미터. 기본 100(API 상한) —
+ *                      법제처는 LIKE 부분검색+가나다순이라 짧은 법령명("상법"은 100개 중 34번째)은
+ *                      조회량이 작으면 아예 도착하지 못해 관련도 정렬이 입력 자체를 받지 못한다.
+ *                      (종전 기본 20은 applicable_law가 「상법」 대신 무관한 법을 잡는 원인이었음.
+ *                      요청 비용은 20이든 100이든 동일 1회.)
  */
 export async function findLaws(
   apiClient: LawApiClient,
   query: string,
   apiKey?: string,
   max = 3,
-  searchDisplay = 20
+  searchDisplay = 100
 ): Promise<LawInfo[]> {
   const cacheKey = `law-search:${query}:${max}:${searchDisplay}`
   const cached = lawCache.get<LawInfo[]>(cacheKey)
@@ -138,4 +170,38 @@ export async function findLaws(
   }
 
   return final
+}
+
+/**
+ * eflaw 검색 결과(연혁 포함)에서 질의명과 일치하는 '폐지(연혁)' 법령의 최신본을 고른다.
+ *
+ * 순수 함수(테스트 용이) — findRepealedLaw가 네트워크 후 이 로직으로 판정.
+ * 현행(target=law)에서 못 찾은 인용이 '지어낸 법령'인지 '폐지된 법령'인지 가른다.
+ * 매칭은 공백무시 완전일치 또는 접두(약칭)만 허용해 엉뚱한 법령 흡수를 막는다.
+ */
+export function pickRepealed(rows: LawInfo[], query: string): LawInfo | undefined {
+  const norm = (s: string) => s.replace(/\s+/g, "")
+  const q = norm(query)
+  return rows
+    .filter((r) => r.status === "연혁"
+      && (norm(r.lawName) === q || norm(r.lawName).startsWith(q)))
+    .sort((a, b) => (b.effectiveDate || "").localeCompare(a.effectiveDate || ""))[0]
+}
+
+/**
+ * 폐지(연혁) 법령 조회 — target=eflaw로 과거·폐지본을 검색해 최신 연혁본을 반환.
+ * 현행 검색이 0건일 때만 보조로 호출(환각 vs 폐지 구분용). 실패 시 undefined.
+ */
+export async function findRepealedLaw(
+  apiClient: LawApiClient,
+  query: string,
+  apiKey?: string
+): Promise<LawInfo | undefined> {
+  let xmlText: string
+  try {
+    xmlText = await apiClient.searchLaw(query, apiKey, 30, "eflaw")
+  } catch {
+    return undefined  // eflaw 조회 실패는 조용히 폴백(기존 NOT_FOUND 경로 유지)
+  }
+  return pickRepealed(parseLawXml(xmlText, 100), query)
 }

@@ -2,6 +2,20 @@ import { z } from "zod";
 import type { LawApiClient } from "../lib/api-client.js";
 import { truncateResponse, formatDateDot } from "../lib/schemas.js";
 import { formatToolError } from "../lib/errors.js";
+import { cleanHtml, flattenContent } from "../lib/article-parser.js";
+
+/** JSON 필드 안전 문자열화 — 객체/배열이 와도 "[object Object]"를 만들지 않는다 */
+function safeText(v: unknown): string {
+  if (typeof v === "string") return v;
+  if (v == null) return "";
+  if (Array.isArray(v)) return flattenContent(v);
+  if (typeof v === "object") {
+    // 법제처 JSON은 {content: "..."} 꼴 래핑이 흔함 (소관부처 등)
+    const c = (v as Record<string, unknown>).content;
+    return typeof c === "string" ? c : flattenContent(v as never) || "";
+  }
+  return String(v);
+}
 
 /**
  * 법령 연혁 조회 도구
@@ -57,7 +71,13 @@ export async function searchHistoricalLaw(
       };
     }
 
-    let output = `${args.lawName} 연혁 (총 ${histories.length}개 버전):\n\n`;
+    // lsHistory는 서버측 총계를 제공하지 않아 "총 N개"로 단정할 수 없다.
+    // display 상한에 걸린 경우(정확히 상한만큼 조회) 이전 연혁이 더 있을 수 있음을 병기.
+    const displayCap = args.display || 50;
+    const capNote = histories.length >= displayCap
+      ? ` — display 상한(${displayCap}) 도달, 조회 범위 밖 연혁이 더 있을 수 있음`
+      : "";
+    let output = `${args.lawName} 연혁 (조회된 ${histories.length}개 버전${capNote}):\n\n`;
 
     for (const h of histories) {
       const efDate = formatDateDot(h.efYd);
@@ -121,15 +141,18 @@ export async function getHistoricalLaw(
     const law = data.법령;
     const basic = law.기본정보 || law;
 
-    let output = `=== ${basic.법령명한글 || basic.법령명 || "연혁법령"} ===\n\n`;
+    // eflaw JSON은 법령명을 "법령명_한글" 키로 주는 경우가 있고(article-detail과 동일),
+    // 소관부처는 {content: "..."} 객체로 온다 — 그대로 보간하면 "[object Object]"가 노출됐다.
+    const lawTitle = safeText(basic.법령명_한글 || basic.법령명한글 || basic.법령명) || "연혁법령";
+    let output = `=== ${lawTitle} ===\n\n`;
 
     output += `기본 정보:\n`;
-    output += `  법령명: ${basic.법령명한글 || basic.법령명 || "N/A"}\n`;
-    output += `  시행일자: ${basic.시행일자 || "N/A"}\n`;
-    output += `  공포일자: ${basic.공포일자 || "N/A"}\n`;
-    output += `  공포번호: ${basic.공포번호 || "N/A"}\n`;
-    output += `  제개정구분: ${basic.제개정구분명 || basic.제개정구분 || "N/A"}\n`;
-    output += `  소관부처: ${basic.소관부처명 || basic.소관부처 || "N/A"}\n\n`;
+    output += `  법령명: ${lawTitle}\n`;
+    output += `  시행일자: ${safeText(basic.시행일자) || "N/A"}\n`;
+    output += `  공포일자: ${safeText(basic.공포일자) || "N/A"}\n`;
+    output += `  공포번호: ${safeText(basic.공포번호) || "N/A"}\n`;
+    output += `  제개정구분: ${safeText(basic.제개정구분명 || basic.제개정구분) || "N/A"}\n`;
+    output += `  소관부처: ${safeText(basic.소관부처명 || basic.소관부처) || "N/A"}\n\n`;
 
     // Extract articles
     const rawArticles = law.조문;
@@ -145,8 +168,8 @@ export async function getHistoricalLaw(
 
         if (article) {
           output += `${args.jo}:\n`;
-          if (article.조문제목) output += `제목: ${article.조문제목}\n`;
-          output += `${article.조문내용 || "내용 없음"}\n`;
+          if (article.조문제목) output += `제목: ${safeText(article.조문제목)}\n`;
+          output += `${cleanHtml(safeText(article.조문내용)) || "내용 없음"}\n`;
         } else {
           output += `[NOT_FOUND] ${args.jo}를 찾을 수 없습니다.\n⚠️ LLM은 조문을 추측/생성하지 마세요.\n`;
           output += `\n조문 목록:\n`;
@@ -158,9 +181,9 @@ export async function getHistoricalLaw(
         // Show all articles (limited)
         output += `조문 (총 ${articles.length}개):\n\n`;
         for (const article of articles.slice(0, 30)) {
-          const joNum = article.조문번호 || article.조번호 || "";
-          const title = article.조문제목 || "";
-          const content = article.조문내용 || "";
+          const joNum = safeText(article.조문번호 || article.조번호);
+          const title = safeText(article.조문제목);
+          const content = cleanHtml(safeText(article.조문내용));
 
           output += `제${joNum}조`;
           if (title) output += ` (${title})`;

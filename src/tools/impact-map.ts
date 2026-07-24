@@ -16,7 +16,7 @@
  */
 import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
-import { findLaws } from "../lib/law-search.js"
+import { findLaws, resolvedLawMatches } from "../lib/law-search.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError } from "../lib/errors.js"
 import { renderPrecedentSearchResult } from "./precedents.js"
@@ -161,6 +161,18 @@ export async function impactMap(
       }
     }
     const law = laws[0]
+
+    // 가드: LIKE 부분매칭 1위를 맹신하면 무관한 법령의 영향 지도를
+    // 헤더·그래프·후속 제안까지 확신형으로 그려버린다. 이름이 맞을 때만 진행.
+    if (!resolvedLawMatches(input.lawName, law.lawName)) {
+      return {
+        content: [{
+          type: "text",
+          text: `[NOT_FOUND] '${input.lawName}' 법령을 정확히 찾지 못했습니다. 검색 최상위는 '${law.lawName}'이지만 요청한 법령과 다를 수 있습니다.\n⚠️ LLM은 법령·조문을 추측하지 마세요. search_law로 정식 법령명을 확인한 뒤 다시 호출하세요.`,
+        }],
+        isError: true,
+      }
+    }
 
     // 검색 쿼리 — 정확 매칭이 필요하니 법령명 + 조문번호 조합
     const joDisplay = input.jo.startsWith("제") ? input.jo : `제${input.jo}`

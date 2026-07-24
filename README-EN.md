@@ -19,7 +19,15 @@
 
 [한국어](./README.md)
 
-![Korean Law MCP demo](./demo.gif)
+[![Korean Law MCP — watch the demo](./docs/video-intro.jpg)](https://youtu.be/gmkuOqIV3dc)
+
+<sub>▶ Click to play on YouTube. Narration is in Korean.</sub>
+
+### Connect it to your AI
+
+| Connect to Claude | Connect to ChatGPT |
+|:---:|:---:|
+| [![Connect to Claude](./docs/video-claude.jpg)](https://youtu.be/KaUKLOH7290) | [![Connect to ChatGPT](./docs/video-gpt.jpg)](https://youtu.be/KCFIzervxtE) |
 
 ---
 
@@ -31,6 +39,12 @@
 - **Revision cross-check**: Compares each parent law's current enforcement date against the ordinance's enforcement date and flags "parent law amended after the ordinance took effect → review for revision", with MST identifiers for follow-up.
 - The official ordinance-linkage API (lnkOrd) has poor coverage, so this parses the standard citation format in ordinance text instead.
 - Also in this release: JSON-RPC batch requests now count each `tools/call` against rate/fallback quotas (amplification fix, per-request cap 20 via `MCP_MAX_BATCH_CALLS`), clean graceful shutdown, and exact-match-first law resolution in `get_article_history`.
+
+### + v4.7.1–v4.7.4 — Search accuracy & citation-verification patches (current: 4.7.4)
+
+- **v4.7.4**: Stop `search_law` from returning the wrong statute. The common name "인공지능법" isn't a substring of the official title 「인공지능 발전과 신뢰 기반 조성 등에 관한 기본법」, so the LIKE search returned 0 hits and the expanded query ("AI법") got back **50 unrelated statutes with the query ignored**. Registers the aliases and adds a `hasRelatedHit` guard: if no result's title or alias overlaps the query, the response is rejected instead of accepted.
+- **v4.7.2**: `verify_citations` degraded to `PARTIAL_VERIFIED` — and thus **missed hallucinations** — when a modifier preceded the statute name ("절도죄는 형법 제329조…"). Fixed by retrying `findLaws` while progressively trimming leading words (#55). Also patches hono (5 HIGH advisories, #54).
+- **v4.7.1**: `legal_research` now absorbs a `scenario` value mistakenly passed as `task` instead of failing the tool call, and `ordinance_radar` accepts a `query` alias (PlayMCP review feedback).
 
 ## v4.6.0 — Citation verification goes deeper (content) + cloud anti-bot
 
@@ -95,7 +109,7 @@ Give it a statute + a date. It pins the version in force on that date (MST), fet
 
 ## What's New in v3.2.0+ — Smart Scenarios
 
-**Same 14 tools, 7 new analysis scenarios.** Just ask in natural language — the AI detects what you need and runs extra analysis automatically.
+**Same 10 tools, 9 analysis scenarios.** Just ask in natural language — the AI detects what you need and runs extra analysis automatically.
 
 | Ask this | Get this |
 |----------|---------|
@@ -217,7 +231,7 @@ npx korean-law-mcp setup
 ```
 
 Interactive wizard handles API key input, client selection, and config file registration.
-Supports Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI.
+Supports Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Gemini CLI, Zed, and Antigravity.
 
 **Manual setup:**
 
@@ -281,9 +295,9 @@ Get your free API key at [법제처 Open API](https://open.law.go.kr/LSO/openApi
 }
 ```
 
-**For web clients (Claude.ai, etc.)** — same URL works everywhere. v3 exposes only 14 tools by default, no profile selection needed.
+**For web clients (Claude.ai, etc.)** — same URL works everywhere. Only 10 tools are advertised by default, no profile selection needed.
 
-> 14 tools (8 chains + 2 core + 2 unified + 2 meta) cover all 41 APIs. Use `discover_tools` → `execute_tool` for specialized tools.
+> 10 tools (research + analysis + 3 law + ordinance radar + 2 unified + 2 meta) cover all 42 APIs. Use `discover_tools` → `execute_tool` for specialized tools.
 
 **API Key Delivery** (priority order):
 
@@ -318,24 +332,20 @@ docker run -e LAW_OC=your-api-key -p 3000:3000 korean-law-mcp
 
 ---
 
-## Tool Structure (14 tools)
+## Tool Structure (10 tools)
 
-v3 exposes only 14 tools. Specialized tools are accessible via `discover_tools` → `execute_tool`.
+v4.4.0 consolidated the advertised tools (52% context reduction). The former 8 `chain_*` tools became `task` values of `legal_research`, and the 4 analysis features became `mode` values of `legal_analysis`. Other specialized tools stay reachable via `discover_tools` → `execute_tool`, and calling the old tool names directly still works for backward compatibility. v4.7.0 added `ordinance_radar`, bringing the total to 10.
 
 | Category | Tool | Description |
 |----------|------|-------------|
-| **Chain** (8) | `chain_full_research` | Comprehensive research (AI search → statutes → precedents → interpretations) |
-| | `chain_law_system` | Legal system analysis (3-tier comparison, delegation structure) |
-| | `chain_action_basis` | Administrative action basis (permits, approvals, dispositions) |
-| | `chain_dispute_prep` | Dispute preparation (appeals, litigation, tribunals) |
-| | `chain_amendment_track` | Amendment tracking (old/new comparison, history) |
-| | `chain_ordinance_compare` | Ordinance comparison (parent law → nationwide ordinances) |
-| | `chain_procedure_detail` | Procedure/cost/form guide |
-| | `chain_document_review` | Contract/terms risk analysis |
-| **Law** (2) | `search_law` | Search statutes → get lawId, MST |
+| **Research** (1) | `legal_research` | Multi-step legal research — pick one of 8 `task` values |
+| **Analysis** (1) | `legal_analysis` | Verification & analysis — pick one of 4 `mode` values |
+| **Law** (3) | `search_law` | Search statutes → get lawId, MST |
 | | `get_law_text` | Full article text retrieval |
-| **Unified** (2) | `search_decisions` | **17 domain** unified search (precedents, constitutional court, tax tribunal, FTC, NLRC, customs, interpretations, admin appeals, PIPC, ACR, appeal review, school rules, public corps, public institutions, treaties, English law) |
-| | `get_decision_text` | **17 domain** full text retrieval |
+| | `get_annexes` | Annex/form retrieval (fee tables, rate tables, forms) |
+| **Ordinance** (1) | `ordinance_radar` | Ordinance revision radar — auto-diffs the parent statutes a local ordinance cites (v4.7.0) |
+| **Unified** (2) | `search_decisions` | **18 domain** unified search (precedents, constitutional court, tax tribunal, NTS, FTC, NLRC, customs, interpretations, admin appeals, PIPC, ACR, ACR special, appeal review, school rules, public corps, public institutions, treaties, English law) |
+| | `get_decision_text` | **18 domain** full text retrieval |
 | **Meta** (2) | `discover_tools` | Search specialized tools (terms, annexes, history, comparison, etc.) |
 | | `execute_tool` | Execute discovered specialized tool |
 
@@ -361,11 +371,11 @@ User: "산업안전보건법 별표1 내용"
 
 ## Features
 
-- **41 APIs → 14 Tools** — Statutes, precedents, admin rules, ordinances, constitutional decisions, tax rulings, customs interpretations, treaties, institutional rules, legal terminology
+- **42 APIs → 10 Tools** — Statutes, precedents, admin rules, ordinances, constitutional decisions, tax rulings, customs interpretations, treaties, institutional rules, legal terminology
 - **MCP + CLI** — Use from Claude Desktop or from your terminal
 - **17 Decision Domains** — `search_decisions` covers precedents, constitutional court, tax tribunal, FTC, NLRC, customs, and 11 more domains in one tool
 - **Korean Law Intelligence** — Auto-resolves abbreviations (`화관법` → `화학물질관리법`), converts article numbers (`제38조` ↔ `003800`), visualizes 3-tier delegation
-- **Annex Extraction** — Downloads HWPX/HWP/PDF/XLSX/DOCX annexes and converts to Markdown ([kordoc](https://github.com/chrisryugj/kordoc) v2.2.5 engine)
+- **Annex Extraction** — Downloads HWPX/HWP/PDF/XLSX/DOCX annexes and converts to Markdown ([kordoc](https://github.com/chrisryugj/kordoc) engine)
 - **8 Chain Tools** — Composite research workflows in a single call (e.g. `chain_full_research`: AI search → statutes → precedents → interpretations)
 - **Caching** — 1-hour search cache, 24-hour article cache
 - **Remote Endpoint** — Use without installation via `https://korean-law-mcp.fly.dev/mcp`

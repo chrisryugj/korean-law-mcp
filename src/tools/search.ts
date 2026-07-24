@@ -52,6 +52,20 @@ function parseLawsXml(xmlText: string): LawHit[] {
   return out
 }
 
+// 법제처 API는 특정 쿼리("AI법" 등)에서 검색어를 무시하고 무관한 법령 목록을 반환할 때가 있음.
+// 결과 중 최소 1건은 법령명/약칭이 쿼리와 포함 관계여야 유효한 검색 결과로 인정.
+export function hasRelatedHit(laws: LawHit[], query: string): boolean {
+  const qKey = normalizeAliasKey(query)
+  if (!qKey) return false
+  return laws.some((h) => {
+    const nameKey = normalizeAliasKey(h.name)
+    if (nameKey.includes(qKey) || qKey.includes(nameKey)) return true
+    if (!h.abbr) return false
+    const abbrKey = normalizeAliasKey(h.abbr)
+    return abbrKey.includes(qKey) || qKey.includes(abbrKey)
+  })
+}
+
 // '광진구 복무 조례'처럼 조례 키워드나 지역명 토큰(○○시/군/구)이 있으면 자치법규 쿼리로 판단.
 // '도'는 도로법·양도세 등 오탐이 많아 제외. 토큰 3자 미만('구', '시')도 제외.
 function looksLikeOrdinanceQuery(query: string): boolean {
@@ -93,9 +107,12 @@ export async function searchLaw(
       const { expanded } = expandLawQuery(input.query)
       for (const expandedQuery of expanded) {
         if (expandedQuery === input.query) continue
-        xmlText = await apiClient.searchLaw(expandedQuery, input.apiKey, input.display)
-        laws = parseLawsXml(xmlText)
-        if (laws.length > 0) {
+        const candidateXml = await apiClient.searchLaw(expandedQuery, input.apiKey, input.display)
+        const candidates = parseLawsXml(candidateXml)
+        // 확장쿼리와 무관한 목록(법제처가 쿼리 무시)은 버리고 다음 확장쿼리 시도
+        if (candidates.length > 0 && hasRelatedHit(candidates, expandedQuery)) {
+          xmlText = candidateXml
+          laws = candidates
           usedQuery = expandedQuery
           break
         }

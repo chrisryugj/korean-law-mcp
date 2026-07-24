@@ -144,6 +144,11 @@ const LAW_ALIAS_ENTRIES: LawAliasEntry[] = [
     canonical: "정보통신망 이용촉진 및 정보보호 등에 관한 법률",
     aliases: ["정보통신망법", "정통망법"],
   },
+  {
+    canonical: "인공지능 발전과 신뢰 기반 조성 등에 관한 기본법",
+    aliases: ["인공지능기본법", "인공지능법", "ai기본법", "ai법"],
+    alternatives: ["인공지능 발전과 신뢰 기반 조성 등에 관한 기본법 시행령"],
+  },
   // ── 청렴/이해충돌 ──
   {
     canonical: "부정청탁 및 금품등 수수의 금지에 관한 법률",
