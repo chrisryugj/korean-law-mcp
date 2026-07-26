@@ -13,10 +13,10 @@ import { formatToolError } from "../lib/errors.js"
 import { MAX_RESPONSE_SIZE, truncateResponse } from "../lib/schemas.js"
 
 export const GetLawTextSchema = z.object({
-  mst: z.string().optional().describe("법령일련번호 (search_law에서 획득)"),
+  mst: z.string().optional().describe("법령일련번호 (search_law에서 획득). 연혁(과거) 버전 MST는 efYd를 반드시 함께 지정"),
   lawId: z.string().optional().describe("법령ID (search_law에서 획득)"),
   jo: z.string().optional().describe("조문 번호 (예: '제38조' 또는 '003800')"),
-  efYd: z.string().optional().describe("시행일자 (YYYYMMDD 형식)"),
+  efYd: z.string().optional().describe("시행일자 (YYYYMMDD). 연혁 버전 조회 시 필수 — mst와 함께 지정해야 하며 생략하면 조회되지 않음"),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달")
 }).refine(data => data.mst || data.lawId, {
   message: "mst 또는 lawId 중 하나는 필수입니다"
@@ -70,10 +70,16 @@ export async function getLawText(
     // JSON 구조 파싱 (LexDiff 방식 적용)
     const lawData = json?.법령
     if (!lawData) {
+      // 연혁(과거) 버전은 MST 단독으로 조회되지 않고 efYd를 함께 줘야 한다.
+      // applicable_law·search_historical_law는 MST만 제시하는 경우가 있어
+      // 그 값을 그대로 넘기면 이 경로로 반복 실패하기 쉬우므로 명시적으로 안내한다.
+      const efYdHint = input.mst && !input.efYd
+        ? `\n\n💡 연혁(과거) 버전을 조회하려는 경우 MST만으로는 조회되지 않습니다. 해당 버전의 시행일을 efYd로 함께 지정하세요:\n      get_law_text(mst="${input.mst}", efYd="YYYYMMDD"${input.jo ? `, jo="${input.jo}"` : ""})`
+        : ""
       return {
         content: [{
           type: "text",
-          text: "[NOT_FOUND] 법령 데이터를 찾을 수 없습니다.\n\n⚠️ 법제처 API가 해당 mst/lawId에 대해 데이터를 반환하지 않았습니다. LLM이 조문을 추측/생성하지 마세요. search_law로 유효한 mst를 먼저 확인하세요."
+          text: "[NOT_FOUND] 법령 데이터를 찾을 수 없습니다.\n\n⚠️ 법제처 API가 해당 mst/lawId에 대해 데이터를 반환하지 않았습니다. LLM이 조문을 추측/생성하지 마세요. search_law로 유효한 mst를 먼저 확인하세요." + efYdHint
         }],
         isError: true
       }

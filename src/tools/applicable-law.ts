@@ -227,6 +227,10 @@ export async function applicableLaw(
     } else {
       lines.push(`  ↳ 이 버전이 현행입니다 (기준일 이후 개정 없음)`)
     }
+    // 연혁 버전은 MST 단독으로 조회되지 않는다(efYd 동반 필수).
+    // MST만 노출하면 호출자가 get_law_text(mst=...)를 시도해 반드시 NOT_FOUND를 받으므로
+    // 그대로 복사해 실행할 수 있는 형태로 안내한다.
+    lines.push(`  ↳ 이 버전 조문 조회: get_law_text(mst="${effective.mst}", efYd="${effective.efYd}", jo="제N조") — efYd 생략 시 조회되지 않음`)
 
     // 3. 조문 비교 (jo 지정 시)
     const joDisplay = input.jo ? (input.jo.startsWith("제") ? input.jo : `제${input.jo}`) : undefined
