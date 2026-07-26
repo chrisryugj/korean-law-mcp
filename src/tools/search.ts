@@ -15,11 +15,24 @@ import { searchOrdinance } from "./ordinance-search.js"
 
 export const SearchLawSchema = z.object({
   query: z.string().describe("검색할 법령명 (예: '관세법', 'fta특례법', '화관법')"),
-  display: z.number().optional().default(50).describe("최대 결과 개수 (기본 50 — 짧은 법령명 정확매칭 누락 방지)"),
+  display: z.number().optional().default(50).describe("최대 표시 개수 (기본 50). 조회는 항상 충분히 수행하므로 작게 지정해도 정확매칭은 누락되지 않음"),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달")
 })
 
 export type SearchLawInput = z.infer<typeof SearchLawSchema>
+
+/**
+ * 법제처 lawSearch는 LIKE 검색 + 가나다순이라 display를 작게 잡으면
+ * 정확매칭 법령이 응답에 아예 담기지 않는다 ("민법" display=3 → 난민법 3건만).
+ * 조회는 항상 이 하한 이상으로 하고, 표시 개수만 input.display로 제한한다.
+ */
+const FETCH_FLOOR = 50
+const FETCH_CEIL = 100
+
+/** 표시 개수와 무관하게 정확매칭을 놓치지 않을 조회 개수 */
+export function resolveFetchSize(display: number): number {
+  return Math.min(Math.max(display, FETCH_FLOOR), FETCH_CEIL)
+}
 
 interface LawHit {
   name: string
@@ -98,7 +111,9 @@ export async function searchLaw(
       }
     }
 
-    let xmlText = await apiClient.searchLaw(input.query, input.apiKey, input.display)
+    const fetchSize = resolveFetchSize(input.display)
+
+    let xmlText = await apiClient.searchLaw(input.query, input.apiKey, fetchSize)
     let laws = parseLawsXml(xmlText)
     let usedQuery = input.query
 
@@ -107,7 +122,7 @@ export async function searchLaw(
       const { expanded } = expandLawQuery(input.query)
       for (const expandedQuery of expanded) {
         if (expandedQuery === input.query) continue
-        const candidateXml = await apiClient.searchLaw(expandedQuery, input.apiKey, input.display)
+        const candidateXml = await apiClient.searchLaw(expandedQuery, input.apiKey, fetchSize)
         const candidates = parseLawsXml(candidateXml)
         // 확장쿼리와 무관한 목록(법제처가 쿼리 무시)은 버리고 다음 확장쿼리 시도
         if (candidates.length > 0 && hasRelatedHit(candidates, expandedQuery)) {
