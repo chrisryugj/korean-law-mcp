@@ -7,13 +7,16 @@
 import { followLawAntibot } from "./law-antibot.js"
 
 /**
- * URL에서 민감 정보(API 키) 마스킹 — 에러 메시지/로그 노출 방지.
+ * URL에서 민감 정보(API 키) 마스킹 — 에러 메시지/로그/도구 응답 노출 방지.
  * 법제처 API는 ?OC=KEY 쿼리 파라미터로 키를 받으므로 해당 값만 *** 처리.
  * 추가 방어로 일반적인 키 파라미터 이름들도 마스킹.
+ *
+ * URL 하나뿐 아니라 URL이 섞인 자유 텍스트에도 적용할 수 있다.
+ * (값 매칭에서 공백류를 제외하므로 URL 뒤에 다른 문장이 이어져도 과도하게 먹지 않는다)
  */
 export function maskSensitiveUrl(url: string): string {
   if (!url) return url
-  return url.replace(/([?&](?:oc|apikey|api_key|authkey|auth_key|key)=)[^&]+/gi, "$1***")
+  return url.replace(/([?&](?:oc|apikey|api_key|authkey|auth_key|key)=)[^&\s]+/gi, "$1***")
 }
 
 export interface FetchWithRetryOptions extends RequestInit {

@@ -21,4 +21,16 @@ describe("maskSensitiveUrl — API 키 마스킹", () => {
   it("빈 문자열은 안전하게 통과", () => {
     expect(maskSensitiveUrl("")).toBe("")
   })
+
+  // 도구 응답 본문(URL + 설명문이 섞인 텍스트)에도 적용되므로
+  // 값 매칭이 공백/개행을 넘어가면 뒷 문장까지 지워버린다
+  it("URL이 섞인 자유 텍스트에서 키만 마스킹하고 뒷 내용은 보존", () => {
+    expect(
+      maskSensitiveUrl("  링크: /DRF/lawService.do?OC=mysecret&target=prec&ID=64849\n  선고일: 20080724"),
+    ).toBe("  링크: /DRF/lawService.do?OC=***&target=prec&ID=64849\n  선고일: 20080724")
+  })
+
+  it("키 값이 URL 끝일 때 개행 뒤 본문을 삼키지 않음", () => {
+    expect(maskSensitiveUrl("https://x/?OC=mysecret\n제1조 목적")).toBe("https://x/?OC=***\n제1조 목적")
+  })
 })

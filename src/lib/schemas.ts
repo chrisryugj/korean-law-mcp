@@ -3,6 +3,7 @@
  */
 
 import { z } from "zod"
+import { maskSensitiveUrl } from "./fetch-with-retry.js"
 
 /**
  * 날짜 스키마 (YYYYMMDD 형식)
@@ -75,6 +76,11 @@ interface TruncateOptions {
 export function truncateResponse(text: string, maxSizeOrOpts?: number): string
 export function truncateResponse(text: string, maxSizeOrOpts?: TruncateOptions): string
 export function truncateResponse(text: string, maxSizeOrOpts: number | TruncateOptions = MAX_RESPONSE_SIZE): string {
+  // Critical Rule 11 — 응답 본문에도 API 키 마스킹 적용.
+  // 법제처가 돌려주는 *상세링크 필드에는 호출자의 OC 키가 그대로 박혀 있어,
+  // 링크를 그대로 출력하면 개인 인증키가 대화 로그·공유 세션에 남는다.
+  text = maskSensitiveUrl(text)
+
   let maxSize: number
   let summary = false
 
