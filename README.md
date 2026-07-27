@@ -1,5 +1,7 @@
 # Korean Law MCP
 
+[![MCP Toplist](https://mcptoplist.com/badge/glama%2Fchrisryugj%2Fkorean-law-mcp.svg)](https://mcptoplist.com/server/glama%2Fchrisryugj%2Fkorean-law-mcp)
+
 **법제처 42개 API를 10개 도구로.** 법령, 판례, 행정규칙, 자치법규, 조약, 해석례(국세청 포함) + **LLM 환각 방지 인용 검증(실존+내용)** + **조문 영향 그래프** + **시점 비교 자동 diff** + **이럴 땐 이렇게 — 5단계 안내** + **판례 생사 확인(Citator)** + **행위시법 판단** + **조례 정비 레이더**를 AI 어시스턴트나 터미널에서 바로 사용.
 
 [![npm version](https://img.shields.io/npm/v/korean-law-mcp.svg)](https://www.npmjs.com/package/korean-law-mcp)
