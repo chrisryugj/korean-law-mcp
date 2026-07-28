@@ -30,6 +30,30 @@ import {
   getApiClient, executeTool,
   executeNaturalQuery, executeNaturalQueryJson,
 } from "./lib/cli-executor.js"
+import { resolveLawApiKey } from "./lib/law-credential.js"
+import {
+  parseCliJsonInput,
+  parseDirectToolInput,
+} from "./lib/cli-input.js"
+
+function getPublicCliOptions(schema: z.ZodSchema): CliOption[] {
+  return extractOptionsFromSchema(schema).filter((option) => option.name !== "apiKey")
+}
+
+function buildToolInput(
+  cmdOpts: Readonly<Record<string, string>>,
+  options: readonly CliOption[]
+): Record<string, unknown> {
+  if (cmdOpts.jsonInput) return parseCliJsonInput(cmdOpts.jsonInput)
+  return Object.fromEntries(
+    options.flatMap((option) => {
+      const value = cmdOpts[option.name]
+      return value === undefined
+        ? []
+        : [[option.name, coerceValue(value, option.type)]]
+    })
+  )
+}
 
 // ────────────────────────────────────────
 // Interactive REPL Mode
@@ -114,18 +138,17 @@ async function runInteractive(): Promise<void> {
     rl.pause()
 
     // 직접 도구 호출: @tool_name {...params}
-    if (input.startsWith("@")) {
-      await handleDirectCall(apiClient, input)
-    } else {
-      // 자연어 쿼리 실행
-      history.push(input)
-      console.log()
-
-      try {
+    try {
+      if (input.startsWith("@")) {
+        await handleDirectCall(apiClient, input)
+      } else {
+        // 자연어 쿼리 실행
+        history.push(input)
+        console.log()
         await executeNaturalQuery(apiClient, input, false)
-      } catch (error) {
-        console.error(fmt.red(`오류: ${error instanceof Error ? error.message : String(error)}`))
       }
+    } catch (error) {
+      console.error(fmt.red(`오류: ${error instanceof Error ? error.message : String(error)}`))
     }
 
     console.log()
@@ -162,21 +185,7 @@ async function handleDirectCall(apiClient: LawApiClient, input: string): Promise
   const toolName = spaceIdx > 0 ? input.slice(1, spaceIdx) : input.slice(1)
   const paramStr = spaceIdx > 0 ? input.slice(spaceIdx + 1).trim() : ""
 
-  let params: Record<string, unknown> = {}
-  if (paramStr) {
-    try {
-      params = JSON.parse(paramStr)
-    } catch {
-      // key=value 형식 시도
-      for (const pair of paramStr.split(/\s+/)) {
-        const eqIdx = pair.indexOf("=")
-        if (eqIdx > 0) {
-          params[pair.slice(0, eqIdx)] = pair.slice(eqIdx + 1).replace(/^["']|["']$/g, "")
-        }
-      }
-    }
-  }
-
+  const params = parseDirectToolInput(paramStr)
   const result = await executeTool(apiClient, toolName, params)
   console.log(formatOutput(result.content.map(c => c.text).join("\n")))
 }
@@ -274,7 +283,7 @@ function createProgram(): Command {
         process.exit(1)
       }
 
-      const options = extractOptionsFromSchema(tool.schema)
+      const options = getPublicCliOptions(tool.schema)
 
       console.log()
       console.log(fmt.bold(tool.name))
@@ -306,7 +315,7 @@ function createProgram(): Command {
       .command(tool.name)
       .description(tool.description)
 
-    const options = extractOptionsFromSchema(tool.schema)
+    const options = getPublicCliOptions(tool.schema)
 
     for (const opt of options) {
       const flag = opt.type === "boolean"
@@ -327,35 +336,18 @@ function createProgram(): Command {
     cmd.option("--json-input <json>", "JSON 문자열로 전체 파라미터 전달")
 
     cmd.action(async (cmdOpts: Record<string, string>) => {
-      const apiKey = cmdOpts.apiKey || process.env.LAW_OC || ""
+      const apiKey = resolveLawApiKey()
       if (!apiKey) {
-        console.error(fmt.red("LAW_OC 환경변수 또는 --apiKey 옵션이 필요합니다."))
+        console.error(fmt.red("법제처 API 키가 필요합니다."))
+        console.error(fmt.dim("온디맨드 설정: korean-law-mcp setup --mode on-demand"))
         console.error(fmt.dim("API 키 발급: https://open.law.go.kr/LSO/openApi/guideResult.do"))
         process.exit(1)
       }
 
       const apiClient = new LawApiClient({ apiKey })
 
-      let input: Record<string, unknown>
-
-      if (cmdOpts.jsonInput) {
-        try {
-          input = JSON.parse(cmdOpts.jsonInput)
-        } catch {
-          console.error(fmt.red("--json-input 파싱 실패: 유효한 JSON을 입력하세요."))
-          process.exit(1)
-        }
-      } else {
-        input = {}
-        for (const opt of options) {
-          const val = cmdOpts[opt.name]
-          if (val !== undefined) {
-            input[opt.name] = coerceValue(val, opt.type)
-          }
-        }
-      }
-
       try {
+        const input = buildToolInput(cmdOpts, options)
         const parsed = tool.schema.parse(input)
         const result = await tool.handler(apiClient, parsed)
 

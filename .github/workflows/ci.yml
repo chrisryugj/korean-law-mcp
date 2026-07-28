@@ -31,3 +31,6 @@ jobs:
 
       - name: Test
         run: npm test
+
+      - name: Test on-demand setup
+        run: npm run test:on-demand

@@ -11,9 +11,10 @@ import { LawApiClient } from "./lib/api-client.js"
 import { registerTools } from "./tool-registry.js"
 import { startHTTPServer } from "./server/http-server.js"
 import { VERSION } from "./version.js"
+import { resolveLawApiKey } from "./lib/law-credential.js"
 
 // API 클라이언트 초기화 (LAW_OC 또는 KOREAN_LAW_API_KEY 지원)
-const LAW_OC = process.env.LAW_OC || process.env.KOREAN_LAW_API_KEY || ""
+const LAW_OC = resolveLawApiKey()
 const apiClient = new LawApiClient({ apiKey: LAW_OC })
 
 // MCP 서버 팩토리 (HTTP 모드: 세션마다 새 인스턴스 필요)
@@ -33,7 +34,7 @@ async function main() {
   // setup 서브커맨드: npx korean-law-mcp setup
   if (args[0] === "setup") {
     const { runSetup } = await import("./setup.js")
-    await runSetup()
+    await runSetup(args.slice(1))
     return
   }
 

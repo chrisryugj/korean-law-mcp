@@ -1,5 +1,29 @@
 # Changelog
 
+## [4.10.0] - 2026-07-29
+
+### Added / 추가
+
+- **전역 온디맨드 Agent Skill / Global on-demand Agent Skill**: `skills/korean-law`를 추가해 Claude Code·Codex 등 지원 에이전트에서 법률 질의가 있을 때만 CLI를 실행하고 종료합니다. Added `skills/korean-law` so supported agents invoke the CLI only for legal queries.
+- **온디맨드 설치 모드 / On-demand setup mode**: `korean-law-mcp setup --mode on-demand`가 사용자별 API 키 설정과 전역 Skill 설치를 수행하며 상시 `mcpServers` 항목은 만들지 않습니다. The new setup mode configures per-user credentials and installs the global Skill without a persistent MCP registration.
+- **플랫폼별 인증 설정 / Platform credential config**: 환경변수 우선순위를 유지하면서 macOS·Linux·Windows 사용자 설정 파일을 CLI와 MCP가 공통으로 읽습니다. CLI and MCP now resolve a platform-specific user config after environment variables.
+- **stdin 질의 / stdin queries**: `korean-law query --stdin`으로 사용자 질문을 shell command에 삽입하지 않고 전달할 수 있습니다. `korean-law query --stdin` accepts user questions without interpolating them into a shell command.
+
+### Security / 보안
+
+- 기존 MCP 설치 마법사와 새 온디맨드 설치에서 API 키 입력을 화면에 표시하지 않습니다. API key input is now hidden in both setup modes.
+- Unix 계열 인증 설정 파일은 `0600` 권한으로 저장하며 키 값은 로그·Skill 파일·명령행 인자에 포함하지 않습니다. Unix credential files use mode `0600`; key values never enter logs, Skill files, or command-line arguments.
+- 설정 파일은 심볼릭 링크·비정상 파일·1MB 초과 입력을 거부하고 같은 디렉터리의 `0600` 임시 파일을 원자적으로 교체합니다. Config writes reject symlinks, non-regular files, and inputs over 1MB, then atomically replace from a `0600` sibling temporary file.
+- 설정 파일 읽기는 `O_NOFOLLOW` file descriptor와 `fstat`을 사용해 심볼릭 링크·FIFO 교체 경쟁을 차단합니다. Config reads use an `O_NOFOLLOW` file descriptor plus `fstat` to block symlink and FIFO replacement races.
+- 외부 Skill 설치기는 Node 20 호환 `skills@1.5.18`로 고정하고 `--ignore-scripts`와 허용 목록 환경만 사용합니다. The external Skill installer is pinned to Node 20-compatible `skills@1.5.18`, disables lifecycle scripts, and receives only an allowlisted environment.
+- CLI의 `--apiKey`, JSON `apiKey`, REPL 직접 호출의 `apiKey` 입력을 제거해 프로세스 목록과 shell history 노출을 막습니다. Removed `apiKey` from CLI flags, JSON input, and direct REPL calls to prevent process-list and shell-history exposure.
+- URL query와 클라이언트 JSON에 키를 직접 넣는 안내를 제거하고 사용자 설정 또는 비밀 저장소 기반 HTTP 헤더로 대체했습니다. Replaced raw keys in URL queries and client JSON with user config or secret-backed HTTP headers.
+
+### Validation / 검증
+
+- 인증정보 우선순위·파일 권한·플랫폼 경로와 setup 옵션·Skill 설치 명령 회귀 테스트를 추가했습니다. Added regression tests for credential precedence, file permissions, platform paths, setup options, and Skill installation arguments.
+- 한글 `README.md`와 영문 `README-EN.md`에 동일한 설치·마이그레이션 절차를 반영했습니다. Mirrored installation and migration guidance in the Korean and English READMEs.
+
 ## [4.9.1] - 2026-07-27
 
 행정규칙 전문이 **자연어·체인 경로에서만** 조회되지 않던 문제 수정. `get_admin_rule` 직접 호출은 멀쩡했고 체인이 넘기는 식별자만 틀렸는데, 안내문이 이를 「법제처 API 제한」으로 단정해 원인 추적까지 막고 있었다(보고자는 한동안 법제처 제약으로 판단하고 우회 설계를 검토). 같은 파일에서 `compare_admin_rule_old_new` 가 응답 실형상과 어긋나 매 호출 빈 결과이던 것도 함께 수리. 로컬 회귀 129건 통과 + 실 API 대조.
@@ -203,7 +227,6 @@ PlayMCP 심사 피드백 대응.
 ### Fixed — zod v4 고정 (신규 설치 크래시 해결)
 
 - **`z.toJSONSchema is not a function` 크래시**: `dependencies`가 zod를 `^3.25.76 || ^4.0.0`으로 선언했으나 코드는 zod v4 전용 API인 `z.toJSONSchema()`를 호출. 새 npm 설치가 zod 3.25를 해석하면 `listTools` 첫 호출에서 크래시. zod를 `^4`로 고정해 해결
-
 ## [4.4.2] - 2026-06-18
 
 ### Fixed — 행정규칙 별표/서식 조회 복구 (#50, #49, #51)
@@ -564,7 +587,7 @@ v4.0의 핵심 원칙은 **"신규 도구 최소화, 기존 시나리오 시스�
 - `LAW_USER_AGENT` 환경변수로 override 가능 (정책 변경 시 빠른 대응)
 
 ### Impact
-- claude.ai 커스텀 커넥터(`https://korean-law-mcp.fly.dev/mcp?oc=...`)로 사용하던 모든 사용자 즉시 영향 → v3.5.5 배포로 자동 복구
+- 당시 URL query 인증을 쓰던 claude.ai 커스텀 커넥터 사용자에게 즉시 영향, v3.5.5 배포로 복구. This affected legacy URL-query connector users and was restored by v3.5.5.
 - npm 글로벌 설치(`npm i -g korean-law-mcp`) 사용자도 동일하게 적용
 - IP 화이트리스트 / 한국 호스팅 이전 같은 큰 작업 불필요
 

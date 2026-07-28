@@ -6,12 +6,23 @@
  */
 
 import { createInterface } from "node:readline/promises"
-import { readFile, writeFile, mkdir } from "node:fs/promises"
 import { existsSync } from "node:fs"
-import { resolve, dirname } from "node:path"
+import { resolve } from "node:path"
 import { homedir, platform } from "node:os"
 import { stdin, stdout } from "node:process"
 import { getLawApiProtocol } from "./lib/law-url-config.js"
+import {
+  readStoredLawApiKey,
+  saveLawApiKey,
+} from "./lib/law-credential.js"
+import {
+  readPrivateJsonObject,
+  writePrivateJsonFile,
+} from "./lib/private-json-file.js"
+import { runOnDemandSetup } from "./setup/on-demand.js"
+import { parseSetupOptions, SETUP_HELP } from "./setup/setup-options.js"
+import { promptSecret } from "./setup/secret-prompt.js"
+import { VERSION } from "./version.js"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -100,47 +111,35 @@ function detectClients(): readonly ClientConfig[] {
 }
 
 async function readJsonFile(path: string): Promise<Record<string, unknown>> {
-  if (!existsSync(path)) return {}
-  const raw = await readFile(path, "utf-8")
-  return JSON.parse(raw) as Record<string, unknown>
+  return readPrivateJsonObject(path)
 }
 
 async function writeJsonFile(path: string, data: Record<string, unknown>): Promise<void> {
-  const dir = dirname(path)
-  if (!existsSync(dir)) {
-    await mkdir(dir, { recursive: true })
-  }
-  await writeFile(path, JSON.stringify(data, null, 2) + "\n", "utf-8")
+  await writePrivateJsonFile(path, data)
 }
 
-function buildServerEntry(apiKey: string, lawApiProtocol = getLawApiProtocol()): Record<string, unknown> {
+function buildServerEntry(lawApiProtocol = getLawApiProtocol()): Record<string, unknown> {
   const env: Record<string, string> = {}
-  if (apiKey) {
-    env.LAW_OC = apiKey
-  }
   if (lawApiProtocol === "http") {
     env.LAW_API_PROTOCOL = lawApiProtocol
   }
   return {
     command: "npx",
-    args: ["-y", "korean-law-mcp"],
+    args: ["-y", "--ignore-scripts", `korean-law-mcp@${VERSION}`],
     env,
   }
 }
 
 /** Zed는 context_servers 키에 { command: { path, args, env } } 구조 */
-function buildZedEntry(apiKey: string, lawApiProtocol = getLawApiProtocol()): Record<string, unknown> {
+function buildZedEntry(lawApiProtocol = getLawApiProtocol()): Record<string, unknown> {
   const env: Record<string, string> = {}
-  if (apiKey) {
-    env.LAW_OC = apiKey
-  }
   if (lawApiProtocol === "http") {
     env.LAW_API_PROTOCOL = lawApiProtocol
   }
   return {
     command: {
       path: "npx",
-      args: ["-y", "korean-law-mcp"],
+      args: ["-y", "--ignore-scripts", `korean-law-mcp@${VERSION}`],
       env,
     },
   }
@@ -229,7 +228,7 @@ function failLine(label: string, detail: string): void {
   console.log(`  ${c.red}${c.bold}x${c.reset} ${c.white}${label}${c.reset}${c.dim} ${detail}${c.reset}`)
 }
 
-async function printComplete(apiKey: string): Promise<void> {
+async function printComplete(hasApiKey: boolean): Promise<void> {
   console.log()
   const box = [
     `  ${c.green}${c.bold}╔${"═".repeat(50)}╗${c.reset}`,
@@ -241,8 +240,8 @@ async function printComplete(apiKey: string): Promise<void> {
     await sleep(40)
   }
   console.log()
-  if (!apiKey) {
-    console.log(`  ${c.yellow}!${c.reset} API 키 미설정 — 환경변수 ${c.bold}LAW_OC${c.reset} 또는 설정 파일의 ${c.bold}env.LAW_OC${c.reset} 수정`)
+  if (!hasApiKey) {
+    console.log(`  ${c.yellow}!${c.reset} API 키 미설정 — ${c.bold}setup --mode on-demand${c.reset} 또는 ${c.bold}LAW_OC${c.reset} 설정`)
     console.log()
   }
   console.log(`  ${c.dim}클라이언트를 재시작하면 'korean-law' MCP 서버가 활성화됩니다.${c.reset}`)
@@ -253,25 +252,39 @@ async function printComplete(apiKey: string): Promise<void> {
 // Main
 // ---------------------------------------------------------------------------
 
-export async function runSetup(): Promise<void> {
+export async function runSetup(args: readonly string[] = []): Promise<void> {
+  const options = parseSetupOptions(args)
+  if (options.showHelp) {
+    process.stdout.write(`${SETUP_HELP}\n`)
+    return
+  }
+  if (options.mode === "on-demand") {
+    await runOnDemandSetup(options)
+    return
+  }
+  await runMcpSetup()
+}
+
+async function runMcpSetup(): Promise<void> {
+  await printBanner()
+
+  // Step 1: API 키
+  stepHeader(1, 3, "법제처 API 키")
+  console.log(`  ${c.dim}발급: https://open.law.go.kr/LSO/openApi/guideResult.do${c.reset}`)
+  console.log(`  ${c.dim}입력값은 화면에 표시되지 않습니다. Enter로 건너뛸 수 있습니다.${c.reset}`)
+  console.log()
+  const apiKey = await promptSecret(`  ${c.cyan}>${c.reset} API 키: `)
+  if (apiKey) {
+    await saveLawApiKey(apiKey)
+    console.log(`  ${c.green}+${c.reset} 키 등록됨`)
+  } else {
+    console.log(`  ${c.yellow}-${c.reset} 건너뜀`)
+  }
+  console.log()
+  const hasApiKey = Boolean(apiKey || readStoredLawApiKey())
+
   const rl = createInterface({ input: stdin, output: stdout })
-
   try {
-    await printBanner()
-
-    // Step 1: API 키
-    stepHeader(1, 3, "법제처 API 키")
-    console.log(`  ${c.dim}발급: https://open.law.go.kr/LSO/openApi/guideResult.do${c.reset}`)
-    console.log(`  ${c.dim}Enter로 건너뛰기 — 나중에 환경변수로 설정 가능${c.reset}`)
-    console.log()
-    const apiKey = (await rl.question(`  ${c.cyan}>${c.reset} API 키: `)).trim()
-    if (apiKey) {
-      console.log(`  ${c.green}+${c.reset} 키 등록됨`)
-    } else {
-      console.log(`  ${c.yellow}-${c.reset} 건너뜀`)
-    }
-    console.log()
-
     // Step 2: 클라이언트 선택
     stepHeader(2, 3, "MCP 클라이언트 선택")
     const clients = detectClients()
@@ -286,7 +299,7 @@ export async function runSetup(): Promise<void> {
 
     if (!clientInput) {
       console.log(`\n  ${c.yellow}선택 없음${c.reset} — 수동 설정 안내:`)
-      printManualConfig(apiKey)
+      printManualConfig()
       return
     }
 
@@ -297,7 +310,7 @@ export async function runSetup(): Promise<void> {
 
     if (indices.length === 0) {
       console.log(`\n  ${c.yellow}유효한 선택 없음${c.reset} — 수동 설정 안내:`)
-      printManualConfig(apiKey)
+      printManualConfig()
       return
     }
 
@@ -305,7 +318,7 @@ export async function runSetup(): Promise<void> {
     console.log()
     stepHeader(3, 3, "설정 파일 업데이트")
     const lawApiProtocol = getLawApiProtocol()
-    const entry = buildServerEntry(apiKey, lawApiProtocol)
+    const entry = buildServerEntry(lawApiProtocol)
 
     for (const idx of indices) {
       const client = clients[idx]
@@ -313,11 +326,16 @@ export async function runSetup(): Promise<void> {
       try {
         const config = await readJsonFile(client.configPath)
         const key = client.format
-        const serverEntry = key === "context_servers" ? buildZedEntry(apiKey, lawApiProtocol) : entry
+        const serverEntry = key === "context_servers" ? buildZedEntry(lawApiProtocol) : entry
         const servers = (config[key] ?? {}) as Record<string, unknown>
-        servers["korean-law"] = serverEntry
-        config[key] = servers
-        await writeJsonFile(client.configPath, config)
+        const nextConfig = {
+          ...config,
+          [key]: {
+            ...servers,
+            "korean-law": serverEntry,
+          },
+        }
+        await writeJsonFile(client.configPath, nextConfig)
         successLine(client.name, client.configPath)
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
@@ -325,14 +343,18 @@ export async function runSetup(): Promise<void> {
       }
     }
 
-    await printComplete(apiKey)
+    await printComplete(hasApiKey)
   } finally {
     rl.close()
   }
 }
 
-function printManualConfig(apiKey: string): void {
-  const entry = buildServerEntry(apiKey)
+export function buildManualConfigEntry(): Record<string, unknown> {
+  return buildServerEntry()
+}
+
+function printManualConfig(): void {
+  const entry = buildManualConfigEntry()
   console.log()
   console.log(`  ${c.dim}아래 JSON을 설정 파일의 mcpServers에 추가하세요:${c.reset}`)
   console.log()

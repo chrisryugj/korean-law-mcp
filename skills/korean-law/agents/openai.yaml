@@ -1,0 +1,4 @@
+interface:
+  display_name: "Korean Law / 대한민국 법령"
+  short_description: "공식 한국 법령·판례 온디맨드 조회 / On-demand legal lookup"
+  default_prompt: "Use $korean-law to verify the applicable Korean statute, case, and effective date. / $korean-law로 적용 법령·판례·시행일을 검증하세요."
