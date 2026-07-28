@@ -556,10 +556,12 @@ npx --yes --ignore-scripts korean-law-mcp@4.10.0 setup --mode on-demand
 설치 과정은 다음 세 가지만 수행합니다. The setup performs only these three actions:
 
 1. 법제처 API 키를 플랫폼별 사용자 설정에 저장 / Save the MOLEG API key in the per-user platform config.
-2. `korean-law` Agent Skill을 지원 에이전트의 전역 영역에 복사 설치 / Copy the global `korean-law` Agent Skill to supported agents.
+2. `korean-law` Agent Skill을 Claude Code와 Codex의 전역 영역에 복사 설치 / Copy the global `korean-law` Agent Skill for Claude Code and Codex.
 3. 상시 `mcpServers` 항목은 등록하지 않음 / Do not register a persistent `mcpServers` entry.
 
 API 키 입력은 화면에 표시되지 않으며 값은 로그나 Skill 파일에 기록되지 않습니다. The API key input is hidden and never written to logs or Skill files.
+
+여기서 “전역”은 PC 전체가 아니라 **현재 OS 사용자 범위**입니다. 다른 PC나 다른 OS 사용자는 각 계정에서 한 번씩 같은 명령을 실행해야 합니다. “Global” means the **current OS user**, not every user or PC; run the same command once for each account on each computer.
 
 | 운영체제 / OS | 인증 설정 위치 / Credential config |
 |---|---|
@@ -576,10 +578,18 @@ API 키 입력은 화면에 표시되지 않으며 값은 로그나 Skill 파일
 
 플러그인을 자동으로 비활성화하지 않으므로 기존 사용 방식은 사용자가 직접 선택할 수 있습니다. Setup never disables the plugin automatically, so the user keeps control of the active mode.
 
-**Skill 업데이트 / Update the Skill**
+**Skill 업데이트·복구 / Update or repair the Skill**
+
+이 설치는 배포 패키지에 포함된 Skill을 복사하므로 일반 `skills update` 추적 대상이 아닙니다. 새 릴리스의 정확한 버전으로 setup을 다시 실행하면 두 전역 설치 경로를 덮어쓰고 검증합니다. Because setup copies the Skill bundled with the package, it is not tracked by the generic `skills update` command. Re-run setup with an exact released version to replace and verify both global copies.
 
 ```bash
-npx --yes --ignore-scripts skills@1.5.18 update korean-law --global --yes
+npx --yes --ignore-scripts korean-law-mcp@4.10.0 setup --mode on-demand
+```
+
+제거할 때는 다음 명령을 사용합니다. To uninstall the Skill:
+
+```bash
+npx --yes --ignore-scripts skills@1.5.18 remove korean-law --global --agent claude-code codex --yes
 ```
 
 ---
@@ -740,11 +750,16 @@ korean-law-mcp setup --mode on-demand --skip-skill-install
 
 # 사용 예시
 korean-law "민법 제1조"                    # 자연어로 바로 조회
+korean-law query --stdin                  # 자동화: 질문은 별도 stdin으로 전달
 korean-law search_law --query "관세법"     # 도구 직접 호출
 korean-law list                            # 전체 도구 목록
 korean-law list --category 판례            # 카테고리별 필터
 korean-law help search_law                 # 도구별 도움말
 ```
+
+에이전트나 스크립트에서는 고정된 argv `korean-law query --stdin`을 시작한 뒤 질문을 별도의 표준입력으로 보내세요. 사용자 텍스트를 셸 문자열, 명령 치환 또는 파이프에 결합하지 마세요. In agents and scripts, start the fixed argv `korean-law query --stdin`, then send the question through stdin; never interpolate user text into a shell string, command substitution, or pipeline.
+
+전역 CLI가 없으면 Skill은 고정 버전을 `npx`로 일회 실행하므로 첫 질의에 다운로드 지연이 생길 수 있습니다. 반복 사용이나 오프라인 사용은 위 `npm install -g` 설치를 권장합니다. Without a global CLI, the Skill uses a pinned one-shot `npx` fallback, so the first query can incur download latency; install the CLI globally for frequent or offline use.
 
 ---
 
@@ -909,6 +924,7 @@ v4.4.0에서 노출 도구를 통폐합했습니다 (컨텍스트 52% 감축). �
 ## 문서
 
 - [docs/API.md](docs/API.md) — 도구 레퍼런스
+- [docs/ON-DEMAND.md](docs/ON-DEMAND.md) — 다중 PC·사용자 온디맨드 배포 / Multi-PC and multi-user on-demand rollout
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 시스템 설계
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — 개발 가이드
 

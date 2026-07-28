@@ -157,16 +157,21 @@ get_annexes(lawName="여권법 시행령", bylSeq="000000")
 
 ---
 
-## Deployment Architecture
+## Deployment Architecture / 배포 아키텍처
 
-### Local (STDIO)
+### Local (STDIO) / 로컬
+
+먼저 숨김 입력으로 사용자 인증 설정을 만든 뒤, 클라이언트에는 키가 없는 항목만 둡니다. First create the per-user credential config with hidden input, then keep only a key-free entry in the client:
+
+```bash
+korean-law-mcp setup --mode on-demand --skip-skill-install
+```
 
 ```json
 {
   "mcpServers": {
     "korean-law": {
-      "command": "korean-law-mcp",
-      "env": { "LAW_OC": "your-key" }
+      "command": "korean-law-mcp"
     }
   }
 }
@@ -190,18 +195,20 @@ get_annexes(lawName="여권법 시행령", bylSeq="000000")
 }
 ```
 
-### Docker (자체 호스팅)
+### Docker (자체 호스팅) / Self-hosted Docker
+
+저장소 밖의 `0600` env 파일 또는 컨테이너 비밀 저장소를 사용합니다. Use a `0600` env file outside the repository or a container secret store.
 
 ```bash
 docker build -t korean-law-mcp .
-docker run -e LAW_OC=your-key -p 3000:3000 korean-law-mcp
+docker run --env-file /secure/path/korean-law.env -p 3000:3000 korean-law-mcp
 ```
 
 ---
 
-## Security
+## Security / 보안
 
-- **API 키**: 환경변수만 사용, 로그에 노출 금지
+- **API 키 / API key**: 사용자 설정 또는 비밀 저장소 주입 환경변수만 사용하고 로그·URL·명령행에 노출하지 않음 / Use per-user config or secret-store injection; never expose it in logs, URLs, or command arguments
 - **요청 격리**: `session-state.ts`의 AsyncLocalStorage로 요청별 API 키 분리 (stateless 모드, race condition 방지)
 - **입력 검증**: Zod 스키마로 모든 도구 입력 검증
 - **Rate Limiting**: `RATE_LIMIT_RPM` 환경변수 (기본 60 req/min)

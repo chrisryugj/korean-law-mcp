@@ -2,11 +2,15 @@
 
 const assert = require("assert")
 const { spawnSync } = require("child_process")
+const { existsSync, mkdtempSync, readFileSync, rmSync } = require("fs")
+const { tmpdir } = require("os")
+const { join } = require("path")
 
-function runCli(args, extraEnv = {}) {
+function runCli(args, extraEnv = {}, input) {
   return spawnSync(process.execPath, ["build/cli.js", ...args], {
     cwd: process.cwd(),
     encoding: "utf8",
+    input,
     env: {
       ...process.env,
       ...extraEnv,
@@ -21,6 +25,8 @@ function combinedOutput(result) {
 
 async function main() {
   const cliInput = await import("../build/lib/cli-input.js")
+  const shellPayload = "$(touch /tmp/korean-law-must-not-execute)"
+  assert.strictEqual(cliInput.parseCliQueryInput(shellPayload), shellPayload)
   assert.throws(
     () => cliInput.parseDirectToolInput(
       JSON.stringify({ query: "민법", apiKey: "repl-json-secret" })
@@ -35,6 +41,46 @@ async function main() {
   const help = runCli(["help", "search_law"])
   assert.strictEqual(help.status, 0, combinedOutput(help))
   assert.strictEqual(combinedOutput(help).includes("--apiKey"), false)
+
+  const queryHelp = runCli(["query", "--help"])
+  assert.strictEqual(queryHelp.status, 0, combinedOutput(queryHelp))
+  assert.match(combinedOutput(queryHelp), /--stdin/)
+
+  const sandbox = mkdtempSync(join(tmpdir(), "korean-law-cli-"))
+  const sentinel = join(sandbox, "executed")
+  const maliciousQuestion = `$(touch ${sentinel})`
+  const isolatedEnv = {
+    HOME: sandbox,
+    XDG_CONFIG_HOME: join(sandbox, ".config"),
+    APPDATA: join(sandbox, "AppData"),
+    LAW_OC: "",
+    KOREAN_LAW_API_KEY: "",
+  }
+  const stdinQuery = runCli(
+    ["query", "--stdin"],
+    isolatedEnv,
+    `${maliciousQuestion}\n`
+  )
+  assert.notStrictEqual(stdinQuery.status, 0)
+  assert.strictEqual(existsSync(sentinel), false)
+  assert.match(combinedOutput(stdinQuery), /MOLEG API key is required/)
+
+  const missingQuestion = runCli(["query"], isolatedEnv)
+  assert.notStrictEqual(missingQuestion.status, 0)
+  assert.match(combinedOutput(missingQuestion), /Enter a question/)
+
+  const mixedQuestion = runCli(
+    ["query", "민법", "--stdin"],
+    isolatedEnv,
+    "ignored\n"
+  )
+  assert.notStrictEqual(mixedQuestion.status, 0)
+  assert.match(combinedOutput(mixedQuestion), /Do not combine --stdin/)
+  rmSync(sandbox, { recursive: true, force: true })
+
+  const skill = readFileSync("skills/korean-law/SKILL.md", "utf8")
+  assert.match(skill, /korean-law query --stdin/)
+  assert.doesNotMatch(skill, /korean-law query ["']<(?:question|질문)>["']/)
 
   const argvSecret = "qa-argv-secret"
   const rejectedOption = runCli([

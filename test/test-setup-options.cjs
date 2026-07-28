@@ -46,7 +46,8 @@ async function main() {
     "--skill",
     "korean-law",
     "--agent",
-    "*",
+    "claude-code",
+    "codex",
     "--yes",
     "--copy",
   ])
@@ -67,6 +68,13 @@ async function main() {
   assert.strictEqual(windows.env.Path, "C:\\Windows\\System32")
   assert.strictEqual(windows.env.LAW_OC, undefined)
   assert.strictEqual(windows.env.GITHUB_TOKEN, undefined)
+  assert.deepStrictEqual(
+    onDemand.getExpectedGlobalSkillFiles("/tmp/qa-home"),
+    [
+      "/tmp/qa-home/.claude/skills/korean-law/SKILL.md",
+      "/tmp/qa-home/.agents/skills/korean-law/SKILL.md",
+    ]
+  )
 
   const manualEntry = setupWizard.buildManualConfigEntry()
   const serializedEntry = JSON.stringify(manualEntry)

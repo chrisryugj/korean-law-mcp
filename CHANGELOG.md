@@ -6,6 +6,7 @@
 
 - **전역 온디맨드 Agent Skill / Global on-demand Agent Skill**: `skills/korean-law`를 추가해 Claude Code·Codex 등 지원 에이전트에서 법률 질의가 있을 때만 CLI를 실행하고 종료합니다. Added `skills/korean-law` so supported agents invoke the CLI only for legal queries.
 - **온디맨드 설치 모드 / On-demand setup mode**: `korean-law-mcp setup --mode on-demand`가 사용자별 API 키 설정과 전역 Skill 설치를 수행하며 상시 `mcpServers` 항목은 만들지 않습니다. The new setup mode configures per-user credentials and installs the global Skill without a persistent MCP registration.
+- **설치 후 검증 / Post-install verification**: setup은 Claude Code와 Codex의 실제 Skill 파일 및 전역 목록을 확인하며 부분 설치를 성공으로 보고하지 않습니다. Setup verifies the actual Claude Code and Codex Skill files plus the global list instead of accepting partial installation.
 - **플랫폼별 인증 설정 / Platform credential config**: 환경변수 우선순위를 유지하면서 macOS·Linux·Windows 사용자 설정 파일을 CLI와 MCP가 공통으로 읽습니다. CLI and MCP now resolve a platform-specific user config after environment variables.
 - **stdin 질의 / stdin queries**: `korean-law query --stdin`으로 사용자 질문을 shell command에 삽입하지 않고 전달할 수 있습니다. `korean-law query --stdin` accepts user questions without interpolating them into a shell command.
 
@@ -16,13 +17,17 @@
 - 설정 파일은 심볼릭 링크·비정상 파일·1MB 초과 입력을 거부하고 같은 디렉터리의 `0600` 임시 파일을 원자적으로 교체합니다. Config writes reject symlinks, non-regular files, and inputs over 1MB, then atomically replace from a `0600` sibling temporary file.
 - 설정 파일 읽기는 `O_NOFOLLOW` file descriptor와 `fstat`을 사용해 심볼릭 링크·FIFO 교체 경쟁을 차단합니다. Config reads use an `O_NOFOLLOW` file descriptor plus `fstat` to block symlink and FIFO replacement races.
 - 외부 Skill 설치기는 Node 20 호환 `skills@1.5.18`로 고정하고 `--ignore-scripts`와 허용 목록 환경만 사용합니다. The external Skill installer is pinned to Node 20-compatible `skills@1.5.18`, disables lifecycle scripts, and receives only an allowlisted environment.
+- MCP SDK와 문서 파서를 최신 호환 패치로 올리고 core runtime 전이 의존성을 안전 버전으로 고정했습니다. Updated the MCP SDK and document parser to current compatible patches and pinned core transitive runtime dependencies to safe versions.
 - CLI의 `--apiKey`, JSON `apiKey`, REPL 직접 호출의 `apiKey` 입력을 제거해 프로세스 목록과 shell history 노출을 막습니다. Removed `apiKey` from CLI flags, JSON input, and direct REPL calls to prevent process-list and shell-history exposure.
+- 기존 CLI 자동화는 사용자별 설정 또는 secret-store 환경변수로 인증을 옮겨야 합니다. Existing CLI automation must migrate credentials to per-user config or a secret-store-injected environment variable.
 - URL query와 클라이언트 JSON에 키를 직접 넣는 안내를 제거하고 사용자 설정 또는 비밀 저장소 기반 HTTP 헤더로 대체했습니다. Replaced raw keys in URL queries and client JSON with user config or secret-backed HTTP headers.
 
 ### Validation / 검증
 
 - 인증정보 우선순위·파일 권한·플랫폼 경로와 setup 옵션·Skill 설치 명령 회귀 테스트를 추가했습니다. Added regression tests for credential precedence, file permissions, platform paths, setup options, and Skill installation arguments.
+- Node 20의 Linux·macOS·Windows CI에서 격리된 실제 Skill 설치를 검증합니다. CI now verifies an isolated real Skill installation on Node 20 across Linux, macOS, and Windows.
 - 한글 `README.md`와 영문 `README-EN.md`에 동일한 설치·마이그레이션 절차를 반영했습니다. Mirrored installation and migration guidance in the Korean and English READMEs.
+- 다중 PC·사용자 배포와 업데이트·복구·제거 절차를 `docs/ON-DEMAND.md`에 한·영 병기로 추가했습니다. Added bilingual multi-PC rollout, update, repair, and removal guidance in `docs/ON-DEMAND.md`.
 
 ## [4.9.1] - 2026-07-27
 

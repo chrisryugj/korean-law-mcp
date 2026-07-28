@@ -1,30 +1,33 @@
-# Korean Law MCP - 개발자 가이드
+# Korean Law MCP - 개발자 가이드 / Developer Guide
 
 > **v2.3.2** | 기여자를 위한 개발 가이드
 
 ---
 
-## 개발 환경 설정
+## 개발 환경 설정 / Development setup
 
-### 요구사항
+### 요구사항 / Requirements
 
-- **Node.js**: 18.0.0 이상
+- **Node.js**: 20.19.0 이상 / 20.19.0+
 - **npm**: 9.0.0 이상
 - **TypeScript**: 5.7+ (프로젝트 종속성에 포함)
 
-### 초기 설정
+### 초기 설정 / Initial setup
+
+API 키는 명령행에 넣지 말고 빌드 후 숨김 입력으로 사용자 설정에 저장합니다. Do not put the API key on the command line; after building, save it in the per-user config through hidden input.
 
 ```bash
 git clone https://github.com/chrisryugj/korean-law-mcp.git
 cd korean-law-mcp
-npm install
+npm ci
 npm run build
-LAW_OC=your-api-key node build/index.js
+node build/index.js setup --mode on-demand --skip-skill-install
+node build/index.js
 ```
 
-### API 키 발급
+### API 키 발급 / Get an API key
 
-[법제처 Open API](https://open.law.go.kr/LSO/openApi/guideResult.do)에서 무료 발급.
+[법제처 Open API](https://open.law.go.kr/LSO/openApi/guideResult.do)에서 무료 발급합니다. Get a free key from the MOLEG Open API portal.
 
 ---
 
@@ -93,8 +96,7 @@ import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 
 export const NewToolSchema = z.object({
-  param1: z.string().describe("파라미터 설명"),
-  apiKey: z.string().optional().describe("API 키")
+  param1: z.string().describe("파라미터 설명 / Parameter description")
 })
 
 export type NewToolInput = z.infer<typeof NewToolSchema>
@@ -104,7 +106,7 @@ export async function newTool(
   input: NewToolInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const response = await apiClient.someMethod(input.param1, { apiKey: input.apiKey })
+    const response = await apiClient.someMethod(input.param1)
     return { content: [{ type: "text", text: formatResult(response) }] }
   } catch (error) {
     return {
@@ -131,24 +133,24 @@ import { NewToolSchema, newTool } from "./tools/new-tool.js"
 }
 ```
 
-### Step 3: 빌드 & 테스트
+### Step 3: 빌드 & 테스트 / Build and test
 
 ```bash
 npm run build
-LAW_OC=your-key node build/index.js  # STDIO 모드 테스트
+node build/index.js  # 사용자 설정을 이용한 STDIO 테스트 / STDIO test with user config
 npx @modelcontextprotocol/inspector build/index.js  # Inspector 테스트
 ```
 
 ---
 
-## 개발 워크플로우
+## 개발 워크플로우 / Development workflow
 
 ```bash
 # Watch 모드
 npm run watch
 
-# 다른 터미널에서 서버 실행
-LAW_OC=your-key node build/index.js
+# 다른 터미널에서 서버 실행 / Run the server in another terminal
+node build/index.js
 
 # CLI 테스트
 npm run cli -- search_law --query "민법"
@@ -191,11 +193,13 @@ npm publish
 flyctl deploy
 ```
 
-### Docker
+### Docker / Docker
+
+저장소 밖의 `0600` env 파일이나 컨테이너 비밀 저장소를 사용합니다. Use a `0600` env file outside the repository or a container secret store.
 
 ```bash
 docker build -t korean-law-mcp .
-docker run -e LAW_OC=your-key -p 3000:3000 korean-law-mcp
+docker run --env-file /secure/path/korean-law.env -p 3000:3000 korean-law-mcp
 ```
 
 ---

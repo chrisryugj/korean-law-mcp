@@ -34,6 +34,7 @@ import { resolveLawApiKey } from "./lib/law-credential.js"
 import {
   parseCliJsonInput,
   parseDirectToolInput,
+  resolveCliQuery,
 } from "./lib/cli-input.js"
 
 function getPublicCliOptions(schema: z.ZodSchema): CliOption[] {
@@ -202,14 +203,18 @@ function createProgram(): Command {
 
   // ── 자연어 쿼리 (기본 명령) ──
   program
-    .command("query <question...>")
+    .command("query [question...]")
     .alias("q")
     .description("자연어로 법령 조회 (예: korean-law query 민법 제1조)")
     .option("-v, --verbose", "라우팅 상세 정보 출력")
     .option("--json", "JSON 형식으로 출력")
-    .action(async (words: string[], opts: { verbose?: boolean; json?: boolean }) => {
+    .option("--stdin", "표준입력에서 질문 읽기 / Read the question from stdin")
+    .action(async (
+      words: string[] | undefined,
+      opts: { verbose?: boolean; json?: boolean; stdin?: boolean }
+    ) => {
+      const query = await resolveCliQuery(words, opts.stdin === true)
       const apiClient = getApiClient()
-      const query = words.join(" ")
 
       if (opts.json) {
         await executeNaturalQueryJson(apiClient, query)
