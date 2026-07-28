@@ -265,10 +265,7 @@ export async function runSetup(args: readonly string[] = []): Promise<void> {
   await runMcpSetup()
 }
 
-async function runMcpSetup(): Promise<void> {
-  await printBanner()
-
-  // Step 1: API 키
+async function configureMcpCredential(): Promise<boolean> {
   stepHeader(1, 3, "법제처 API 키")
   console.log(`  ${c.dim}발급: https://open.law.go.kr/LSO/openApi/guideResult.do${c.reset}`)
   console.log(`  ${c.dim}입력값은 화면에 표시되지 않습니다. Enter로 건너뛸 수 있습니다.${c.reset}`)
@@ -281,68 +278,75 @@ async function runMcpSetup(): Promise<void> {
     console.log(`  ${c.yellow}-${c.reset} 건너뜀`)
   }
   console.log()
-  const hasApiKey = Boolean(apiKey || readStoredLawApiKey())
+  return Boolean(apiKey || readStoredLawApiKey())
+}
 
+function printClientChoices(clients: readonly ClientConfig[]): void {
+  clients.forEach((client, index) => {
+    const exists = existsSync(client.configPath)
+    const badge = exists ? `${c.green} [감지됨]${c.reset}` : ""
+    const number = `${c.cyan}${String(index + 1).padStart(2)}${c.reset}`
+    console.log(`  ${number}) ${c.white}${client.name}${c.reset}${badge}`)
+  })
+  console.log()
+}
+
+async function selectMcpClients(
+  rl: ReturnType<typeof createInterface>
+): Promise<readonly ClientConfig[] | undefined> {
+  stepHeader(2, 3, "MCP 클라이언트 선택")
+  const clients = detectClients()
+  printClientChoices(clients)
+  const input = (await rl.question(
+    `  ${c.cyan}>${c.reset} 번호 (예: 1,3): `
+  )).trim()
+  const selected = input
+    .split(",")
+    .map((value) => parseInt(value.trim(), 10) - 1)
+    .filter((index) => index >= 0 && index < clients.length)
+    .map((index) => clients[index])
+
+  if (selected.length > 0) return selected
+  const message = input ? "유효한 선택 없음" : "선택 없음"
+  console.log(`\n  ${c.yellow}${message}${c.reset} — 수동 설정 안내:`)
+  printManualConfig()
+  return undefined
+}
+
+async function updateMcpClients(clients: readonly ClientConfig[]): Promise<void> {
+  console.log()
+  stepHeader(3, 3, "설정 파일 업데이트")
+  const lawApiProtocol = getLawApiProtocol()
+  const entry = buildServerEntry(lawApiProtocol)
+  for (const client of clients) {
+    await sleep(150)
+    try {
+      const config = await readJsonFile(client.configPath)
+      const key = client.format
+      const serverEntry = key === "context_servers"
+        ? buildZedEntry(lawApiProtocol)
+        : entry
+      const servers = (config[key] ?? {}) as Record<string, unknown>
+      await writeJsonFile(client.configPath, {
+        ...config,
+        [key]: { ...servers, "korean-law": serverEntry },
+      })
+      successLine(client.name, client.configPath)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      failLine(client.name, message)
+    }
+  }
+}
+
+async function runMcpSetup(): Promise<void> {
+  await printBanner()
+  const hasApiKey = await configureMcpCredential()
   const rl = createInterface({ input: stdin, output: stdout })
   try {
-    // Step 2: 클라이언트 선택
-    stepHeader(2, 3, "MCP 클라이언트 선택")
-    const clients = detectClients()
-    clients.forEach((cl, i) => {
-      const exists = existsSync(cl.configPath)
-      const badge = exists ? `${c.green} [감지됨]${c.reset}` : ""
-      const num = `${c.cyan}${String(i + 1).padStart(2)}${c.reset}`
-      console.log(`  ${num}) ${c.white}${cl.name}${c.reset}${badge}`)
-    })
-    console.log()
-    const clientInput = (await rl.question(`  ${c.cyan}>${c.reset} 번호 (예: 1,3): `)).trim()
-
-    if (!clientInput) {
-      console.log(`\n  ${c.yellow}선택 없음${c.reset} — 수동 설정 안내:`)
-      printManualConfig()
-      return
-    }
-
-    const indices = clientInput
-      .split(",")
-      .map((s) => parseInt(s.trim(), 10) - 1)
-      .filter((i) => i >= 0 && i < clients.length)
-
-    if (indices.length === 0) {
-      console.log(`\n  ${c.yellow}유효한 선택 없음${c.reset} — 수동 설정 안내:`)
-      printManualConfig()
-      return
-    }
-
-    // Step 3: 설정 파일 업데이트
-    console.log()
-    stepHeader(3, 3, "설정 파일 업데이트")
-    const lawApiProtocol = getLawApiProtocol()
-    const entry = buildServerEntry(lawApiProtocol)
-
-    for (const idx of indices) {
-      const client = clients[idx]
-      await sleep(150)
-      try {
-        const config = await readJsonFile(client.configPath)
-        const key = client.format
-        const serverEntry = key === "context_servers" ? buildZedEntry(lawApiProtocol) : entry
-        const servers = (config[key] ?? {}) as Record<string, unknown>
-        const nextConfig = {
-          ...config,
-          [key]: {
-            ...servers,
-            "korean-law": serverEntry,
-          },
-        }
-        await writeJsonFile(client.configPath, nextConfig)
-        successLine(client.name, client.configPath)
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
-        failLine(client.name, msg)
-      }
-    }
-
+    const clients = await selectMcpClients(rl)
+    if (!clients) return
+    await updateMcpClients(clients)
     await printComplete(hasApiKey)
   } finally {
     rl.close()

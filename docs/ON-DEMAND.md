@@ -26,7 +26,7 @@ npx --yes --ignore-scripts korean-law-mcp@4.10.0 setup --mode on-demand
 
 ## 안전한 호출 / Safe invocation
 
-에이전트는 구조화된 argv로 고정 명령을 시작하고 질문을 별도 표준입력으로 전달해야 합니다. Agents must start a fixed command with structured argv and send the question separately through stdin:
+에이전트는 구조화된 argv로 고정 명령을 시작하고 질문 전체를 별도 표준입력으로 쓴 뒤 stdin을 닫아 EOF를 전달해야 합니다. Agents must start a fixed command with structured argv, write the complete question separately to stdin, then close stdin to deliver EOF:
 
 ```text
 argv: ["korean-law", "query", "--stdin"]
@@ -65,3 +65,4 @@ npx --yes --ignore-scripts skills@1.5.18 remove korean-law --global --agent clau
 4. 격리된 사용자 홈에서 setup, 두 Skill 파일, 전역 목록, `0600` 인증 파일을 확인합니다. Verify setup, both Skill files, the global list, and the `0600` credential file in an isolated user home.
 5. 고정 명령과 stdin으로 실제 법률 질의를 실행하고 프로세스가 남지 않는지 확인합니다. Run a live legal query with the fixed command and stdin, then confirm no process remains.
 6. GitHub PR을 병합한 뒤 같은 커밋으로 npm 패키지와 GitHub Release를 게시합니다. After merging the GitHub PR, publish the npm package and GitHub Release from the same commit.
+7. `npm run release:verify-published`로 고정 버전이 실제 설치 가능한지 확인한 뒤 릴리스를 공지합니다. Run `npm run release:verify-published` to confirm that the pinned version is installable before announcing the release.

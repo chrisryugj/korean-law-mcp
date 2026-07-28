@@ -699,9 +699,9 @@ npx --yes --ignore-scripts korean-law-mcp@4.10.0 setup --mode on-demand --skip-s
 
 ---
 
-### 방법 4: 내 컴퓨터에 직접 설치 (오프라인 가능)
+### 방법 4: 내 컴퓨터에 직접 설치 / Local MCP installation
 
-인터넷 없이 쓰고 싶거나, 원격 서버를 거치지 않으려면 직접 설치할 수 있습니다.
+호스팅된 원격 MCP 서버를 거치지 않고 로컬에서 MCP 프로세스를 실행하는 방식입니다. 최초 설치와 `law.go.kr` 법령 질의에는 인터넷 연결이 필요하므로 오프라인 모드는 아닙니다. This runs the MCP process locally without the hosted remote MCP endpoint; initial installation and `law.go.kr` queries still require internet access, so it is not an offline mode.
 
 **사전 준비 / Prerequisite:** [Node.js](https://nodejs.org) 20.19 이상 / Node.js 20.19+
 
@@ -757,9 +757,9 @@ korean-law list --category 판례            # 카테고리별 필터
 korean-law help search_law                 # 도구별 도움말
 ```
 
-에이전트나 스크립트에서는 고정된 argv `korean-law query --stdin`을 시작한 뒤 질문을 별도의 표준입력으로 보내세요. 사용자 텍스트를 셸 문자열, 명령 치환 또는 파이프에 결합하지 마세요. In agents and scripts, start the fixed argv `korean-law query --stdin`, then send the question through stdin; never interpolate user text into a shell string, command substitution, or pipeline.
+에이전트나 스크립트에서는 고정된 argv `korean-law query --stdin`을 시작한 뒤 질문 전체를 별도의 표준입력으로 보내고 stdin을 닫아 EOF를 전달하세요. 사용자 텍스트를 셸 문자열, 명령 치환 또는 파이프에 결합하지 마세요. In agents and scripts, start the fixed argv `korean-law query --stdin`, send the complete question through stdin, then close stdin to deliver EOF; never interpolate user text into a shell string, command substitution, or pipeline.
 
-전역 CLI가 없으면 Skill은 고정 버전을 `npx`로 일회 실행하므로 첫 질의에 다운로드 지연이 생길 수 있습니다. 반복 사용이나 오프라인 사용은 위 `npm install -g` 설치를 권장합니다. Without a global CLI, the Skill uses a pinned one-shot `npx` fallback, so the first query can incur download latency; install the CLI globally for frequent or offline use.
+전역 CLI가 없으면 Skill은 고정 버전을 `npx`로 일회 실행하므로 첫 질의에 다운로드 지연이 생길 수 있습니다. 반복 다운로드를 피하려면 위 `npm install -g` 설치를 권장합니다. Without a global CLI, the Skill uses a pinned one-shot `npx` fallback, so the first query can incur download latency; install the CLI globally to avoid repeated downloads.
 
 ---
 

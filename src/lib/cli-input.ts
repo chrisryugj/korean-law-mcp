@@ -1,6 +1,8 @@
 import { z } from "zod"
-import { createInterface } from "node:readline/promises"
+import type { Readable } from "node:stream"
+import { StringDecoder } from "node:string_decoder"
 
+const MAX_CLI_QUERY_CHARACTERS = 20_000
 const CliQuerySchema = z.string()
   .trim()
   .min(
@@ -8,7 +10,7 @@ const CliQuerySchema = z.string()
     "질문을 입력하세요. / Enter a question."
   )
   .max(
-    20_000,
+    MAX_CLI_QUERY_CHARACTERS,
     "질문은 20,000자 이하여야 합니다. / The question must be 20,000 characters or fewer."
   )
 
@@ -30,25 +32,32 @@ export function parseCliQueryInput(rawInput: string): string {
 }
 
 async function readCliQueryFromStdin(
-  input: NodeJS.ReadableStream = process.stdin
+  input: Readable = process.stdin
 ): Promise<string> {
-  const reader = createInterface({ input, terminal: false })
+  const decoder = new StringDecoder("utf8")
+  let query = ""
   try {
-    return parseCliQueryInput(await reader.question(""))
+    for await (const chunk of input) {
+      query += typeof chunk === "string"
+        ? chunk
+        : decoder.write(Buffer.from(chunk))
+      if (query.length > MAX_CLI_QUERY_CHARACTERS) {
+        return parseCliQueryInput(query)
+      }
+    }
+    return parseCliQueryInput(query + decoder.end())
   } catch (error) {
     if (error instanceof z.ZodError) throw error
     throw new Error(
       "표준입력에서 질문을 읽지 못했습니다. / Failed to read the question from stdin."
     )
-  } finally {
-    reader.close()
   }
 }
 
 export async function resolveCliQuery(
   words: readonly string[] | undefined,
   useStdin: boolean,
-  input: NodeJS.ReadableStream = process.stdin
+  input: Readable = process.stdin
 ): Promise<string> {
   if (useStdin && words?.length) {
     throw new Error(

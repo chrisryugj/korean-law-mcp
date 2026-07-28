@@ -385,9 +385,9 @@ korean-law list --category 판례          # filter by category
 korean-law help search_law               # tool help
 ```
 
-In agents and scripts, start the fixed argv `korean-law query --stdin`, then send the question through stdin; never interpolate user text into a shell string, command substitution, or pipeline. 에이전트·스크립트에서는 고정 argv를 시작한 뒤 질문을 별도 표준입력으로 전달하고 셸 명령 문자열에 결합하지 마세요.
+In agents and scripts, start the fixed argv `korean-law query --stdin`, send the complete question through stdin, then close stdin to deliver EOF; never interpolate user text into a shell string, command substitution, or pipeline. 에이전트·스크립트에서는 고정 argv를 시작한 뒤 질문 전체를 표준입력으로 보내고 stdin을 닫아 EOF를 전달하며, 셸 명령 문자열에 결합하지 마세요.
 
-Without a global CLI, the Skill uses a pinned one-shot `npx` fallback, so the first query can incur download latency. Install the CLI globally for frequent or offline use. 전역 CLI가 없으면 첫 질의에 다운로드 지연이 생길 수 있으므로 반복·오프라인 사용은 전역 설치를 권장합니다.
+Without a global CLI, the Skill uses a pinned one-shot `npx` fallback, so the first query can incur download latency. Install the CLI globally to avoid repeated downloads. 전역 CLI가 없으면 첫 질의에 다운로드 지연이 생길 수 있으므로 반복 다운로드를 피하려면 전역 설치를 권장합니다.
 
 ### Option 4: Docker
 

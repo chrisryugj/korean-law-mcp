@@ -22,6 +22,9 @@ function main() {
   assert.strictEqual(plugin.mcpServers["korean-law"].args.includes(expectedPin), true)
   assert.strictEqual(packageJson.files.includes("skills"), true)
   assert.strictEqual(packageJson.files.includes("docs/ON-DEMAND.md"), true)
+  assert.match(packageJson.scripts["release:preflight"], / absent$/)
+  assert.match(packageJson.scripts["release:verify-published"], / published$/)
+  assert.match(readFileSync("CHANGELOG.md", "utf8"), /4\.10\.0.*Unreleased/)
 
   for (const path of [
     "README.md",

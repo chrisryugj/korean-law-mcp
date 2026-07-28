@@ -39,7 +39,8 @@
     "typecheck": "tsc --noEmit",
     "dead-code": "knip",
     "gc": "npm run typecheck && npm run dead-code && npm test && npm run build",
-    "release:preflight": "node scripts/check-release-version.mjs",
+    "release:preflight": "node scripts/check-release-version.mjs absent",
+    "release:verify-published": "node scripts/check-release-version.mjs published",
     "prepublishOnly": "npm run build",
     "prepare": "husky"
   },

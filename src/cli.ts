@@ -208,7 +208,7 @@ function createProgram(): Command {
     .description("자연어로 법령 조회 (예: korean-law query 민법 제1조)")
     .option("-v, --verbose", "라우팅 상세 정보 출력")
     .option("--json", "JSON 형식으로 출력")
-    .option("--stdin", "표준입력에서 질문 읽기 / Read the question from stdin")
+    .option("--stdin", "EOF까지 표준입력 읽기 / Read stdin until EOF")
     .action(async (
       words: string[] | undefined,
       opts: { verbose?: boolean; json?: boolean; stdin?: boolean }

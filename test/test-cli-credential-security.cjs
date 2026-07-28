@@ -5,6 +5,7 @@ const { spawnSync } = require("child_process")
 const { existsSync, mkdtempSync, readFileSync, rmSync } = require("fs")
 const { tmpdir } = require("os")
 const { join } = require("path")
+const { Readable } = require("stream")
 
 function runCli(args, extraEnv = {}, input) {
   return spawnSync(process.execPath, ["build/cli.js", ...args], {
@@ -27,6 +28,22 @@ async function main() {
   const cliInput = await import("../build/lib/cli-input.js")
   const shellPayload = "$(touch /tmp/korean-law-must-not-execute)"
   assert.strictEqual(cliInput.parseCliQueryInput(shellPayload), shellPayload)
+  assert.strictEqual(
+    await cliInput.resolveCliQuery(
+      [],
+      true,
+      Readable.from(["제1문단\n", "제2문단\n", "제3문단\n"])
+    ),
+    "제1문단\n제2문단\n제3문단"
+  )
+  await assert.rejects(
+    cliInput.resolveCliQuery(
+      [],
+      true,
+      Readable.from(["가".repeat(20_001)])
+    ),
+    /20,000 characters or fewer/
+  )
   assert.throws(
     () => cliInput.parseDirectToolInput(
       JSON.stringify({ query: "민법", apiKey: "repl-json-secret" })

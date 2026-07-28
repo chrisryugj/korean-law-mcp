@@ -10,8 +10,8 @@ description: "대한민국 법령, 시행령, 시행규칙, 판례, 행정규칙
 ## 실행 절차 / Workflow
 
 1. 현재 세션에 Korean Law MCP 도구가 이미 있으면 해당 도구를 우선 사용한다. If Korean Law MCP tools are already available, use them first.
-2. MCP 도구가 없으면 구조화된 argv로 고정 명령 `korean-law query --stdin`을 시작하고, 사용자의 질문은 별도로 표준입력에 전달한다. Without MCP tools, start the fixed command `korean-law query --stdin` with structured argv, then send the user's question separately through stdin.
-3. CLI가 PATH에 없으면 아래의 고정된 일회성 명령을 시작한 뒤 질문을 표준입력에 전달한다. If the CLI is not on PATH, start this fixed one-shot command, then send the question through stdin:
+2. MCP 도구가 없으면 구조화된 argv로 고정 명령 `korean-law query --stdin`을 시작하고, 사용자의 질문 전체를 별도 표준입력에 쓴 뒤 stdin을 닫아 EOF를 전달한다. Without MCP tools, start the fixed command `korean-law query --stdin` with structured argv, write the complete question separately to stdin, then close stdin to send EOF.
+3. CLI가 PATH에 없으면 아래의 고정된 일회성 명령을 시작한 뒤 같은 방식으로 질문 전체와 EOF를 전달한다. If the CLI is not on PATH, start this fixed one-shot command, then send the complete question and EOF the same way:
 
    ```bash
    npx --yes --ignore-scripts --package korean-law-mcp@4.10.0 -- korean-law query --stdin
