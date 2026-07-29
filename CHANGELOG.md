@@ -28,6 +28,7 @@
 - Node 20의 Linux·macOS·Windows CI에서 격리된 실제 Skill 설치를 검증합니다. CI now verifies an isolated real Skill installation on Node 20 across Linux, macOS, and Windows.
 - 한글 `README.md`와 영문 `README-EN.md`에 동일한 설치·마이그레이션 절차를 반영했습니다. Mirrored installation and migration guidance in the Korean and English READMEs.
 - 다중 PC·사용자 배포와 업데이트·복구·제거 절차를 `docs/ON-DEMAND.md`에 한·영 병기로 추가했습니다. Added bilingual multi-PC rollout, update, repair, and removal guidance in `docs/ON-DEMAND.md`.
+- 설치 검증은 child stream 종료까지 기다리고, 실패 시 크기가 제한된 stdout·stderr 진단을 함께 제공합니다. Installation verification waits for child streams to close and preserves bounded stdout and stderr diagnostics on failure.
 
 ## [4.9.1] - 2026-07-27
 

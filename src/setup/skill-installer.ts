@@ -4,8 +4,10 @@ import { platform } from "node:os"
 import { z } from "zod"
 import {
   captureCommand,
+  formatCommandOutput,
   runCommand,
   type CommandInvocation,
+  type CommandOutput,
 } from "./child-command.js"
 
 const SKILLS_CLI_NAME = "skills"
@@ -28,6 +30,7 @@ const SkillListSchema = z.array(z.object({
   scope: z.literal("global"),
   agents: z.array(z.string()),
 }))
+type SkillList = z.infer<typeof SkillListSchema>
 
 export function buildSkillInstallInvocation(
   packageRoot: string,
@@ -113,7 +116,7 @@ async function verifySkillInstallation(
   userHome: string
 ): Promise<void> {
   const output = await captureCommand(buildSkillListInvocation(installInvocation))
-  const installed = SkillListSchema.parse(JSON.parse(output))
+  const installed = parseSkillListOutput(output)
   if (!installed.some((skill) => skill.name === SKILL_NAME)) {
     throw new Error(
       "전역 Skill 목록에서 korean-law를 확인하지 못했습니다. / " +
@@ -121,6 +124,18 @@ async function verifySkillInstallation(
     )
   }
   verifySkillFiles(userHome)
+}
+
+export function parseSkillListOutput(output: CommandOutput): SkillList {
+  try {
+    return SkillListSchema.parse(JSON.parse(output.stdout))
+  } catch {
+    throw new Error(
+      "전역 Skill 목록 출력을 해석하지 못했습니다. / " +
+      "Failed to parse the global Skill list output" +
+      formatCommandOutput(output)
+    )
+  }
 }
 
 export async function installGlobalSkill(

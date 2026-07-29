@@ -96,7 +96,41 @@ async function main() {
     ],
     env: process.env,
   })
-  assert.strictEqual(delayedOutput, "prefixsuffix")
+  assert.deepStrictEqual(delayedOutput, {
+    stdout: "prefixsuffix",
+    stderr: "",
+  })
+
+  await assert.rejects(
+    childCommand.captureCommand({
+      command: process.execPath,
+      args: [
+        "-e",
+        "process.stdout.write('out'); process.stderr.write('err'); process.exit(7)",
+      ],
+      env: process.env,
+    }),
+    (error) => error.message.includes("code 7") &&
+      error.message.includes("stdout: out") &&
+      error.message.includes("stderr: err")
+  )
+  await assert.rejects(
+    childCommand.captureCommand({
+      command: "/path/that/does/not/exist",
+      args: [],
+      env: process.env,
+    }),
+    /ENOENT/
+  )
+  assert.throws(
+    () => skillInstaller.parseSkillListOutput({
+      stdout: "not-json",
+      stderr: "warning",
+    }),
+    (error) => error.message.includes("Failed to parse") &&
+      error.message.includes("stdout: not-json") &&
+      error.message.includes("stderr: warning")
+  )
 
   const manualEntry = setupWizard.buildManualConfigEntry()
   const serializedEntry = JSON.stringify(manualEntry)
