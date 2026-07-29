@@ -142,7 +142,7 @@ async function runCommand(invocation: CommandInvocation): Promise<void> {
   })
 }
 
-async function captureCommand(invocation: CommandInvocation): Promise<string> {
+export async function captureCommand(invocation: CommandInvocation): Promise<string> {
   return await new Promise<string>((resolvePromise, reject) => {
     const child = spawn(invocation.command, invocation.args, {
       stdio: ["ignore", "pipe", "pipe"],
@@ -153,7 +153,7 @@ async function captureCommand(invocation: CommandInvocation): Promise<string> {
     child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk))
     child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk))
     child.once("error", reject)
-    child.once("exit", (code) => {
+    child.once("close", (code) => {
       if (code === 0) {
         resolvePromise(Buffer.concat(stdout).toString("utf8"))
         return

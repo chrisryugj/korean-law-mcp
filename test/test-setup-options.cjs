@@ -76,6 +76,24 @@ async function main() {
     ]
   )
 
+  const delayedOutput = await onDemand.captureCommand({
+    command: process.execPath,
+    args: [
+      "-e",
+      [
+        "const { spawn } = require('node:child_process')",
+        "process.stdout.write('prefix')",
+        "const child = spawn(process.execPath, [",
+        "  '-e',",
+        "  \"setTimeout(() => process.stdout.write('suffix'), 50)\",",
+        "], { detached: true, stdio: ['ignore', 1, 2] })",
+        "child.unref()",
+      ].join("\n"),
+    ],
+    env: process.env,
+  })
+  assert.strictEqual(delayedOutput, "prefixsuffix")
+
   const manualEntry = setupWizard.buildManualConfigEntry()
   const serializedEntry = JSON.stringify(manualEntry)
   assert.strictEqual(serializedEntry.includes("LAW_OC"), false)
