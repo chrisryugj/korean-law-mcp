@@ -4,7 +4,8 @@ const assert = require("assert")
 
 async function main() {
   const setup = await import("../build/setup/setup-options.js")
-  const onDemand = await import("../build/setup/on-demand.js")
+  const childCommand = await import("../build/setup/child-command.js")
+  const skillInstaller = await import("../build/setup/skill-installer.js")
   const setupWizard = await import("../build/setup.js")
 
   assert.deepStrictEqual(setup.parseSetupOptions([]), {
@@ -34,7 +35,10 @@ async function main() {
     /Unknown setup option/
   )
 
-  const linux = onDemand.buildSkillInstallInvocation("/tmp/korean-law", "linux")
+  const linux = skillInstaller.buildSkillInstallInvocation(
+    "/tmp/korean-law",
+    "linux"
+  )
   assert.strictEqual(linux.command.endsWith("/npx"), true)
   assert.deepStrictEqual(linux.args, [
     "--yes",
@@ -54,7 +58,7 @@ async function main() {
   assert.strictEqual(linux.env.LAW_OC, undefined)
   assert.strictEqual(linux.env.KOREAN_LAW_API_KEY, undefined)
 
-  const windows = onDemand.buildSkillInstallInvocation(
+  const windows = skillInstaller.buildSkillInstallInvocation(
     "C:\\korean-law",
     "win32",
     {
@@ -69,14 +73,14 @@ async function main() {
   assert.strictEqual(windows.env.LAW_OC, undefined)
   assert.strictEqual(windows.env.GITHUB_TOKEN, undefined)
   assert.deepStrictEqual(
-    onDemand.getExpectedGlobalSkillFiles("/tmp/qa-home"),
+    skillInstaller.getExpectedGlobalSkillFiles("/tmp/qa-home"),
     [
       "/tmp/qa-home/.claude/skills/korean-law/SKILL.md",
       "/tmp/qa-home/.agents/skills/korean-law/SKILL.md",
     ]
   )
 
-  const delayedOutput = await onDemand.captureCommand({
+  const delayedOutput = await childCommand.captureCommand({
     command: process.execPath,
     args: [
       "-e",
