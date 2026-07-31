@@ -244,33 +244,91 @@ This project wraps that entire legal system into **14 structured tools** that an
 
 ## Quick Start
 
-### Option 1: MCP Server (Claude Desktop / Cursor / Windsurf)
+### Option 1A: Global on-demand Agent Skill / 전역 온디맨드 Agent Skill
+
+Recommended when running many Claude Code or Codex sessions. The Skill remains discoverable, but the CLI starts only for a legal query and exits after the response.
+
+여러 Claude Code·Codex 세션을 동시에 사용할 때 권장합니다. Skill은 항상 발견되지만 법률 질의가 있을 때만 CLI를 실행하고 응답 후 종료합니다.
+
+**Prerequisite / 사전 준비:** Node.js 20.19+
+
+```bash
+npx --yes --ignore-scripts korean-law-mcp@4.10.0 setup --mode on-demand
+```
+
+The setup performs only these three actions. 설치 과정은 다음 세 가지만 수행합니다.
+
+1. Save the MOLEG API key in the per-user platform config. / 법제처 API 키를 플랫폼별 사용자 설정에 저장
+2. Copy the global `korean-law` Agent Skill for Claude Code and Codex. / Claude Code와 Codex의 전역 영역에 Skill 복사 설치
+3. Do not register a persistent `mcpServers` entry. / 상시 `mcpServers` 항목 미등록
+
+API key input is hidden and never written to logs or Skill files. API 키 입력은 화면에 표시되지 않으며 로그나 Skill 파일에 기록되지 않습니다.
+
+“Global” means the **current OS user**, not every user or PC; run the same command once for each account on each computer. “전역”은 PC 전체가 아닌 **현재 OS 사용자 범위**이므로 각 PC·계정에서 한 번씩 실행합니다.
+
+| OS / 운영체제 | Credential config / 인증 설정 위치 |
+|---|---|
+| macOS | `~/Library/Application Support/korean-law/config.json` |
+| Linux | `${XDG_CONFIG_HOME:-~/.config}/korean-law/config.json` |
+| Windows | `%APPDATA%\korean-law\config.json` |
+
+**Migration from the Claude Code plugin / 기존 Claude Code 플러그인 마이그레이션**
+
+1. Disable the existing `korean-law` MCP plugin at user scope from `/plugin`. / `/plugin` 화면에서 기존 플러그인을 사용자 범위로 비활성화합니다.
+2. Run the on-demand setup command above. / 위 온디맨드 설치 명령을 실행합니다.
+3. Open a new session and ask a legal question. / 새 세션에서 법률 질문을 합니다.
+4. Confirm that no `korean-law` CLI process remains after the query. / 질의 종료 후 CLI 프로세스가 남지 않는지 확인합니다.
+
+Setup never disables the plugin automatically, so the user keeps control of the active mode. 설치 과정은 기존 플러그인을 자동으로 비활성화하지 않습니다.
+
+**Update or repair the Skill / Skill 업데이트·복구**
+
+Setup copies the Skill bundled with the package, so it is not tracked by the generic `skills update` command. Re-run setup with an exact released version to replace and verify both global copies. 이 Skill은 배포 패키지에서 복사되므로 일반 `skills update` 대상이 아니며, 새 릴리스의 정확한 버전으로 setup을 다시 실행해 갱신합니다.
+
+```bash
+npx --yes --ignore-scripts korean-law-mcp@4.10.0 setup --mode on-demand
+```
+
+To uninstall the Skill / Skill 제거:
+
+```bash
+npx --yes --ignore-scripts skills@1.5.18 remove korean-law --global --agent claude-code codex --yes
+```
+
+### Option 1B: Always-on MCP Server / 상시 MCP 서버
 
 **Auto setup (recommended):**
 
 ```bash
-npx korean-law-mcp setup
+npx --yes --ignore-scripts korean-law-mcp@4.10.0 setup
 ```
 
 Interactive wizard handles API key input, client selection, and config file registration.
 Supports Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Gemini CLI, Zed, and Antigravity.
 
+The plugin runs pinned `korean-law-mcp@4.10.0`. It starts one stdio process per session, so use Option 1A for many concurrent sessions.
+
+플러그인은 고정 버전 `korean-law-mcp@4.10.0`을 실행합니다. 세션마다 stdio 프로세스가 시작되므로 동시 세션이 많으면 방법 1A를 사용하세요.
+
 **Manual setup:**
 
 ```bash
-npm install -g korean-law-mcp
+npm install -g --ignore-scripts korean-law-mcp@4.10.0
 ```
 
-Add to your MCP client config:
+First save the API key through hidden input. 먼저 숨김 입력으로 사용자 인증 설정을 저장합니다.
+
+```bash
+korean-law-mcp setup --mode on-demand --skip-skill-install
+```
+
+Add a key-free entry to your MCP client config. MCP 클라이언트 설정에는 키가 없는 항목을 추가합니다.
 
 ```json
 {
   "mcpServers": {
     "korean-law": {
-      "command": "korean-law-mcp",
-      "env": {
-        "LAW_OC": "your-api-key"
-      }
+      "command": "korean-law-mcp"
     }
   }
 }
@@ -286,58 +344,40 @@ Get your free API key at [법제처 Open API](https://open.law.go.kr/LSO/openApi
 | Continue | `~/.continue/config.json` |
 | Zed | `~/.config/zed/settings.json` |
 
-### Option 2: Remote (No Install)
+### Option 2: Remote clients with secret-backed headers / 보안 헤더를 지원하는 원격 클라이언트
 
-**Claude Desktop** does not support remote HTTP MCP servers directly. Use the `mcp-remote` adapter (requires [Node.js](https://nodejs.org) 18+ for `npx`):
+Never put an API key in the URL `?oc=` query because URLs may be retained in browser history, proxies, and access logs. URL은 브라우저 기록, 프록시, access log에 남을 수 있으므로 API 키를 `?oc=` 쿼리에 넣지 마세요.
 
-```json
-{
-  "mcpServers": {
-    "korean-law": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "mcp-remote",
-        "https://korean-law-mcp.fly.dev/mcp?oc=your-api-key"
-      ]
-    }
-  }
-}
-```
+Use the endpoint only when the client can inject an HTTP header from its secret store. 클라이언트가 비밀 저장소 기반 HTTP 헤더를 지원할 때만 원격 endpoint를 사용합니다.
 
-**Cursor, Windsurf, and other clients with native remote HTTP support** — use the URL directly:
+| Field / 항목 | Value / 값 |
+|---|---|
+| Endpoint | `https://mcp.gomdori.app/law` |
+| Header | `Authorization: Bearer <secret-store reference>` |
+| Alternative header | `apikey: <secret-store reference>` |
 
-```json
-{
-  "mcpServers": {
-    "korean-law": {
-      "url": "https://korean-law-mcp.fly.dev/mcp?oc=your-api-key"
-    }
-  }
-}
-```
-
-**For web clients (Claude.ai, etc.)** — same URL works everywhere. Only 10 tools are advertised by default, no profile selection needed.
-
-> 10 tools (research + analysis + 3 law + ordinance radar + 2 unified + 2 meta) cover all 42 APIs. Use `discover_tools` → `execute_tool` for specialized tools.
+Do not write the real key into project JSON or a connector URL. Use Option 1A if Claude.ai or another client has no secret-backed header support. 실제 키를 프로젝트 JSON이나 커넥터 URL에 쓰지 말고, 보안 헤더를 지원하지 않으면 방법 1A를 사용하세요.
 
 **API Key Delivery** (priority order):
 
 | Method | Example | Notes |
 |--------|---------|-------|
-| URL query | `?oc=your-key` | Simplest for web clients. Auto-applies to entire session |
-| HTTP header | `apikey: your-key` | Also supports `law-oc`, `x-api-key`, `Authorization: Bearer` |
-| Tool parameter | `apiKey: "your-key"` | Per-tool override |
+| User config / 사용자 설정 | `setup --mode on-demand` | Recommended for local Skill, MCP, and CLI / 로컬 권장 |
+| Secret-backed header / 보안 헤더 | `Authorization: Bearer <secret>` | Recommended for remote clients / 원격 권장 |
+| Environment / 환경변수 | `LAW_OC` | Only when injected by a process secret store / 비밀 저장소 주입 시에만 |
+| URL query | `?oc=...` | Do not use / 사용 금지 |
+| CLI or tool argument / CLI·도구 인자 | `apiKey` | Do not use / 사용 금지 |
 
 > Get your free API key at [법제처 Open API](https://open.law.go.kr/LSO/openApi/guideResult.do).
 
 ### Option 3: CLI
 
 ```bash
-npm install -g korean-law-mcp
-export LAW_OC=your-api-key
+npm install -g --ignore-scripts korean-law-mcp@4.10.0
+korean-law-mcp setup --mode on-demand --skip-skill-install
 
 korean-law search_law --query "관세법"
+korean-law query --stdin                  # automation: send the question separately via stdin
 korean-law get_law_text --mst 160001 --jo "제38조"
 korean-law search_precedents --query "부당해고"
 korean-law list                          # all tools
@@ -345,11 +385,17 @@ korean-law list --category 판례          # filter by category
 korean-law help search_law               # tool help
 ```
 
+In agents and scripts, start the fixed argv `korean-law query --stdin`, send the complete question through stdin, then close stdin to deliver EOF; never interpolate user text into a shell string, command substitution, or pipeline. 에이전트·스크립트에서는 고정 argv를 시작한 뒤 질문 전체를 표준입력으로 보내고 stdin을 닫아 EOF를 전달하며, 셸 명령 문자열에 결합하지 마세요.
+
+Without a global CLI, the Skill uses a pinned one-shot `npx` fallback, so the first query can incur download latency. Install the CLI globally to avoid repeated downloads. 전역 CLI가 없으면 첫 질의에 다운로드 지연이 생길 수 있으므로 반복 다운로드를 피하려면 전역 설치를 권장합니다.
+
 ### Option 4: Docker
+
+Inject the API key from a `0600` env file outside the repository or a container secret store; never put it in the command line or image. API 키는 저장소 밖의 `0600` env 파일이나 컨테이너 비밀 저장소로 주입하고, 명령행이나 이미지에는 넣지 마세요.
 
 ```bash
 docker build -t korean-law-mcp .
-docker run -e LAW_OC=your-api-key -p 3000:3000 korean-law-mcp
+docker run --env-file /secure/path/korean-law.env -p 3000:3000 korean-law-mcp
 ```
 
 ---
@@ -400,7 +446,7 @@ User: "산업안전보건법 별표1 내용"
 - **Annex Extraction** — Downloads HWPX/HWP/PDF/XLSX/DOCX annexes and converts to Markdown ([kordoc](https://github.com/chrisryugj/kordoc) engine)
 - **8 Chain Tools** — Composite research workflows in a single call (e.g. `chain_full_research`: AI search → statutes → precedents → interpretations)
 - **Caching** — 1-hour search cache, 24-hour article cache
-- **Remote Endpoint** — Use without installation via `https://korean-law-mcp.fly.dev/mcp`
+- **Remote Endpoint / 원격 엔드포인트** — Use without installation via `https://mcp.gomdori.app/law` / 설치 없이 사용
 
 ---
 
@@ -416,6 +462,7 @@ User: "산업안전보건법 별표1 내용"
 ## Documentation
 
 - [docs/API.md](docs/API.md) — Tool reference
+- [docs/ON-DEMAND.md](docs/ON-DEMAND.md) — Multi-PC and multi-user on-demand rollout / 다중 PC·사용자 온디맨드 배포
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — System design
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — Development guide
 

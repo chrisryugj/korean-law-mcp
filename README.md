@@ -320,7 +320,7 @@ graph LR
 
 - **`fetch-with-retry.ts`에 일반 브라우저 UA 기본 헤더 주입** — 호출자 코드 변경 0, 한 줄 패치로 모든 도구 복구. `LAW_USER_AGENT` 환경변수로 override 가능
 - 에러 메시지가 "정확한 서버장비의 IP주소 및 도메인주소를 등록해 주세요"여서 IP 화이트리스트 차단으로 오인되기 쉬웠음 — 실제 원인은 UA 검증
-- claude.ai 커스텀 커넥터로 `https://korean-law-mcp.fly.dev/mcp?oc=...` 사용하던 사용자 즉시 영향. v3.5.5 배포로 자동 복구
+- 당시 URL query 인증을 쓰던 claude.ai 커스텀 커넥터 사용자에게 즉시 영향. 현재는 URL에 키를 넣지 않고 보안 헤더를 사용해야 합니다. This affected legacy URL-query connectors; current clients must use secret-backed headers instead.
 
 **v3.5.4** — 실사용 피드백 반영: NOT_FOUND 명시 시그널 전면 도입
 
@@ -541,7 +541,60 @@ MCP 도구 설계에서 **도구 수 ≠ 기능 수**입니다.
 
 ---
 
-### 방법 1: Claude Code 플러그인 (한 줄 설치, 가장 쉬움) ⚡
+### 방법 1A: 전역 온디맨드 Agent Skill (다중 세션 권장) / Global on-demand Agent Skill
+
+여러 Claude Code·Codex 세션을 동시에 사용하는 경우 이 방식을 권장합니다. Skill은 항상 발견되지만 법률 질의가 있을 때만 CLI 프로세스를 실행하고, 응답 후 바로 종료합니다.
+
+Recommended when running many Claude Code or Codex sessions. The Skill remains discoverable, but the CLI starts only for a legal query and exits after the response.
+
+**사전 준비 / Prerequisite:** Node.js 20.19 이상 / Node.js 20.19+
+
+```bash
+npx --yes --ignore-scripts korean-law-mcp@4.10.0 setup --mode on-demand
+```
+
+설치 과정은 다음 세 가지만 수행합니다. The setup performs only these three actions:
+
+1. 법제처 API 키를 플랫폼별 사용자 설정에 저장 / Save the MOLEG API key in the per-user platform config.
+2. `korean-law` Agent Skill을 Claude Code와 Codex의 전역 영역에 복사 설치 / Copy the global `korean-law` Agent Skill for Claude Code and Codex.
+3. 상시 `mcpServers` 항목은 등록하지 않음 / Do not register a persistent `mcpServers` entry.
+
+API 키 입력은 화면에 표시되지 않으며 값은 로그나 Skill 파일에 기록되지 않습니다. The API key input is hidden and never written to logs or Skill files.
+
+여기서 “전역”은 PC 전체가 아니라 **현재 OS 사용자 범위**입니다. 다른 PC나 다른 OS 사용자는 각 계정에서 한 번씩 같은 명령을 실행해야 합니다. “Global” means the **current OS user**, not every user or PC; run the same command once for each account on each computer.
+
+| 운영체제 / OS | 인증 설정 위치 / Credential config |
+|---|---|
+| macOS | `~/Library/Application Support/korean-law/config.json` |
+| Linux | `${XDG_CONFIG_HOME:-~/.config}/korean-law/config.json` |
+| Windows | `%APPDATA%\korean-law\config.json` |
+
+**기존 Claude Code 플러그인 사용자 마이그레이션 / Migration from the Claude Code plugin**
+
+1. `/plugin` 화면에서 기존 `korean-law` MCP 플러그인을 사용자 범위로 비활성화합니다. Disable the existing `korean-law` MCP plugin at user scope from `/plugin`.
+2. 위 온디맨드 설치 명령을 실행합니다. Run the on-demand setup command above.
+3. 새 세션을 열고 “민법 제1조 알려줘”처럼 질문합니다. Open a new session and ask a legal question.
+4. 질의가 끝난 뒤 `korean-law` CLI 프로세스가 남지 않는지 확인합니다. Confirm that no `korean-law` CLI process remains after the query.
+
+플러그인을 자동으로 비활성화하지 않으므로 기존 사용 방식은 사용자가 직접 선택할 수 있습니다. Setup never disables the plugin automatically, so the user keeps control of the active mode.
+
+**Skill 업데이트·복구 / Update or repair the Skill**
+
+이 설치는 배포 패키지에 포함된 Skill을 복사하므로 일반 `skills update` 추적 대상이 아닙니다. 새 릴리스의 정확한 버전으로 setup을 다시 실행하면 두 전역 설치 경로를 덮어쓰고 검증합니다. Because setup copies the Skill bundled with the package, it is not tracked by the generic `skills update` command. Re-run setup with an exact released version to replace and verify both global copies.
+
+```bash
+npx --yes --ignore-scripts korean-law-mcp@4.10.0 setup --mode on-demand
+```
+
+제거할 때는 다음 명령을 사용합니다. To uninstall the Skill:
+
+```bash
+npx --yes --ignore-scripts skills@1.5.18 remove korean-law --global --agent claude-code codex --yes
+```
+
+---
+
+### 방법 1B: Claude Code MCP 플러그인 (항상 활성화) / Always-on Claude Code plugin
 
 [Claude Code](https://claude.com/claude-code)를 쓴다면 두 줄이면 끝. API 키는 설치 중 자동으로 물어봅니다.
 
@@ -564,7 +617,7 @@ MCP 도구 설계에서 **도구 수 ≠ 기능 수**입니다.
 /plugin marketplace update korean-law-marketplace
 ```
 
-> 내부적으로 `npx korean-law-mcp@latest`를 실행하므로 npm에 배포된 최신 버전이 항상 사용됩니다.
+> 플러그인은 고정 버전 `korean-law-mcp@4.10.0`을 실행합니다. 세션마다 stdio 프로세스가 하나씩 시작되므로 동시 세션이 많으면 방법 1A를 권장합니다. The plugin runs pinned `korean-law-mcp@4.10.0`; use Method 1A when many sessions run concurrently.
 
 #### Troubleshooting: `Permission denied (publickey)` 에러
 
@@ -595,47 +648,31 @@ Failed to install: Failed to clone repository: Cloning into
 
 ---
 
-### 방법 2: Claude.ai 웹에서 바로 사용 (설치 없음)
+### 방법 2: 보안 헤더를 지원하는 원격 클라이언트 / Remote clients with secret-backed headers
 
-아무것도 설치하지 않고, 주소 하나만 입력하면 됩니다. Claude Pro/Max/Team/Enterprise 요금제가 필요합니다 (Free는 커넥터 1개만 가능).
+API 키를 URL의 `?oc=` 쿼리에 넣지 마세요. URL은 브라우저 기록, 프록시, access log에 남을 수 있습니다. Never put the API key in a URL query because URLs may be retained in browser history, proxies, and access logs.
 
-**커넥터 추가 방법:**
+원격 클라이언트가 비밀 저장소 기반 HTTP 헤더를 지원할 때만 아래 값을 등록합니다. Use the remote endpoint only when the client can inject an HTTP header from its secret store.
 
-1. [claude.ai](https://claude.ai)에 로그인합니다.
-2. 왼쪽 사이드바 하단의 **본인 이름**을 클릭합니다.
-3. **"설정"** (또는 Settings)을 선택합니다.
-4. **"커넥터"** (또는 Connectors) 메뉴로 들어갑니다.
-5. **"커스텀 커넥터"** 영역에서 **"커스텀 커넥터 추가"** 버튼을 클릭합니다.
-6. 아래 내용을 입력합니다:
-   - **이름**: `korean-law` (원하는 이름 아무거나 OK)
-   - **URL**: 아래 주소를 붙여넣으세요. `honggildong` 부분을 **0단계에서 발급받은 본인 인증키**로 바꾸세요:
+| 항목 / Field | 값 / Value |
+|---|---|
+| Endpoint | `https://mcp.gomdori.app/law` |
+| Header | `Authorization: Bearer <secret-store reference>` |
+| Alternative header | `apikey: <secret-store reference>` |
 
-```
-https://mcp.gomdori.app/law?oc=honggildong
-```
-
-7. **추가** 버튼을 누르면 등록 완료!
-
-**도구 활성화 (중요!):**
-
-8. 추가한 커넥터의 **"구성"** (또는 Configure)을 클릭합니다.
-9. 도구 목록이 나오면, 모든 도구를 **"항상 사용"** (또는 Always allow)으로 설정합니다.
-10. 이렇게 하면 매번 승인할 필요 없이 AI가 바로 법령을 검색할 수 있습니다.
-
-**사용하기:**
-
-11. 채팅 화면으로 돌아가서 "근로기준법 제74조 알려줘"라고 입력하면 끝!
-
-> **참고**: 커넥터 URL을 수정하려면 삭제 후 다시 추가해야 합니다.
-
-> v3부터 프로필 선택이 필요 없습니다. 10개 도구가 42개 API 전체를 커버합니다.
-> 기존에 `?profile=lite&oc=...` 주소를 넣으셨다면 **그대로 두셔도 됩니다** — 동일하게 작동합니다.
+실제 키를 프로젝트 JSON이나 커넥터 URL에 직접 쓰지 마세요. 헤더용 비밀 저장소를 제공하지 않는 Claude.ai 또는 다른 클라이언트에서는 방법 1A를 사용하세요. Do not write the real key into project JSON or a connector URL; use Method 1A if the client has no secret-backed header support.
 
 ---
 
-### 방법 3: AI 데스크톱 앱에서 사용 (설치 없음)
+### 방법 3: AI 데스크톱 앱에 안전하게 수동 등록 / Secure manual desktop registration
 
-Claude Desktop, Cursor, Windsurf 같은 **데스크톱 앱**을 쓰고 있다면, 설정 파일에 아래 내용을 추가하세요.
+먼저 숨김 입력으로 사용자 인증 설정을 만듭니다. First create the per-user credential config with hidden input:
+
+```bash
+npx --yes --ignore-scripts korean-law-mcp@4.10.0 setup --mode on-demand --skip-skill-install
+```
+
+그다음 Claude Desktop, Cursor, Windsurf 같은 데스크톱 앱의 설정 파일에 키가 없는 로컬 MCP 항목을 추가합니다. Then add a local MCP entry without the key:
 
 **설정 파일 위치 찾기:**
 
@@ -645,55 +682,33 @@ Claude Desktop, Cursor, Windsurf 같은 **데스크톱 앱**을 쓰고 있다면
 | Cursor | 프로젝트 폴더 안 `.cursor/mcp.json` | 프로젝트 폴더 안 `.cursor/mcp.json` |
 | Windsurf | 프로젝트 폴더 안 `.windsurf/mcp.json` | 프로젝트 폴더 안 `.windsurf/mcp.json` |
 
-#### Claude Desktop
-
-Claude Desktop은 원격 HTTP MCP 서버를 직접 연결하지 못하므로 `mcp-remote` 어댑터를 통해 연결합니다. [Node.js](https://nodejs.org) 18 이상이 필요합니다 (`npx` 사용을 위해).
-
 ```json
 {
   "mcpServers": {
     "korean-law": {
       "command": "npx",
-      "args": [
-        "-y",
-        "mcp-remote",
-        "https://mcp.gomdori.app/law?oc=honggildong"
-      ]
+      "args": ["-y", "--ignore-scripts", "korean-law-mcp@4.10.0"]
     }
   }
 }
 ```
 
-> `honggildong`을 본인 인증키로 바꾸세요. Node.js를 설치하기 싫다면 [방법 4](#방법-4-내-컴퓨터에-직접-설치-오프라인-가능)의 로컬 설치를 사용하세요.
-
-#### Cursor, Windsurf 등 (원격 HTTP 지원 클라이언트)
-
-```json
-{
-  "mcpServers": {
-    "korean-law": {
-      "url": "https://mcp.gomdori.app/law?oc=honggildong"
-    }
-  }
-}
-```
-
-> 이미 다른 MCP 서버가 설정되어 있다면, `"mcpServers": { ... }` 안에 `"korean-law": { ... }` 부분만 추가하면 됩니다.
+인증키는 위 사용자 설정에서 읽으므로 `env.LAW_OC`를 프로젝트나 클라이언트 JSON에 넣지 않습니다. The process reads the per-user credential config, so project and client JSON never contain `env.LAW_OC`.
 
 저장 후 앱을 **재시작**하면 법령 도구가 활성화됩니다.
 
 ---
 
-### 방법 4: 내 컴퓨터에 직접 설치 (오프라인 가능)
+### 방법 4: 내 컴퓨터에 직접 설치 / Local MCP installation
 
-인터넷 없이 쓰고 싶거나, 원격 서버를 거치지 않으려면 직접 설치할 수 있습니다.
+호스팅된 원격 MCP 서버를 거치지 않고 로컬에서 MCP 프로세스를 실행하는 방식입니다. 최초 설치와 `law.go.kr` 법령 질의에는 인터넷 연결이 필요하므로 오프라인 모드는 아닙니다. This runs the MCP process locally without the hosted remote MCP endpoint; initial installation and `law.go.kr` queries still require internet access, so it is not an offline mode.
 
-**사전 준비:** [Node.js](https://nodejs.org) 18 이상이 설치되어 있어야 합니다.
+**사전 준비 / Prerequisite:** [Node.js](https://nodejs.org) 20.19 이상 / Node.js 20.19+
 
 **자동 설치 (추천):**
 
 ```bash
-npx korean-law-mcp setup
+npx --yes --ignore-scripts korean-law-mcp@4.10.0 setup
 ```
 
 설치 마법사가 API 키 입력 → AI 클라이언트 선택 → 설정 파일 자동 등록까지 한 번에 처리합니다.
@@ -702,19 +717,17 @@ Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Gemini CLI, Zed, Antigra
 **수동 설치:**
 
 ```bash
-npm install -g korean-law-mcp
+npm install -g --ignore-scripts korean-law-mcp@4.10.0
+korean-law-mcp setup --mode on-demand --skip-skill-install
 ```
 
-AI 앱 설정 파일에 아래 내용을 추가합니다 (`honggildong`을 본인 인증키로 바꾸세요):
+AI 앱 설정 파일에 아래 내용을 추가합니다. Add the following entry to the AI client config:
 
 ```json
 {
   "mcpServers": {
     "korean-law": {
-      "command": "korean-law-mcp",
-      "env": {
-        "LAW_OC": "honggildong"
-      }
+      "command": "korean-law-mcp"
     }
   }
 }
@@ -730,33 +743,37 @@ AI 앱 설정 파일에 아래 내용을 추가합니다 (`honggildong`을 본�
 
 ```bash
 # 설치
-npm install -g korean-law-mcp
+npm install -g --ignore-scripts korean-law-mcp@4.10.0
 
-# 인증키 설정 (honggildong을 본인 키로 바꾸세요)
-export LAW_OC=honggildong        # Mac/Linux
-set LAW_OC=honggildong           # Windows CMD
-$env:LAW_OC="honggildong"       # Windows PowerShell
+# 인증키 설정 (숨김 입력, shell history에 키를 남기지 않음)
+korean-law-mcp setup --mode on-demand --skip-skill-install
 
 # 사용 예시
 korean-law "민법 제1조"                    # 자연어로 바로 조회
+korean-law query --stdin                  # 자동화: 질문은 별도 stdin으로 전달
 korean-law search_law --query "관세법"     # 도구 직접 호출
 korean-law list                            # 전체 도구 목록
 korean-law list --category 판례            # 카테고리별 필터
 korean-law help search_law                 # 도구별 도움말
 ```
 
+에이전트나 스크립트에서는 고정된 argv `korean-law query --stdin`을 시작한 뒤 질문 전체를 별도의 표준입력으로 보내고 stdin을 닫아 EOF를 전달하세요. 사용자 텍스트를 셸 문자열, 명령 치환 또는 파이프에 결합하지 마세요. In agents and scripts, start the fixed argv `korean-law query --stdin`, send the complete question through stdin, then close stdin to deliver EOF; never interpolate user text into a shell string, command substitution, or pipeline.
+
+전역 CLI가 없으면 Skill은 고정 버전을 `npx`로 일회 실행하므로 첫 질의에 다운로드 지연이 생길 수 있습니다. 반복 다운로드를 피하려면 위 `npm install -g` 설치를 권장합니다. Without a global CLI, the Skill uses a pinned one-shot `npx` fallback, so the first query can incur download latency; install the CLI globally to avoid repeated downloads.
+
 ---
 
 ### API 키 전달 방법 정리
 
-여러 방법으로 인증키를 전달할 수 있습니다. 위에서부터 우선 적용됩니다:
+권장 순서와 금지 경로는 다음과 같습니다. The recommended and rejected credential paths are:
 
-| 방법 | 사용법 | 언제 쓰나 |
+| 방법 / Method | 사용법 / Usage | 판단 / Guidance |
 |------|--------|-----------|
-| URL에 포함 | 주소 끝에 `?oc=내키` | 웹 클라이언트에서 가장 간편 |
-| HTTP 헤더 | `apikey: 내키` | 프로그래밍으로 연동할 때 |
-| 환경변수 | `LAW_OC=내키` | 로컬 설치(방법 3, 4) |
-| 도구 파라미터 | `apiKey: "내키"` | 특정 요청만 다른 키 쓸 때 |
+| 사용자 설정 파일 / User config | `setup --mode on-demand` | 로컬 Skill·MCP·CLI 권장 / Recommended locally |
+| 보안 HTTP 헤더 / Secret-backed header | `Authorization: Bearer <secret>` | 원격 클라이언트 권장 / Recommended remotely |
+| 환경변수 / Environment | `LAW_OC` | 프로세스 비밀 저장소가 주입할 때만 / Only via a process secret store |
+| URL query | `?oc=...` | 사용 금지 / Do not use |
+| CLI·도구 인자 / CLI or tool argument | `apiKey` | 사용 금지 / Do not use |
 
 ### 법제처 API 프로토콜 설정
 
@@ -770,7 +787,6 @@ MCP 클라이언트 설정의 `env` 블록에 함께 넣는 방식이 가장 명
     "korean-law": {
       "command": "korean-law-mcp",
       "env": {
-        "LAW_OC": "honggildong",
         "LAW_API_PROTOCOL": "http"
       }
     }
@@ -787,7 +803,6 @@ $env:LAW_API_PROTOCOL="http"       # Windows PowerShell
 ```
 
 ```env
-LAW_OC=honggildong
 LAW_API_PROTOCOL=http
 ```
 
@@ -909,6 +924,7 @@ v4.4.0에서 노출 도구를 통폐합했습니다 (컨텍스트 52% 감축). �
 ## 문서
 
 - [docs/API.md](docs/API.md) — 도구 레퍼런스
+- [docs/ON-DEMAND.md](docs/ON-DEMAND.md) — 다중 PC·사용자 온디맨드 배포 / Multi-PC and multi-user on-demand rollout
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 시스템 설계
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — 개발 가이드
 

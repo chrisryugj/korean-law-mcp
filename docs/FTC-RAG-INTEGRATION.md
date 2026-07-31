@@ -239,7 +239,7 @@ const verified = await mcp.call("verify_citations", {
 
 ## 7. 운영 체크리스트
 
-- [ ] MCP 서버 HTTP stateless 모드 기동 (`PORT=8080 LAW_OC=키 node build/index.js --http`)
+- [ ] MCP 서버 HTTP stateless 모드 기동: 비밀 저장소로 환경변수를 주입하고 키를 명령행에 쓰지 않음 (`PORT=8080 node build/index.js --http`) / Start HTTP stateless mode with secret-store injection; never put the key on the command line
 - [ ] 벡터DB (Qdrant/pgvector/Milvus) 컬렉션 생성 + 메타필드 인덱스
 - [ ] 초기 backfill: 과거 N년치 FTC 의결서 일괄 동기화
 - [ ] cron 등록: `0 3 * * * /usr/bin/node /path/daily-ftc-sync.mjs`

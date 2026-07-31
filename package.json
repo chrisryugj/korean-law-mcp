@@ -1,6 +1,6 @@
 {
   "name": "korean-law-mcp",
-  "version": "4.9.1",
+  "version": "4.10.0",
   "description": "법제처 42개 API → 9개 MCP 도구. 법령·판례·조례·조약 + 다단계 리서치(legal_research, 8 task) + 정밀분석(legal_analysis: 인용검증·판례생사·행위시법·영향그래프) + 시점 비교(time_travel) + 상황별 5단계 안내(action_plan) + 국세청 해석례(nts)",
   "type": "module",
   "main": "build/index.js",
@@ -29,6 +29,8 @@
   },
   "scripts": {
     "build": "tsc",
+    "test:on-demand": "node test/test-law-credential.cjs && node test/test-setup-options.cjs && node test/test-cli-credential-security.cjs && node test/test-release-metadata.cjs",
+    "test:install-smoke": "node test/test-on-demand-install-smoke.cjs",
     "watch": "tsc --watch",
     "start": "node build/index.js",
     "cli": "node build/cli.js",
@@ -37,6 +39,8 @@
     "typecheck": "tsc --noEmit",
     "dead-code": "knip",
     "gc": "npm run typecheck && npm run dead-code && npm test && npm run build",
+    "release:preflight": "node scripts/check-release-version.mjs absent",
+    "release:verify-published": "node scripts/check-release-version.mjs published",
     "prepublishOnly": "npm run build",
     "prepare": "husky"
   },
@@ -55,13 +59,12 @@
   "author": "Chris",
   "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.27.1",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@xmldom/xmldom": "^0.9.8",
     "commander": "^14.0.3",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
-    "kordoc": "^4.2.0",
-    "pdfjs-dist": "^5.5.207",
+    "kordoc": "^4.2.9",
     "zod": "^4.0.0"
   },
   "devDependencies": {
@@ -73,10 +76,15 @@
     "vitest": "^4.1.9"
   },
   "overrides": {
-    "hono": "^4.12.29"
+    "hono": "^4.12.29",
+    "@hono/node-server": "^2.0.12",
+    "body-parser": "^2.3.0",
+    "fast-uri": "^3.1.4"
   },
   "files": [
     "build",
+    "skills",
+    "docs/ON-DEMAND.md",
     "README.md",
     "LICENSE",
     "NOTICE"
