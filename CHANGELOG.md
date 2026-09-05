@@ -1,5 +1,18 @@
 # Changelog
 
+## [4.12.3] - 2026-09-06
+
+법령정보 지식베이스 **연계 도구 4개가 에러 없이 항상 0건** 이던 장애를 복구한다. [#155](https://github.com/chrisryugj/korean-law-mcp/pull/155) (@yoonkhsc) 머지. 테스트 722 → **733**.
+
+법제처는 **실재하지 않는 `target` 에 HTTP 200 + 빈 본문** 을 돌려준다. 에러도 아니고 XML 오류 메시지도 아니라 `fetchApi` 가 정상 반환하고 파서가 0건을 내는 것으로 끝나, 재시도·폴백에도 걸리지 않고 사용자에게는 "해당 자료가 없다"로만 보였다.
+
+### Fixed
+
+- **`get_related_laws` · `get_term_articles` · `get_daily_to_legal` · `get_legal_to_daily` 가 상시 0건이던 장애** (#155): `src/tools/knowledge-base.ts` 가 쓰던 `target` 3개(`lstrmRel`·`lstrmJo`·`lawRel`)가 실재하지 않는 값이었다. 각각 `lawService.do&target=lstrmRlt`·`lawService.do&target=lstrmRltJo`·`lawSearch.do&target=lsRlt` 로 바로잡는다. `relType`(`DL`/`LD`)은 `lstrmRlt` 에 없는 파라미터라 함께 제거했다. 재실측(2026-09-06, OC 로컬): 같은 조건 `type=XML` 응답 바이트가 `lstrmRel`·`lstrmJo`·`lawRel` 모두 **0B — 아예 없는 대조군 `bogus123` 과 바이트 단위로 동일**, 반면 `lstrmRlt` 4,659B / `lstrmRltJo` 439,634B / `lsRlt`(`건축법`) 정상 응답
+- **`target` 만 고쳐도 남던 0건** (#155): 이 세 응답은 항목을 한글 래퍼(`<연계용어>`·`<연계법령>`·`<관련법령>`)에 담고 필드명도 다른데, 공유 파서 `parseKBXML` 은 항목 태그를 `["lstrm","lstrmAI","law","jo","rel","item"]` 로 고정한다. 정상 동작 중인 `get_legal_term_kb`·`get_daily_term`·`fallbackTermSearch` 가 이 파서를 함께 쓰므로 공유 파서는 건드리지 않고, 연계 도구 4개 전용 파서(`parseRelationXML`)를 같은 파일에 두어 영향 범위를 고친 함수 4개로 닫았다
+- **총건수 오독** (#155): `<검색결과개수>` 는 연계 항목 수가 아니라 **기준 용어·기준 법령의 개수(항상 1)** 다. 파싱한 항목 수를 총건수로 쓴다. `lawService.do` 는 `display` 를 무시하고 연계 조문 전문을 통째로 주므로(`임대차` 기준 약 430KB) 건수 제한은 파서에서 건다
+- **조가지번호 표기** (#155): 조번호 `0024` + 조가지번호 `02` 를 `제24조의2` 로 조립한다(종전 경로의 `제24의2조` 는 존재하지 않는 조문 표기)
+
 ## [4.12.2] - 2026-08-29
 
 법제처 상류 변경으로 `get_law_text` 가 통째로 멈춘 장애를 복구한다. [#154](https://github.com/chrisryugj/korean-law-mcp/pull/154) (@Rillmo) 를 머지하고, 같은 이슈가 함께 보고한 `get_historical_law` 조문 파싱 결함을 후속 수리했다. 테스트 717 → **722**.
