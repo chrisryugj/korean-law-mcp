@@ -73,6 +73,9 @@ export async function fetchUpcomingLaws(
   }
 }
 
+/** 병기 상한 — 초과분은 침묵하지 않고 "외 N건"으로 알린다 (#156) */
+const MAX_UPCOMING_NOTES = 5
+
 const fmtDate = (d: string) => (d.length === 8 ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}` : d)
 
 /**
@@ -88,7 +91,15 @@ export function buildUpcomingNotes(
   if (upcoming.length === 0) return ""
   const hitById = new Map(hits.map(h => [h.lawId, h]))
   const lines: string[] = []
-  for (const u of upcoming.slice(0, 5)) {
+
+  // 시행 임박순으로 정렬한 뒤 자른다. 종전엔 API 응답 순서(먼 시행일부터)를 그대로
+  // slice(0,5) 해서 가장 급한 개정이 먼저 버려졌다 — 실측(#156, 대기환경보전법):
+  // 시행예정 6건 중 가장 임박한 2026-09-18 이 잘리고 2027-01-10 이 남았다.
+  // 준법 감시 용도에선 정확히 반대 순서다.
+  const sorted = [...upcoming].sort((a, b) =>
+    (a.effDates[0] || "99999999").localeCompare(b.effDates[0] || "99999999"))
+
+  for (const u of sorted.slice(0, MAX_UPCOMING_NOTES)) {
     const eff = u.effDates.map(fmtDate).join(" · ")
     // 시행예정본은 efYd 없이는 법제처 API가 404 — 반드시 시행일 병기
     const joHint = u.effDates[0]
@@ -103,6 +114,12 @@ export function buildUpcomingNotes(
     } else {
       lines.push(`🔜 시행예정 ${u.lawType || "법령"}: 「${u.name}」 ${tail} — 아직 미시행이라 현행 검색에는 없음`)
     }
+  }
+
+  // 잘렸으면 반드시 말한다. 침묵하면 사용자는 표시된 게 전부라고 믿는다 (#156).
+  const hidden = sorted.length - MAX_UPCOMING_NOTES
+  if (hidden > 0) {
+    lines.push(`🔜 …외 ${hidden}건 더 있음 (시행 임박순 ${MAX_UPCOMING_NOTES}건만 표시) — 전수는 법제처 eflaw(시행일자별 법령) 조회 필요`)
   }
   return lines.join("\n") + "\n"
 }
