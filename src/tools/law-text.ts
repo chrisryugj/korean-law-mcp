@@ -16,7 +16,7 @@ export const GetLawTextSchema = z.object({
   mst: z.string().optional().describe("법령일련번호 (search_law에서 획득)"),
   lawId: z.string().optional().describe("법령ID (search_law에서 획득)"),
   jo: z.string().optional().describe("조문 번호. 자연어 표기 권장 — '제38조'·'제148조의2'를 그대로 넣으면 서버가 변환한다. 6자리 JO 코드 직접 지정 시 조번호 4자리 zero-pad + 의X 2자리: 제38조→003800, 제10조의2→001002, 제234조의2→023402(234002 아님)"),
-  efYd: z.string().optional().describe("시행일자 (YYYYMMDD 형식)"),
+  efYd: z.string().optional().describe("시행일자 (YYYYMMDD). 그 법령에 **실재하는 시행일**이어야 한다 — 오늘 날짜 같은 임의 '조회 기준일'을 넣으면 NOT_FOUND 가 난다. 현행 본문은 efYd 없이 조회할 것. 시행예정본은 search_law 가 안내한 efYd 를 그대로 쓴다."),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달")
 }).refine(data => data.mst || data.lawId, {
   message: "mst 또는 lawId 중 하나는 필수입니다"
@@ -70,10 +70,17 @@ export async function getLawText(
     // JSON 구조 파싱 (LexDiff 방식 적용)
     const lawData = json?.법령
     if (!lawData) {
+      // efYd 가 붙어 있으면 그게 1순위 용의자다. 종전 메시지는 무조건 mst/lawId 를 탓해,
+      // 식별자가 멀쩡한데도 "search_law 로 유효한 mst 를 확인하라"고 엉뚱한 곳을 가리켰다
+      // (#160: search_law 가 준 mst/lawId 그대로인데 efYd 에 오늘 날짜를 넣어 NOT_FOUND).
+      const retryId = input.mst || input.lawId || ""
+      const hint = input.efYd
+        ? `⚠️ efYd=${input.efYd} 에 해당하는 시행일 버전이 없습니다. efYd 는 '조회 기준일'이 아니라 그 법령에 실재하는 시행일이어야 합니다 — 오늘 날짜를 넣으면 대개 실패합니다.\n→ 현행 본문: get_law_text(mst="${retryId}") 로 efYd 없이 재조회\n→ 시행예정본: search_law 가 안내한 efYd 를 그대로 사용\nmst/lawId 자체는 유효할 수 있습니다.`
+        : `⚠️ 법제처 API가 해당 mst/lawId에 대해 데이터를 반환하지 않았습니다. search_law로 유효한 mst를 먼저 확인하세요.`
       return {
         content: [{
           type: "text",
-          text: "[NOT_FOUND] 법령 데이터를 찾을 수 없습니다.\n\n⚠️ 법제처 API가 해당 mst/lawId에 대해 데이터를 반환하지 않았습니다. LLM이 조문을 추측/생성하지 마세요. search_law로 유효한 mst를 먼저 확인하세요."
+          text: `[NOT_FOUND] 법령 데이터를 찾을 수 없습니다.\n\n${hint}\n\nLLM이 조문을 추측/생성하지 마세요.`
         }],
         isError: true
       }
