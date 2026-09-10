@@ -9,7 +9,7 @@
 >   - `.github/workflows/publish.yml`(GitHub Release → OIDC trusted publishing + provenance)은 **npm 쪽 trusted publisher 등록이 아직 안 됐다**. 그래서 게시는 위 로컬 `npm publish` 가 정규 경로이고, Release 는 그 뒤에 만든다 — 워크플로는 같은 버전이 이미 레지스트리에 있으면 게시를 건너뛰고 검증(typecheck·test·build·verify:package·audit)만 릴리스 시점에 재확인한다.
 > - **🚫 이 레포에서 `fly deploy` 직접 실행 절대 금지** — 통합 이미지를 law 단독 이미지로 덮어써 stats·patent·archhub·school까지 전부 죽는다. 자세한 배경: [docs/FLY-COST.md](docs/FLY-COST.md)
 
-Korean Law MCP Server v4.12.0 - 법제처 42개 API → 10개 통합 도구 (내부 98개) + 9개 시나리오 + 자연어 CLI + HTTP stateless + 판례 토큰 74% 감축 + **legal_research (체인 8종 통합, task 파라미터)** + **legal_analysis (인용검증·판례생사·행위시법·영향그래프 통합, mode 파라미터)** + **time_travel (시점 diff)** + **action_plan (이럴 땐 이렇게, 5단계 안내)** + **시행예정 감지 (search_law가 제명변경·미시행 개정 자동 병기)** + **ordinance_radar (조례 정비 레이더 — 근거 상위법 개정 자동 대조, v4.7.0)** + **인용 검증 표기 내성 (낫표·가운뎃점·`같은 법` 조응, v4.9.0)** + **폐지 감지 (검색 0건 시 폐지 법령·행정규칙 연혁 추적 — 폐지사유·후속 통합 규정 자동 안내, v4.10.0)**
+Korean Law MCP Server v4.13.0 - 법제처 42개 API → 10개 통합 도구 (내부 99개) + 9개 시나리오 + 자연어 CLI + HTTP stateless + 판례 토큰 74% 감축 + **legal_research (체인 8종 통합, task 파라미터)** + **legal_analysis (인용검증·판례생사·행위시법·영향그래프 통합, mode 파라미터)** + **time_travel (시점 diff)** + **action_plan (이럴 땐 이렇게, 5단계 안내)** + **시행예정 감지 (search_law가 제명변경·미시행 개정 자동 병기)** + **ordinance_radar (조례 정비 레이더 — 근거 상위법 개정 자동 대조, v4.7.0)** + **인용 검증 표기 내성 (낫표·가운뎃점·`같은 법` 조응, v4.9.0)** + **폐지 감지 (검색 0건 시 폐지 법령·행정규칙 연혁 추적 — 폐지사유·후속 통합 규정 자동 안내, v4.10.0)** + **search_law_bulk (등록부 대량 조회 + MST diff 감시, v4.13.0)**
 
 ## Structure
 
@@ -17,7 +17,7 @@ Korean Law MCP Server v4.12.0 - 법제처 42개 API → 10개 통합 도구 (내
 src/
 ├── index.ts              # 엔트리포인트 (STDIO/HTTP 모드)
 ├── cli.ts                # CLI v2.0 (자연어 라우팅 + REPL)
-├── tool-registry.ts      # 98개 도구 등록, V3_EXPOSED 10개만 노출 (TOOL_COUNTS 파생값)
+├── tool-registry.ts      # 99개 도구 등록, V3_EXPOSED 10개만 노출 (TOOL_COUNTS 파생값)
 ├── tools/                # 도구 구현 (76개 파일, scenarios/ 포함)
 ├── lib/
 │   ├── api-client.ts     # API 클라이언트 (throwIfError/checkHtmlError 통일)
@@ -161,7 +161,7 @@ get_law_text(mst, jo="006300") → 제63조(휴직) 조회
 |------|------|
 | `cli.ts` | CLI v2.0 — 자연어 라우팅 + REPL |
 | `lib/query-router.ts` | 자연어 → 도구 자동 라우팅 (verify/비교/시간필터/impact_map/time_travel/action_plan 포함) |
-| `tool-registry.ts` | 98개 도구 정의, V3_EXPOSED 10개 노출 (TOOL_COUNTS 파생값) |
+| `tool-registry.ts` | 99개 도구 정의, V3_EXPOSED 10개 노출 (TOOL_COUNTS 파생값) |
 | `tools/legal-research.ts` | chain_* 8개 통합 진입점 — task 파라미터 디스패치 (v4.4.0) |
 | `tools/legal-analysis.ts` | 킬러피처 4개 통합 진입점 — mode 파라미터 디스패치 (v4.4.0) |
 | `tools/verify-citations.ts` | LLM 환각 방지 인용 검증 (v3.5 killer feature) |

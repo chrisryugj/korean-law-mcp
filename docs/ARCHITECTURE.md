@@ -87,7 +87,7 @@
 
 1. **Separation of Concerns**: Tools → Shared Libs → API Client
 2. **Single Responsibility**: 파일당 200줄 미만, 단일 기능 (예외: `risk-rules.ts`. 기존 초과 파일이 남아 있다 — CLAUDE.md 규칙 2 참조)
-3. **Centralized Tool Registry**: 98개 도구를 `tool-registry.ts`의 `allTools[]`에 등록. 그중 `V3_EXPOSED` 10개만 `ListTools`로 노출하고 나머지는 `execute_tool` 경유 — 클라이언트 컨텍스트에 98개 description을 싣지 않기 위한 것
+3. **Centralized Tool Registry**: 99개 도구를 `tool-registry.ts`의 `allTools[]`에 등록. 그중 `V3_EXPOSED` 10개만 `ListTools`로 노출하고 나머지는 `execute_tool` 경유 — 클라이언트 컨텍스트에 99개 description을 싣지 않기 위한 것
 4. **Type Safety**: TypeScript strict mode + Zod validation
 5. **Stateless HTTP**: MCP StreamableHTTP stateless 모드 — 요청마다 fresh Server+Transport, AsyncLocalStorage로 요청별 API 키 격리 (재시작·스케일아웃 내성)
 6. **Network Resilience**: 30s timeout, 3 retries with exponential backoff
@@ -103,7 +103,7 @@
 
 - MCP 서버 초기화
 - CLI 인자 파싱 (`--mode stdio|sse|http`, `--port`)
-- `registerTools(server, apiClient)` 호출로 98개 도구 일괄 등록
+- `registerTools(server, apiClient)` 호출로 99개 도구 일괄 등록
 
 ### Tool Registry (`src/tool-registry.ts`)
 
@@ -116,7 +116,7 @@
 
 - `korean-law "민법 제1조"` 자연어 한 줄 → `query-router`가 도구/파라미터 결정 (v2.0)
 - `korean-law` 인자 없이 실행하면 REPL 모드
-- `korean-law <tool> --param value` 형태로 98개 도구 직접 실행도 유지
+- `korean-law <tool> --param value` 형태로 99개 도구 직접 실행도 유지
 - `korean-law list [--category ...]` / `help <tool>` / `--json-input`
 - CLI 경로(`cli.ts`/`cli-executor.ts`/`cli-format.ts`)는 별도 바이너리라 `console.log`를 쓴다 — STDIO MCP 경로와 섞이지 않는다
 
@@ -260,7 +260,7 @@ legal_research(task="action_basis")  ── 45초 ──▶ 만료
 | LRU 캐시 (hit rate ~82%) | 반복 조회 85% 응답 시간 감소 |
 | `truncateSections()` | 체인 응답 크기 최적화 |
 | 판례 응답 compact | 토큰 74% 감축 |
-| `V3_EXPOSED` 10개만 노출 | ListTools 컨텍스트에 98개 description을 싣지 않음 |
+| `V3_EXPOSED` 10개만 노출 | ListTools 컨텍스트에 99개 description을 싣지 않음 |
 | 체인 데드라인 + 부분 결과 | 꼬리 지연에서 타임아웃 대신 부분 답 |
 
 > 레이턴시 수치는 측정 시점·소스 IP에 따라 흔들린다. 업스트림 실측 방법과 최신 값은
@@ -328,7 +328,7 @@ docker run -e LAW_OC=your-key -e MCP_HTTP_HOST=0.0.0.0 \
 
 ## Related Docs
 
-- [API.md](API.md) - 98개 도구 레퍼런스 (노출 10개)
+- [API.md](API.md) - 99개 도구 레퍼런스 (노출 10개)
 - [DEVELOPMENT.md](DEVELOPMENT.md) - 개발자 가이드
 - [UPSTREAM-PERF.md](UPSTREAM-PERF.md) - 업스트림 실측·재시도 정책 근거
 - [FLY-COST.md](FLY-COST.md) - 통합 호스트 배포 배경 (이 레포에서 `fly deploy` 금지 이유)

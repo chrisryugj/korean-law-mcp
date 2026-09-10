@@ -1,5 +1,80 @@
 # Changelog
 
+## [4.13.0] - 2026-09-11
+
+ISO 법규준수 등록부(품질·환경·안전보건·정보보안·BCM·부패방지·AI·ESG 8개 영역 108개 법령)를 이 서버로
+주간 감시하던 실사용 보고 3건([#157](https://github.com/chrisryugj/korean-law-mcp/issues/157) ·
+[#158](https://github.com/chrisryugj/korean-law-mcp/issues/158) ·
+[#159](https://github.com/chrisryugj/korean-law-mcp/issues/159), @thkim660207-cmd)을 처리한다.
+
+세 건 모두 "응답은 정상인데 실무에서 쓰기 어렵다"는 형태였다 — **호출 수**(등록부 1회전에 `search_law` 98회),
+**응답 예산**(이력 섹션이 5만 자를 혼자 소진해 정작 필요한 신구대조표가 잘림), 그리고 **침묵**(본문이 이미지뿐인데
+아무 말이 없어 LLM 이 수치를 지어내기 좋은 자리가 됨). 테스트 738 → **758**.
+
+### Added
+
+- **`search_law_bulk` — 등록부 대량 조회 + MST diff 감시** (#157): 법령명 배열(최대 40건)을 받아 건당
+  `법령ID · MST · 시행일 · 시행예정` 한 줄만 돌려준다. 부분매칭 목록·다음단계 안내처럼 감시 용도에 불필요한
+  본문을 싣지 않는다. `previous={법령ID: 직전 MST}` 를 주면 **MST 가 달라진 법령만** 반환하는 diff 모드로
+  동작한다 — MST 는 개정마다 바뀌므로 그 자체가 변경 감지 키다. 응답 말미에 다음 감시에 그대로 넣을
+  `{법령ID: MST}` 스냅샷을 함께 준다. 노출 도구는 10개 그대로이고 `execute_tool(tool_name="search_law_bulk")`
+  경유로 접근한다(`search_law` 설명과 discover_tools "법령검색" 카테고리에서 안내).
+  - **MST 가 같아도 시행예정이 있으면 침묵하지 않는다**: 공포됐으나 미시행인 개정은 현행 MST 를 바꾸지 않아
+    diff 만 보면 "변경 없음"이다. 등록부가 시행일을 놓치는 자리라 별도로 표시한다
+  - 한 건이 실패해도 나머지를 버리지 않는다(`Promise.allSettled`, 동시 5건). 요청 단위 업스트림 예산
+    (`MCP_MAX_UPSTREAM_REQUESTS`, 기본 48)이 소진되면 받은 데까지의 결과 + **남은 쿼리 목록**을 돌려준다
+  - 현행 우선 정렬·정확매칭 분리 판정을 `search-hits.ts`(`sortCurrentFirst`·`splitExactPartial`)로 옮겨
+    `search_law` 와 공용한다 — 같은 법령명에 두 도구가 다른 법령을 고르면 감시가 조용히 어긋난다
+
+### Changed
+
+- **`amendment_track` 의 조문별 개정 이력이 opt-in** (#158): `legal_research(task="amendment_track")` ·
+  `chain_amendment_track` 이 제정 시점부터의 조문×개정 전건을 항상 싣던 것을 `includeHistory`(기본 `false`)로
+  바꾼다. 산업안전보건법(1981년 제정) 실측에서 이 섹션 혼자 **49,990자 → 24,938자로 절단**되며 5만 자 응답
+  상한을 소진해, 실무에서 정작 필요한 신구대조표가 잘려나갔다. 끈 자리에는 껐다는 사실과 켜는 법
+  (`includeHistory=true` · `get_article_history(lawId=…)`)을 남긴다 — 침묵하면 이 서버가 이력을 못 준다고 오해된다. 실측(산업안전보건법 `lawId=001766`,
+  2026-09-11): 기본 응답 **6,542자 · 축약 표시 없음**, `includeHistory=true` 는 31,366자
+
+### Security
+
+- **프로덕션 의존성 취약점 4건 해소**: `sharp` 0.35.4(high, libheif GHSA-rgj7-g3m4-5g8c) ·
+  `hono` 4.13.7(moderate 3건). `kordoc` 은 lock 이 4.7.2 에 머물러 있던 것을 선언 범위(`^4.7.2`) 안의
+  최신 4.13.1 로 올렸다 — `npm run verify:annex-runtime` 으로 별표 파싱이 optional 의존 없이 동작함을 재확인했다
+- **남은 권고 4건은 상류에 패치가 없다**: `adm-zip`(GHSA-vwc7-r8mq-g2x9, moderate) 하나에서 파생한 것으로
+  경로는 `kordoc → @huggingface/transformers · onnxruntime-node → adm-zip` 이다. 권고 범위가 `>=0.5.9` 라
+  최신 0.6.0 에도 수정본이 없고, `npm audit fix --force` 가 제시하는 유일한 해결책은 `kordoc@2.5.2`
+  다운그레이드(breaking)다. 취약점 성격은 zip 추출 시 심볼릭 링크 추종이고 해당 코드는 ONNX 런타임의
+  **optional OCR 경로**라 이 서버의 법령 조회 런타임에서 도달하지 않는다
+
+### Fixed
+
+- **이미지-only 별표가 아무 경고 없이 나가던 문제** (#159): 법제처는 별표의 기준 수치·적용 대상 목록을
+  `<img id="…">` 태그로만 돌려줄 때가 있다(실측: 낙동강유역환경청 「수질오염물질의 배출허용기준 중
+  별도배출허용기준」 고시 `2100000248042` — 이미지 6개 + 실텍스트 8자). `get_admin_rule` 은 이것을
+  "본문 있음"으로 보고 그대로 출력해, 배출기준치처럼 심사원이 실제로 확인하는 수치 자리에서 LLM 이 추측하기
+  좋은 상태가 됐다. 이제 이미지 태그를 걷어낸 실텍스트가 100자 미만이면 본문 **앞에** 경고를 붙이고
+  원문 URL(`law.go.kr/admRulInfoP.do?admRulSeq=…`)과 **첨부파일 원문(hwpx/pdf) 링크**를 함께 안내한다.
+  첨부파일은 API 가 이미 주고 있었는데 "본문이 비어 있지 않다"는 이유로 안내 분기에 도달하지 못하고 묻혀 있었다
+
+## [4.12.5] - 2026-09-09
+
+*(소급 기록 — 릴리스 당시 CHANGELOG 절이 누락됐다. 내용은 커밋 이력 기준)*
+
+### Fixed
+
+- 프로덕션 의존성 취약점 3건 (`c089b8f`). v4.12.4 릴리스 게이트(`npm audit --omit=dev`)가 잡았다
+
+## [4.12.4] - 2026-09-09
+
+*(소급 기록 — 릴리스 당시 CHANGELOG 절이 누락됐다. 내용은 커밋 이력 기준)*
+
+### Fixed
+
+- **시행예정 병기가 임박한 개정부터 조용히 잘라내던 문제** ([#156](https://github.com/chrisryugj/korean-law-mcp/issues/156), `293f252`):
+  API 응답 순서(먼 시행일부터)를 그대로 상위 5건만 남겨, 대기환경보전법 실측에서 가장 임박한 2026-09-18 이
+  잘리고 2027-01-10 이 남았다. 시행 임박순 정렬 후 자르고, 잘린 건수를 명시한다
+- **`efYd` 오용으로 난 NOT_FOUND 가 엉뚱하게 `mst` 를 탓하던 문제** ([#160](https://github.com/chrisryugj/korean-law-mcp/issues/160), `00a54fa`)
+
 ## [4.12.3] - 2026-09-06
 
 법령정보 지식베이스 **연계 도구 4개가 에러 없이 항상 0건** 이던 장애를 복구한다. [#155](https://github.com/chrisryugj/korean-law-mcp/pull/155) (@yoonkhsc) 머지. 테스트 722 → **733**.

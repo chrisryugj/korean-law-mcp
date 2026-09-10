@@ -1,6 +1,6 @@
 # Korean Law MCP - API Reference
 
-> **v4.12.0** | 10개 노출 도구 (내부 98개, 미노출 도구는 execute_tool 또는 직접 호출로 접근)
+> **v4.13.0** | 10개 노출 도구 (내부 99개, 미노출 도구는 execute_tool 또는 직접 호출로 접근)
 
 도구 구조는 [README.md](../README.md) 참조.
 상세 파라미터는 각 도구의 Zod 스키마(`src/tools/*.ts`) 참조.
@@ -88,11 +88,12 @@
 |------|------|
 | `ordinance_radar` | 조례 제1조(목적)에서 근거 상위법령(법률/시행령/시행규칙)을 추출하고, 각 상위법의 현행 시행일 vs 조례 시행일을 대조해 "상위법이 조례 시행 이후 개정 → 정비 검토 대상"을 자동 플래그. `ordinSeq`(또는 `id`)나 `ordinanceName` 중 하나 필수. 본문 전체가 아닌 목적 조문만 스캔해 별표의 무관 인용(감면대상 정의 등) 과잉경보를 배제. lnkOrd 연계 API는 커버리지가 낮아 미사용 |
 
-### 검색 (11개)
+### 검색 (12개)
 
 | 도구 | target | 설명 |
 |------|--------|------|
 | `search_law` | `law`+`eflaw` | 법령명 검색 (약칭 자동 인식, 제명변경·시행예정 개정 자동 병기) |
+| `search_law_bulk` | `law`+`eflaw` | 법령명 배열 일괄 조회 — 건당 `법령ID·MST·시행일·시행예정`만 컴팩트 반환. `previous={법령ID:직전MST}` 로 **변경분만** 받는 diff 모드 (준법 등록부 정기 감시용, 최대 40건/호출) |
 | `search_admin_rule` | `admrul` | 훈령/예규/고시/공고 |
 | `search_ordinance` | `ordin` | 조례/규칙 |
 | `search_precedents` | `prec` | 판례 |

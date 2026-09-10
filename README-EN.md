@@ -31,6 +31,25 @@
 
 ---
 
+## v4.13.0 — Compliance-register monitoring: 98 calls down to 1-2
+
+Three field reports from running an ISO compliance register (108 laws across 8 domains) against this server:
+[#157](https://github.com/chrisryugj/korean-law-mcp/issues/157) · [#158](https://github.com/chrisryugj/korean-law-mcp/issues/158) · [#159](https://github.com/chrisryugj/korean-law-mcp/issues/159) (@thkim660207-cmd). Tests 738 → **758**.
+
+- **`search_law_bulk`**: takes an array of law names and returns one compact line each — `law_id · MST · effective_date · upcoming`.
+  Pass `previous={law_id: previous_MST}` for diff mode: only laws whose MST changed come back, so a full register sweep
+  costs one or two calls. The response ends with a snapshot JSON you feed straight into the next run. Amendments that are
+  promulgated but not yet in force do not change the current MST, so they are reported separately instead of silently
+  reading as "unchanged"
+- **Per-article amendment history is now opt-in** (`includeHistory=true` to restore): it used to be dumped from original
+  enactment every time, and on the Occupational Safety and Health Act (enacted 1981) that section alone exhausted the
+  50k-char response budget — truncating the old-vs-new comparison table people actually needed
+- **Image-only annexes now say so**: some notices return discharge-limit tables as `<img>` tags with no text. That used to
+  pass through as "has content", which is exactly where a model starts guessing numbers. Now it carries a warning plus the
+  source URL and the **original attachment (hwpx/pdf) links** — which the API was already returning but the code never surfaced
+
+---
+
 ## v4.12.0 — 62-issue batch + closing the "it doesn't exist" failure paths
 
 A batch that measured three axes (legal correctness, token efficiency, response latency) and closed **62 filed issues** ([#88–#149](https://github.com/chrisryugj/korean-law-mcp/issues), PR [#150](https://github.com/chrisryugj/korean-law-mcp/pull/150) by @humdrum00001010), plus follow-up repairs for 31 defects found in pre-merge domain review. Tests 196 → **701**.

@@ -35,7 +35,7 @@ korean-law-mcp/
 ├── src/
 │   ├── index.ts              # MCP 서버 진입점 (STDIO/HTTP 모드)
 │   ├── cli.ts                # CLI 인터페이스
-│   ├── tool-registry.ts      # 98개 도구 등록 (allTools 배열)
+│   ├── tool-registry.ts      # 99개 도구 등록 (allTools 배열)
 │   ├── lib/                  # 공통 라이브러리 (51개 파일)
 │   │   ├── api-client.ts     # API 클라이언트
 │   │   ├── annex-file-parser.ts  # HWPX/HWP/PDF 별표 파싱
