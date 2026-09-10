@@ -8,6 +8,7 @@ import type { LawApiClient } from "../lib/api-client.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError, noResultHint } from "../lib/errors.js"
 import { detectAbolishedAdminRule } from "../lib/abolished-laws.js"
+import { analyzeImageOnlyBody, buildImageOnlyWarning } from "../lib/image-only-body.js"
 
 // search_admin_rule 스키마
 export const SearchAdminRuleSchema = z.object({
@@ -86,6 +87,33 @@ export const GetAdminRuleSchema = z.object({
 })
 
 export type GetAdminRuleInput = z.infer<typeof GetAdminRuleSchema>
+
+/** xmldom 파싱 결과 타입 — 이 프로젝트는 DOM lib를 켜지 않는다 */
+type XmlDoc = ReturnType<InstanceType<typeof DOMParser>["parseFromString"]>
+
+/** 태그별 텍스트를 순서대로 모은다 (xmldom NodeList는 iterable이 아니다) */
+function collectText(doc: XmlDoc, tag: string): string {
+  const nodes = doc.getElementsByTagName(tag)
+  const out: string[] = []
+  for (let i = 0; i < nodes.length; i++) {
+    const t = nodes[i].textContent?.trim() || ""
+    if (t) out.push(t)
+  }
+  return out.join("\n")
+}
+
+/** 첨부파일명 ↔ 링크 짝 (#159 경고에서 원문 파일을 함께 안내하기 위한 것) */
+function collectAttachments(doc: XmlDoc): Array<{ name: string; link: string }> {
+  const links = doc.getElementsByTagName("첨부파일링크")
+  const names = doc.getElementsByTagName("첨부파일명")
+  const out: Array<{ name: string; link: string }> = []
+  for (let i = 0; i < links.length; i++) {
+    const link = links[i].textContent?.trim() || ""
+    if (!link) continue
+    out.push({ name: names[i]?.textContent?.trim() || `첨부 ${i + 1}`, link })
+  }
+  return out
+}
 
 /**
  * 전문이 비어 있을 때 원인별 안내 (#72)
@@ -192,6 +220,14 @@ export async function getAdminRule(
           text: truncateResponse(resultText)
         }]
       }
+    }
+
+    // 이미지-only 경고 (#159) — 본문 앞에 둔다. 뒤에 붙이면 truncateResponse가
+    // 경고부터 잘라내고 무의미한 <img> 태그만 남아 LLM이 수치를 지어내기 쉬워진다.
+    const bodyText = `${collectText(doc, "조문내용")}\n${collectText(doc, "별표내용")}`
+    const imgInfo = analyzeImageOnlyBody(bodyText)
+    if (imgInfo.imageOnly) {
+      resultText += buildImageOnlyWarning(input.id, imgInfo, collectAttachments(doc)) + "\n"
     }
 
     // 조문 내용 출력

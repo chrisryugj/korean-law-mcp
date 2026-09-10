@@ -87,3 +87,33 @@ describe("compare_admin_rule_old_new — 실형상 파싱", () => {
     expect(r.content[0].text).toContain("[개정 전] 【<신  설>】")
   })
 })
+
+// 실측 축약 (#159): 조문내용이 <img> 태그뿐이라 "비어 있음" 분기에 걸리지 않고,
+// 첨부파일(원문 hwpx/pdf)이 있는데도 안내되지 않던 응답
+const IMAGE_ONLY_XML = `<?xml version="1.0" encoding="UTF-8"?><AdmRulService><행정규칙기본정보><행정규칙일련번호>2100000248042</행정규칙일련번호><행정규칙명><![CDATA[(낙동강유역환경청) 수질오염물질의 배출허용기준 중 별도배출허용기준]]></행정규칙명><행정규칙종류>고시</행정규칙종류><조문형식여부>N</조문형식여부></행정규칙기본정보>
+<조문내용><![CDATA[(단위: ㎎/ℓ)
+<img id="144740515">
+</img>
+<img id="144740517">
+</img>]]></조문내용>
+<첨부파일><첨부파일명><![CDATA[별도배출허용기준 지정·고시.pdf]]></첨부파일명><첨부파일링크>http://law.go.kr/flDownload.do?flSeq=144740485
+</첨부파일링크></첨부파일></AdmRulService>`
+
+describe("get_admin_rule — 이미지-only 별표 경고 (#159)", () => {
+  it("본문이 <img>뿐이면 경고·원문 URL·첨부파일을 앞세운다", async () => {
+    const r = await getAdminRule(detailStub(IMAGE_ONLY_XML), { id: "2100000248042" })
+    expect(r.isError).toBeFalsy()
+    const text = r.content[0].text
+    expect(text).toContain("이미지로만 제공되어 텍스트 추출 불가")
+    expect(text).toContain("admRulSeq=2100000248042")
+    // 첨부파일 링크는 API가 이미 주고 있었는데 "본문이 비어 있지 않다"는 이유로 묻혀 있었다
+    expect(text).toContain("flSeq=144740485")
+    // 경고가 본문보다 앞 — truncate에 잘려 사라지면 안 된다
+    expect(text.indexOf("텍스트 추출 불가")).toBeLessThan(text.indexOf("<img"))
+  })
+
+  it("정상 조문에는 경고를 붙이지 않는다", async () => {
+    const r = await getAdminRule(detailStub(DETAIL_XML), { id: "2100000271110" })
+    expect(r.content[0].text).not.toContain("이미지로만 제공되어")
+  })
+})
