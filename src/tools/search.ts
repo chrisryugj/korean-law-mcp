@@ -7,8 +7,8 @@ import type { LawApiClient } from "../lib/api-client.js"
 import { lawCache } from "../lib/cache.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError } from "../lib/errors.js"
-import { expandLawQuery, normalizeAliasKey, resolveLawAlias } from "../lib/search-normalizer.js"
-import { formatHit, hasRelatedHit, parseLawsXml, type LawHit } from "./search-hits.js"
+import { expandLawQuery } from "../lib/search-normalizer.js"
+import { formatHit, hasRelatedHit, parseLawsXml, sortCurrentFirst, splitExactPartial } from "./search-hits.js"
 import { buildUpcomingNotes, fetchUpcomingLaws } from "../lib/upcoming-laws.js"
 import { searchLawFallbacks } from "./search-fallbacks.js"
 
@@ -76,30 +76,8 @@ export async function searchLaw(
       return await searchLawFallbacks(apiClient, input)
     }
 
-    // 정확매칭 분리: 법제처 API는 LIKE 검색 + 가나다순 정렬이라
-    // "상법"같이 짧은 법령명은 "보상법/배상법/기상법" 등에 묻혀버림.
-    // 법령명/약칭이 사용자 입력(또는 canonical alias)과 정확히 같으면 우선 노출.
-    const queryKey = normalizeAliasKey(input.query)
-    const canonicalKey = normalizeAliasKey(resolveLawAlias(input.query).canonical)
-
-    // 현행 우선 정렬: 연혁(과거버전) 법령이 정확매칭 첫 항목으로 노출되면
-    // LLM이 옛 조문을 현행으로 오인해 답변하는 사고가 남 (소방시설법 분법 사례).
-    laws.sort((a, b) => {
-      const rank = (h: LawHit) => h.statusCode === "연혁" ? 1 : 0
-      return rank(a) - rank(b)
-    })
-
-    const exact: LawHit[] = []
-    const partial: LawHit[] = []
-    for (const h of laws) {
-      const nameKey = normalizeAliasKey(h.name)
-      const abbrKey = h.abbr ? normalizeAliasKey(h.abbr) : ""
-      const isExact = nameKey === queryKey
-        || nameKey === canonicalKey
-        || (abbrKey && (abbrKey === queryKey || abbrKey === canonicalKey))
-      if (isExact) exact.push(h)
-      else partial.push(h)
-    }
+    // 현행 우선 정렬 + 정확매칭 분리 (판정은 search-hits.ts — search_law_bulk 와 공용)
+    const { exact, partial } = splitExactPartial(sortCurrentFirst(laws), input.query)
 
     // display는 여기서 — 정확/부분 분리를 마친 "결과"에 적용한다 (#89).
     const exactShown = Math.min(exact.length, input.display)

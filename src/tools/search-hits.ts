@@ -3,7 +3,7 @@
  */
 
 import { DOMParser } from "@xmldom/xmldom"
-import { normalizeAliasKey } from "../lib/search-normalizer.js"
+import { normalizeAliasKey, resolveLawAlias } from "../lib/search-normalizer.js"
 
 export interface LawHit {
   name: string
@@ -48,6 +48,42 @@ export function hasRelatedHit(laws: LawHit[], query: string): boolean {
     const abbrKey = normalizeAliasKey(h.abbr)
     return abbrKey.includes(qKey) || qKey.includes(abbrKey)
   })
+}
+
+/**
+ * 현행 우선 정렬 (원본 불변).
+ *
+ * 연혁(과거버전)이 첫 항목으로 오면 LLM 이 옛 조문을 현행으로 오인한다
+ * (소방시설법 분법 사례). search_law 와 search_law_bulk 가 같은 법령을 골라야
+ * 하므로 판정은 여기 한 곳에 둔다.
+ */
+export function sortCurrentFirst(laws: LawHit[]): LawHit[] {
+  const rank = (h: LawHit) => (h.statusCode === "연혁" ? 1 : 0)
+  return [...laws].sort((a, b) => rank(a) - rank(b))
+}
+
+/**
+ * 정확매칭 분리.
+ *
+ * 법제처 API 는 LIKE 검색 + 가나다순이라 "상법" 같이 짧은 법령명이
+ * "보상법/배상법/기상법" 사이에 묻힌다. 법령명·약칭이 입력(또는 canonical alias)과
+ * 같으면 앞세운다.
+ */
+export function splitExactPartial(laws: LawHit[], query: string): { exact: LawHit[]; partial: LawHit[] } {
+  const queryKey = normalizeAliasKey(query)
+  const canonicalKey = normalizeAliasKey(resolveLawAlias(query).canonical)
+  const exact: LawHit[] = []
+  const partial: LawHit[] = []
+  for (const h of laws) {
+    const nameKey = normalizeAliasKey(h.name)
+    const abbrKey = h.abbr ? normalizeAliasKey(h.abbr) : ""
+    const isExact = nameKey === queryKey
+      || nameKey === canonicalKey
+      || (abbrKey !== "" && (abbrKey === queryKey || abbrKey === canonicalKey))
+    if (isExact) exact.push(h)
+    else partial.push(h)
+  }
+  return { exact, partial }
 }
 
 export function formatHit(idx: number, h: LawHit): string {

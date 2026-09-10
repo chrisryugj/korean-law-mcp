@@ -18,6 +18,7 @@ import { searchDecisions, SearchDecisionsSchema, getDecisionText, GetDecisionTex
 
 // Tool imports
 import { searchLaw, SearchLawSchema } from "./tools/search.js"
+import { searchLawBulk, SearchLawBulkSchema } from "./tools/search-bulk.js"
 import { getLawText, GetLawTextSchema } from "./tools/law-text.js"
 import { parseJoCode, ParseJoCodeSchema, getLawAbbreviations, GetLawAbbreviationsSchema } from "./tools/utils.js"
 import { compareOldNew, CompareOldNewSchema } from "./tools/comparison.js"
@@ -87,9 +88,15 @@ export const allTools: McpTool[] = [
   // === 법령 검색/조회 ===
   {
     name: "search_law",
-    description: "[법령검색] 법령명·조례명·행정규칙명 키워드검색 → lawId, mst 획득. 지자체 조례·규칙(자치법규), 훈령·예규·고시(행정규칙)도 검색 — 0건 시 자치법규/행정규칙으로 자동 폴백(예: '광진구 복무조례', '외국환거래규정'). 약칭 자동변환. 제명변경·시행예정 개정 자동 병기. 폐지된 법령·행정규칙은 폐지 사실과 후속(통합) 규정을 자동 안내. 법령·조례·행정규칙 조회 전 식별자 확보용.",
+    description: "[법령검색] 법령명·조례명·행정규칙명 키워드검색 → lawId, mst 획득. 지자체 조례·규칙(자치법규), 훈령·예규·고시(행정규칙)도 검색 — 0건 시 자치법규/행정규칙으로 자동 폴백(예: '광진구 복무조례', '외국환거래규정'). 약칭 자동변환. 제명변경·시행예정 개정 자동 병기. 폐지된 법령·행정규칙은 폐지 사실과 후속(통합) 규정을 자동 안내. 법령·조례·행정규칙 조회 전 식별자 확보용. 여러 법령의 개정 여부를 한 번에 확인(준법 등록부 감시)하려면 execute_tool(tool_name=\"search_law_bulk\").",
     schema: SearchLawSchema,
     handler: searchLaw
+  },
+  {
+    name: "search_law_bulk",
+    description: "[법령검색] 법령명 배열을 한 번에 조회 — 건당 법령ID·MST·시행일·시행예정만 컴팩트 반환(부분매칭 목록·안내문 없음). previous={법령ID:직전MST} 를 주면 MST가 달라진 법령만 돌려주는 diff 모드 — MST는 개정마다 바뀌므로 그 자체가 변경 감지 키다. ISO 준법 등록부처럼 수십 건의 개정 여부를 주기적으로 확인할 때 search_law 건당 호출 대신 사용.",
+    schema: SearchLawBulkSchema,
+    handler: searchLawBulk
   },
   {
     name: "get_law_text",

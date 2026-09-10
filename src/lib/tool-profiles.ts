@@ -87,7 +87,7 @@ export const TOOL_ALIASES: Record<string, string[]> = {
 
 /** 도구 카테고리 매핑 (discover_tools용) */
 export const TOOL_CATEGORIES: Record<string, string[]> = {
-  "법령검색": ["search_law", "search_all", "advanced_search", "suggest_law_names", "search_ai_law"],
+  "법령검색": ["search_law", "search_law_bulk", "search_all", "advanced_search", "suggest_law_names", "search_ai_law"],
   "법령조회": ["get_law_text", "get_article_detail", "get_batch_articles", "get_article_with_precedents"],
   "행정규칙": ["search_admin_rule", "get_admin_rule", "compare_admin_rule_old_new"],
   "자치법규": ["search_ordinance", "get_ordinance", "ordinance_radar", "chain_ordinance_compare"],
