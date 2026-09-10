@@ -82,6 +82,8 @@ export const LegalResearchSchema = z.preprocess((raw) => {
     .describe("[time_travel] 비교 시작 시점 YYYYMMDD"),
   toDate: z.string().regex(/^\d{8}$/).optional()
     .describe("[time_travel] 비교 종료 시점 YYYYMMDD"),
+  includeHistory: z.boolean().optional()
+    .describe("[amendment_track] 조문별 개정 이력(제정 시점부터 전건)까지 포함. 기본 false — 이 섹션이 응답 상한을 먼저 소진해 신구대조표가 잘린다 (#158)"),
   text: z.string().optional()
     .describe("[document_review 전용·필수] 검토할 계약서/약관 전문 텍스트"),
   maxClauses: z.number().min(1).max(30).optional()
@@ -172,7 +174,8 @@ export async function legalResearch(
       const { value: scenario, note } = pickScenario(chainAmendmentTrackSchema.shape.scenario, input.scenario, task)
       return withNote(note, await chainAmendmentTrack(apiClient, {
         query, mst: input.mst, lawId: input.lawId, scenario,
-        fromDate: input.fromDate, toDate: input.toDate, apiKey,
+        fromDate: input.fromDate, toDate: input.toDate,
+        includeHistory: input.includeHistory ?? false, apiKey,
       }))
     }
     case "ordinance_compare": {

@@ -653,6 +653,8 @@ export const chainAmendmentTrackSchema = z.object({
     .describe("[time_travel 전용] 비교 시작 시점 YYYYMMDD (예: '20240101')"),
   toDate: z.string().regex(/^\d{8}$/).optional()
     .describe("[time_travel 전용] 비교 종료 시점 YYYYMMDD (예: '20251101')"),
+  includeHistory: z.boolean().optional().default(false)
+    .describe("조문별 개정 이력(제정 시점부터 조문×개정 전건)을 함께 실을지. 기본 false — 실무에서 필요한 건 대개 최근 개정의 신구대조인데, 이 섹션이 응답 상한을 먼저 소진해 신구대조표가 잘린다 (#158)"),
   apiKey: z.string().optional(),
 })
 
@@ -682,10 +684,17 @@ export async function chainAmendmentTrack(
     const oldNew = await callTool(compareOldNew, apiClient, { ...id, apiKey: input.apiKey })
     parts.push(secOrSkip("신구대조표 (최근 개정)", oldNew))
 
-    // Step 2: 조문별 개정 이력 (lawId 필요)
+    // Step 2: 조문별 개정 이력 (lawId 필요, opt-in)
+    // 제정 시점부터 전건을 나열해 5만 자 상한을 혼자 소진한다(산업안전보건법 1981~ = 4.9만 자
+    // → 2.4만 자로 절단). 등록부를 연속 처리하는 준법 감시에서는 대개 잉여라 기본은 끈다 (#158).
     if (lawId) {
-      const artHistory = await callTool(getArticleHistory, apiClient, { lawId, apiKey: input.apiKey })
-      parts.push(secOrSkip("조문별 개정 이력", artHistory))
+      if (input.includeHistory) {
+        const artHistory = await callTool(getArticleHistory, apiClient, { lawId, apiKey: input.apiKey })
+        parts.push(secOrSkip("조문별 개정 이력", artHistory))
+      } else {
+        parts.push(`\n[조문별 개정 이력 생략] 제정 시점부터의 조문×개정 전건이라 응답 상한을 소진합니다. ` +
+          `필요하면 includeHistory=true 또는 get_article_history(lawId="${lawId}").`)
+      }
     }
 
     // Scenario 확장
