@@ -1,0 +1,29 @@
+name: Mirror to GitLab
+
+on:
+  push:
+    branches: [main]
+    tags: ['**']
+  workflow_dispatch:
+
+concurrency:
+  group: mirror-gitlab
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Push main and tags to gitlab.aigov.go.kr
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          REPO: ${{ github.event.repository.name }}
+        run: |
+          git push "https://oauth2:${GITLAB_TOKEN}@gitlab.aigov.go.kr/chrisryugj/${REPO}.git" \
+            "refs/remotes/origin/main:refs/heads/main" \
+            "refs/tags/*:refs/tags/*"
