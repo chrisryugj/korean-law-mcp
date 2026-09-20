@@ -78,6 +78,29 @@ function isLawGoKrHost(targetUrl: string): boolean {
 }
 
 /**
+ * undici 의 `fetch failed` 는 원인(cause)을 감춘 채 온다 — DNS 실패·TCP 리셋·연결 타임아웃·
+ * TLS 검증 실패가 전부 같은 다섯 글자다. #78·#161 처럼 사용자에게 "fetch failed" 만 남으면
+ * 리전 egress 드롭인지 법제처 점검인지 사후에 가를 수 없다(머신이 갈리면 서버 로그도 같이
+ * 사라진다). cause 의 code·메시지와 대상 호스트를 붙여 표면화한다. 원본 메시지도 URL 을
+ * 품을 수 있으므로 마스킹은 그대로 거친다.
+ */
+export function describeFetchError(error: Error, url: string): string {
+  const cause = (error as { cause?: unknown }).cause
+  if (error.message !== "fetch failed" || !(cause instanceof Error)) return maskSensitiveUrl(error.message)
+  const code = (cause as { code?: unknown }).code
+  const detail = [typeof code === "string" ? code : "", cause.message && cause.message !== code ? cause.message : ""]
+    .filter(Boolean)
+    .join(": ")
+  let host = ""
+  try {
+    host = new URL(url).host
+  } catch {
+    // URL 파싱 실패 시 호스트 생략
+  }
+  return `fetch failed (${maskSensitiveUrl(detail || cause.name)})${host ? ` - ${host}` : ""}`
+}
+
+/**
  * Fetch with automatic retry and timeout
  */
 export async function fetchWithRetry(
@@ -201,9 +224,9 @@ export async function fetchWithRetry(
         if (error.name === "AbortError" && timedOut) {
           lastError = new Error(`Request timeout after ${timeout}ms for ${maskSensitiveUrl(url)}`)
         } else {
-          // fetch 네이티브 에러 메시지에도 URL이 포함될 수 있음
-          const masked = maskSensitiveUrl(error.message)
-          lastError = masked !== error.message ? new Error(masked) : error
+          // fetch 네이티브 에러 메시지에도 URL이 포함될 수 있음. `fetch failed` 는 cause 를 풀어 쓴다
+          const described = describeFetchError(error, url)
+          lastError = described !== error.message ? Object.assign(new Error(described), { cause: error }) : error
         }
       }
 
@@ -216,6 +239,9 @@ export async function fetchWithRetry(
     }
   }
 
+  // 재시도를 다 태우고도 못 붙은 건 서버 로그에 남긴다 — 사용자 보고(#161)만으로는 시각과
+  // "fetch failed" 뿐이라, 같은 시각 서버가 본 원인 코드가 있어야 리전·업스트림을 가른다.
+  if (lastError) console.error(`[upstream] ${retries + 1}회 시도 실패: ${lastError.message}`)
   throw lastError || new Error("Request failed after retries")
 }
 
