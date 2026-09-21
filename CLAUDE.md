@@ -9,7 +9,7 @@
 >   - `.github/workflows/publish.yml`(GitHub Release → OIDC trusted publishing + provenance)은 **npm 쪽 trusted publisher 등록이 아직 안 됐다**. 그래서 게시는 위 로컬 `npm publish` 가 정규 경로이고, Release 는 그 뒤에 만든다 — 워크플로는 같은 버전이 이미 레지스트리에 있으면 게시를 건너뛰고 검증(typecheck·test·build·verify:package·audit)만 릴리스 시점에 재확인한다.
 > - **🚫 이 레포에서 `fly deploy` 직접 실행 절대 금지** — 통합 이미지를 law 단독 이미지로 덮어써 stats·patent·archhub·school까지 전부 죽는다. 자세한 배경: [docs/FLY-COST.md](docs/FLY-COST.md)
 
-Korean Law MCP Server v4.13.0 - 법제처 42개 API → 10개 통합 도구 (내부 99개) + 9개 시나리오 + 자연어 CLI + HTTP stateless + 판례 토큰 74% 감축 + **legal_research (체인 8종 통합, task 파라미터)** + **legal_analysis (인용검증·판례생사·행위시법·영향그래프 통합, mode 파라미터)** + **time_travel (시점 diff)** + **action_plan (이럴 땐 이렇게, 5단계 안내)** + **시행예정 감지 (search_law가 제명변경·미시행 개정 자동 병기)** + **ordinance_radar (조례 정비 레이더 — 근거 상위법 개정 자동 대조, v4.7.0)** + **인용 검증 표기 내성 (낫표·가운뎃점·`같은 법` 조응, v4.9.0)** + **폐지 감지 (검색 0건 시 폐지 법령·행정규칙 연혁 추적 — 폐지사유·후속 통합 규정 자동 안내, v4.10.0)** + **search_law_bulk (등록부 대량 조회 + MST diff 감시, v4.13.0)**
+Korean Law MCP Server v4.13.1 - 법제처 42개 API → 10개 통합 도구 (내부 99개) + 9개 시나리오 + 자연어 CLI + HTTP stateless + 판례 토큰 74% 감축 + **legal_research (체인 8종 통합, task 파라미터)** + **legal_analysis (인용검증·판례생사·행위시법·영향그래프 통합, mode 파라미터)** + **time_travel (시점 diff)** + **action_plan (이럴 땐 이렇게, 5단계 안내)** + **시행예정 감지 (search_law가 제명변경·미시행 개정 자동 병기)** + **ordinance_radar (조례 정비 레이더 — 근거 상위법 개정 자동 대조, v4.7.0)** + **인용 검증 표기 내성 (낫표·가운뎃점·`같은 법` 조응, v4.9.0)** + **폐지 감지 (검색 0건 시 폐지 법령·행정규칙 연혁 추적 — 폐지사유·후속 통합 규정 자동 안내, v4.10.0)** + **search_law_bulk (등록부 대량 조회 + MST diff 감시, v4.13.0)**
 
 ## Structure
 

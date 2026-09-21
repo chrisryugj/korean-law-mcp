@@ -1,5 +1,20 @@
 # Changelog
 
+## [4.13.1] - 2026-09-21
+
+### Fixed
+
+- **`fetch failed` 가 원인을 감추던 문제** ([#161](https://github.com/chrisryugj/korean-law-mcp/issues/161)): claude.ai 커넥터에서
+  `search_law` 가 `[EXTERNAL_API_ERROR] fetch failed` 로 실패한다는 보고가 [#78](https://github.com/chrisryugj/korean-law-mcp/issues/78)
+  에 이어 다시 왔다(2026-09-20 12:50 KST, 약 5분). 두 번 다 사용자 손에 남은 건 저 다섯 글자와 시각뿐이었다 — undici 는
+  DNS 실패·TCP 리셋·연결 타임아웃·TLS 검증 실패를 전부 같은 메시지로 던지고 `cause` 에만 code 를 싣는데, 그걸 버리고 있었다.
+  머신이 갈리면 서버 로그도 같이 사라지므로 사후에 리전 egress 드롭인지 법제처 점검인지 가를 근거가 없었다.
+  - `describeFetchError`: `cause` 의 code·메시지·대상 호스트를 붙인다 — `fetch failed (ECONNRESET: read ECONNRESET) - www.law.go.kr`.
+    API 키 마스킹은 그대로 거친다
+  - 재시도를 다 태운 최종 실패는 `[upstream] N회 시도 실패: …` 로 stderr 에 남긴다. `fly logs` 에서 같은 시각의 원인 코드를
+    찾을 수 있다
+  - 테스트 758 → **763**
+
 ## [4.13.0] - 2026-09-11
 
 ISO 법규준수 등록부(품질·환경·안전보건·정보보안·BCM·부패방지·AI·ESG 8개 영역 108개 법령)를 이 서버로
