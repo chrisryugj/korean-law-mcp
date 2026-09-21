@@ -138,13 +138,13 @@ export const allTools: McpTool[] = [
   },
   {
     name: "get_admin_rule",
-    description: "[행정규칙] 행정규칙 전문 조회.",
+    description: "[행정규칙] 행정규칙 전문 조회. 전문이 긴 규칙(외국환거래규정 등)은 jo(조문 단위, 예: '제9-5조')·chapter(장)·keyword(본문 검색)·page(페이징) 파라미터로 부분 조회 — 파라미터 없이 호출하면 앞부분 5만 자에서 잘린다.",
     schema: GetAdminRuleSchema,
     handler: getAdminRule
   },
   {
     name: "compare_admin_rule_old_new",
-    description: "[행정규칙] 행정규칙 신구법 비교. query로 검색, id로 본문 대조표 조회.",
+    description: "[행정규칙] 행정규칙 신구법 비교. query로 검색, id로 본문 대조표 조회. 신구대조 데이터가 없는 규칙은 제·개정이유(개정문 요지)로 자동 대체 반환.",
     schema: CompareAdminRuleOldNewSchema,
     handler: compareAdminRuleOldNew
   },

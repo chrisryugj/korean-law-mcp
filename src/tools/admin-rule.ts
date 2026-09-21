@@ -5,10 +5,14 @@
 import { z } from "zod"
 import { DOMParser } from "@xmldom/xmldom"
 import type { LawApiClient } from "../lib/api-client.js"
-import { truncateResponse } from "../lib/schemas.js"
+import { truncateResponse, MAX_RESPONSE_SIZE, formatDateDot } from "../lib/schemas.js"
 import { formatToolError, noResultHint } from "../lib/errors.js"
 import { detectAbolishedAdminRule } from "../lib/abolished-laws.js"
 import { analyzeImageOnlyBody, buildImageOnlyWarning } from "../lib/image-only-body.js"
+import {
+  adminRuleXmlCache, adminRuleCacheKey, ADMIN_RULE_CACHE_TTL_MS,
+  buildPartialBody, pickPartialMode, PARTIAL_HINT,
+} from "../lib/admin-rule-views.js"
 
 // search_admin_rule 스키마
 export const SearchAdminRuleSchema = z.object({
@@ -81,8 +85,16 @@ export async function searchAdminRule(
 }
 
 // get_admin_rule 스키마
+// 법제처 admrul 상세는 법령과 달리 JO 파라미터가 없어 전문이 통짜로만 온다(실측).
+// 부분 조회는 서버가 전문을 파싱해 제공하며, 우선순위는 jo > chapter > keyword > page.
 export const GetAdminRuleSchema = z.object({
   id: z.string().describe("행정규칙일련번호 13자리 (search_admin_rule 결과의 '행정규칙일련번호'. 4~5자리 '행정규칙ID'는 조회되지 않음)"),
+  jo: z.string().optional().describe("조문 지정 — '제9-5조', '9-5', '제10조의2', '9-5-2' 형식 모두 수용. 지정 조문만 반환"),
+  context: z.number().optional().describe("jo와 함께 사용 — 전후 n개 조문을 함께 반환 (기본 0, 최대 10)"),
+  chapter: z.string().optional().describe("장 지정 — '제9장' 또는 '9'. 해당 장 전체 반환"),
+  keyword: z.string().optional().describe("본문 키워드 — 키워드가 포함된 조문 블록 목록 반환"),
+  max_results: z.number().optional().describe("keyword와 함께 사용 — 최대 조문 수 (기본 10, 최대 30)"),
+  page: z.number().optional().describe("전문을 청크로 페이징 조회 (1부터). 응답에 page/total_pages 표기"),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달")
 })
 
@@ -141,7 +153,13 @@ export async function getAdminRule(
   input: GetAdminRuleInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const xmlText = await apiClient.getAdminRule(input.id, input.apiKey)
+    // 전문 응답 캐시 — jo → keyword → page 연속 조회 시 Open API 재호출 방지
+    const cacheKey = adminRuleCacheKey(input.id)
+    let xmlText = adminRuleXmlCache.get<string>(cacheKey)
+    const fromCache = xmlText !== null
+    if (!xmlText) {
+      xmlText = await apiClient.getAdminRule(input.id, input.apiKey)
+    }
 
     const parser = new DOMParser()
     const doc = parser.parseFromString(xmlText, "text/xml")
@@ -149,13 +167,21 @@ export async function getAdminRule(
     // 행정규칙 정보 추출
     const ruleNameRaw = doc.getElementsByTagName("행정규칙명")[0]?.textContent?.trim() || ""
     const ruleName = ruleNameRaw || "알 수 없음"
-    const promDate = doc.getElementsByTagName("공포일자")[0]?.textContent || ""
-    const orgName = doc.getElementsByTagName("소관부처")[0]?.textContent || ""
+    // 상세 응답의 실제 태그는 발령일자/발령번호 (공포일자는 없는 경우가 많다 — 실측)
+    const promDate = doc.getElementsByTagName("공포일자")[0]?.textContent
+      || doc.getElementsByTagName("발령일자")[0]?.textContent || ""
+    const promNo = doc.getElementsByTagName("발령번호")[0]?.textContent || ""
+    const orgName = doc.getElementsByTagName("소관부처")[0]?.textContent
+      || doc.getElementsByTagName("소관부처명")[0]?.textContent || ""
     const ruleType = doc.getElementsByTagName("행정규칙종류")[0]?.textContent || ""
     const joForm = doc.getElementsByTagName("조문형식여부")[0]?.textContent?.trim() || ""
 
+    if (ruleNameRaw && !fromCache) {
+      adminRuleXmlCache.set(cacheKey, xmlText, ADMIN_RULE_CACHE_TTL_MS)
+    }
+
     let resultText = `행정규칙명: ${ruleName}\n`
-    if (promDate) resultText += `공포일: ${promDate}\n`
+    if (promDate) resultText += `공포일: ${formatDateDot(promDate)}${promNo ? ` (제${promNo}호)` : ""}\n`
     if (ruleType) resultText += `종류: ${ruleType}\n`
     if (orgName) resultText += `소관부처: ${orgName}\n`
     resultText += `\n---\n\n`
@@ -230,42 +256,66 @@ export async function getAdminRule(
       resultText += buildImageOnlyWarning(input.id, imgInfo, collectAttachments(doc)) + "\n"
     }
 
-    // 조문 내용 출력
+    // 조문 본문 (부칙·별표 제외 — 부분 조회의 파싱 대상).
+    // 종전 출력과 동일하게 조문내용 태그 사이는 빈 줄로 구분한다.
+    const articleParts: string[] = []
     for (let i = 0; i < joContents.length; i++) {
       const joContent = joContents[i].textContent?.trim() || ""
-
-      if (joContent.length > 0) {
-        resultText += `${joContent}\n\n`
-      }
+      if (joContent.length > 0) articleParts.push(joContent)
     }
+    const articlesText = articleParts.join("\n\n")
 
-    // 부칙 추가
+    // 부칙
+    let extrasText = ""
     const addendums = doc.getElementsByTagName("부칙내용")
     if (addendums.length > 0) {
-      resultText += `\n---\n부칙\n---\n\n`
+      extrasText += `\n---\n부칙\n---\n\n`
       for (let i = 0; i < addendums.length; i++) {
         const content = addendums[i].textContent?.trim() || ""
         if (content.length > 0) {
-          resultText += `${content}\n\n`
+          extrasText += `${content}\n\n`
         }
       }
     }
 
-    // 별표 추가
+    // 별표
     const annexes = doc.getElementsByTagName("별표내용")
     if (annexes.length > 0) {
-      resultText += `\n---\n별표\n---\n\n`
+      extrasText += `\n---\n별표\n---\n\n`
       for (let i = 0; i < annexes.length; i++) {
         const title = doc.getElementsByTagName("별표제목")[i]?.textContent?.trim() || ""
         const content = annexes[i].textContent?.trim() || ""
 
         if (title) {
-          resultText += `[${title}]\n`
+          extrasText += `[${title}]\n`
         }
         if (content.length > 0) {
-          resultText += `${content}\n\n`
+          extrasText += `${content}\n\n`
         }
       }
+    }
+
+    const fullBody = `${articlesText}\n\n${extrasText}`.trim() + "\n"
+
+    // 부분 조회 (jo > chapter > keyword > page) — 기존 전문 조회 동작은 그대로 유지
+    const { mode } = pickPartialMode(input)
+    if (mode) {
+      const view = buildPartialBody(articlesText, fullBody, input)
+      let out = resultText + `[${view.label}]\n`
+      if (view.note) out += `${view.note}\n`
+      out += `\n${view.text}`
+      return {
+        content: [{ type: "text", text: truncateResponse(out) }],
+        ...(view.text.startsWith("[NOT_FOUND]") ? { isError: true as const } : {})
+      }
+    }
+
+    resultText += fullBody
+
+    // 전문이 응답 한도를 넘으면 잘림이 확실하므로, 잘려도 살아남도록
+    // 부분 조회 힌트를 본문 "앞"에 둔다 (T3)
+    if (resultText.length > MAX_RESPONSE_SIZE) {
+      resultText = resultText.replace(/\n---\n\n/u, `\n---\nℹ️ 전문이 ${resultText.length.toLocaleString()}자입니다 — ${PARTIAL_HINT}\n---\n\n`)
     }
 
     return {
@@ -300,6 +350,37 @@ function markChangedParts(text: string): string {
     .replace(/<\/p>/gi, "】")
     .replace(/<\/?[A-Za-z][^>]*>/g, "")
     .trim()
+}
+
+/**
+ * 신구대조 미제공 시 admrul 상세의 제·개정이유 폴백 (T2).
+ * 발령번호·발령일자와 함께 반환하며, 이유 필드가 없으면 null.
+ */
+async function fetchRevisionFallback(
+  apiClient: LawApiClient,
+  id: string,
+  apiKey?: string
+): Promise<string | null> {
+  try {
+    const cacheKey = adminRuleCacheKey(id)
+    let xmlText = adminRuleXmlCache.get<string>(cacheKey)
+    if (!xmlText) {
+      xmlText = await apiClient.getAdminRule(id, apiKey)
+    }
+    const doc = new DOMParser().parseFromString(xmlText, "text/xml")
+    const reason = collectText(doc, "제개정이유내용").trim()
+    if (!reason) return null
+    const name = doc.getElementsByTagName("행정규칙명")[0]?.textContent?.trim() || ""
+    const date = doc.getElementsByTagName("발령일자")[0]?.textContent?.trim() || ""
+    const no = doc.getElementsByTagName("발령번호")[0]?.textContent?.trim() || ""
+    const kind = doc.getElementsByTagName("제개정구분명")[0]?.textContent?.trim() || ""
+    let head = ""
+    if (name) head += `행정규칙명: ${name}\n`
+    if (no || date) head += `발령: 제${no || "?"}호${date ? ` (${formatDateDot(date)})` : ""}${kind ? ` · ${kind}` : ""}\n`
+    return `${head}\n${reason}`
+  } catch {
+    return null
+  }
 }
 
 export async function compareAdminRuleOldNew(
@@ -337,7 +418,18 @@ export async function compareAdminRuleOldNew(
       const maxCount = Math.max(oldArticles?.length || 0, newArticles?.length || 0)
 
       if (maxCount === 0) {
-        resultText += "[NOT_FOUND] 신구법 대조 데이터가 없습니다.\n⚠️ LLM은 대조 내용을 추측하지 마세요."
+        // 행정규칙 신구대조는 law.go.kr 웹 화면에서 생성되는 뷰라 API 데이터가 없는
+        // 경우가 많다. 이때 admrul 상세의 제·개정이유(개정이유·주요내용)를 폴백으로
+        // 반환한다 — "제○조를 ○○로 한다" 수준은 아니어도 변경 취지·대상 조문이
+        // 문장으로 들어 있어 실용적 대체재가 된다. (id가 행정규칙일련번호인 경우 동작)
+        const fallback = await fetchRevisionFallback(apiClient, String(input.id), input.apiKey)
+        if (fallback) {
+          // 대조 헤더("알 수 없음" 등)는 버리고 폴백 자체 헤더로 대체한다
+          const text = "[신구법 대조 데이터 없음 — 제·개정이유로 대체합니다]\n\n" + fallback
+          return { content: [{ type: "text", text: truncateResponse(text) }] }
+        }
+        resultText += "[NOT_FOUND] 신구법 대조 데이터가 없습니다 (제·개정이유도 API 미제공).\n" +
+          "law.go.kr 행정규칙 화면의 '제정·개정이유' 탭에서 확인할 수 있습니다.\n⚠️ LLM은 대조 내용을 추측하지 마세요."
         return { content: [{ type: "text", text: resultText }], isError: true }
       }
 
