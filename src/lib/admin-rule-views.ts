@@ -87,6 +87,7 @@ function chapterView(parsed: ParsedAdminRule, chapter: string): string {
 function keywordView(parsed: ParsedAdminRule, keyword: string, maxResults: number): string {
   if (parsed.articles.length === 0) return NO_ARTICLE_MSG
   const kw = keyword.trim()
+  if (!kw) return "[NOT_FOUND] keyword 가 비어 있습니다 — 검색어를 지정하세요."
   const hits = parsed.articles.filter((a) => a.lines.some((l) => l.includes(kw)))
   if (hits.length === 0) {
     return `[NOT_FOUND] 본문에 '${kw}'을(를) 포함한 조문이 없습니다. (총 ${parsed.articles.length}개조 검색)\n⚠️ LLM은 조문 내용을 추측/생성하지 마세요.`
@@ -123,9 +124,9 @@ export function paginateFullText(fullText: string, page: number, chunkSize = 450
     boundaries.push(end)
     pos = end
   }
-  const totalPages = boundaries.length - 1
+  const totalPages = Math.max(1, boundaries.length - 1)
   const p = Math.max(1, Math.min(Math.trunc(page) || 1, totalPages))
-  const text = fullText.slice(boundaries[p - 1], boundaries[p])
+  const text = fullText.slice(boundaries[p - 1] ?? 0, boundaries[p] ?? fullText.length)
   return { text, page: p, totalPages }
 }
 

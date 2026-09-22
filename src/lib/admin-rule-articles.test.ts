@@ -151,3 +151,45 @@ describe("paginateFullText — 비중첩 페이징 (AC#6)", () => {
     expect(paginateFullText(full, 0, 1000).page).toBe(1)
   })
 })
+
+// ─── 리뷰 보강 (#162): 조문·라인 유실 방어 ───
+describe("parseAdminRuleArticles — 라인 유실 방어", () => {
+  it("장마다 조 번호가 1부터 다시 시작해도 조문을 잃지 않는다", () => {
+    const body = ["제1장 총칙", "제1조(목적) 가.", "제2조(정의) 나.", "제2장 벌칙", "제1조(과태료) 다.", "제2조(경과) 라."].join("\n")
+    const p = parseAdminRuleArticles(body)
+    expect(p.articles).toHaveLength(4)
+    expect(p.articles.map((a) => a.chapter)).toEqual([1, 1, 2, 2])
+    expect(p.articles.filter((a) => a.chapter === 2).map((a) => a.lines.join(""))).toEqual([
+      "제1조(과태료) 다.", "제2조(경과) 라.",
+    ])
+  })
+
+  it("장 헤더 뒤 절 헤더는 다음 조문에 붙어 부분 조회에서 살아남는다", () => {
+    // 실측(외국환거래규정): 절 헤더가 장 헤더 바로 뒤에 와 어느 조문에도 속하지 못했다
+    const body = ["제1장 총칙", "제1-1조(목적) 가.", "제2장 외국환업무취급기관", "제1절 외국환은행", "제2-1조(업무) 나."].join("\n")
+    const p = parseAdminRuleArticles(body)
+    expect(p.articles.find((a) => a.key === "2-1")!.lines.join("\n")).toContain("제1절 외국환은행")
+    expect(buildPartialBody(body, body, { chapter: "제2장" }).text).toContain("제1절 외국환은행")
+    expect(p.preamble).toEqual([])
+  })
+
+  it("전체 라인이 조문·장·서문 중 한 곳에는 반드시 담긴다", () => {
+    const body = ["머리말", "제1장 총칙", "제1조(목적) 가.", "제1절 통칙", "제2조(정의) 나.", "맺음말"].join("\n")
+    const p = parseAdminRuleArticles(body)
+    const kept = [...p.preamble, ...p.chapters.map((c) => c.title), ...p.articles.flatMap((a) => a.lines)]
+    expect(kept.sort()).toEqual(body.split("\n").sort())
+  })
+})
+
+describe("부분 조회 입력 방어", () => {
+  it("본문이 비어도 page 표기는 1/1", () => {
+    expect(paginateFullText("", 1)).toMatchObject({ page: 1, totalPages: 1, text: "" })
+    expect(buildPartialBody("", "", { page: 1 }).label).toBe("페이지 1/1")
+  })
+
+  it("공백뿐인 keyword는 전체 매칭이 아니라 NOT_FOUND", () => {
+    const v = buildPartialBody(HYPHEN_BODY, HYPHEN_BODY, { keyword: "   " })
+    expect(v.text).toContain("[NOT_FOUND]")
+    expect(v.text).toContain("비어 있습니다")
+  })
+})

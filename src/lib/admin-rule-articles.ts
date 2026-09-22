@@ -99,6 +99,8 @@ export function parseAdminRuleArticles(body: string): ParsedAdminRule {
   let cur: AdminRuleArticle | null = null
   let curChapter = 0
   let lastOrd: [number, number, number] | null = null
+  // 조문 사이에 끼는 절 헤더 등 — 다음 조문 앞에 붙여 부분 조회에서 유실되지 않게 한다
+  let pending: string[] = []
 
   for (const rawLine of lines) {
     const line = rawLine.replace(/\s+$/u, "")
@@ -112,6 +114,9 @@ export function parseAdminRuleArticles(body: string): ParsedAdminRule {
       curChapter = Number(ch[1])
       chapters.push({ num: curChapter, title: trimmed })
       cur = null // 장 헤더는 어느 조문에도 속하지 않는다
+      // 장마다 조 번호가 1부터 다시 시작하는 체계(제2장 제1조 등)에서 조문이 통째로
+      // 유실되지 않도록 단조증가 기준을 장 단위로 리셋한다
+      lastOrd = null
       continue
     }
 
@@ -123,9 +128,10 @@ export function parseAdminRuleArticles(body: string): ParsedAdminRule {
           key: toKey(ord[0], ord[1], ord[2]),
           ord,
           label: trimmed,
-          lines: [line],
+          lines: pending.length ? [...pending, line] : [line],
           chapter: curChapter,
         }
+        pending = []
         // 하이픈형에서 장 헤더가 생략된 경우 조 번호 앞자리를 장으로 삼는다
         if (!curChapter && ord[1] > 0) cur.chapter = ord[0]
         articles.push(cur)
@@ -136,8 +142,12 @@ export function parseAdminRuleArticles(body: string): ParsedAdminRule {
     }
 
     if (cur) cur.lines.push(line)
-    else if (trimmed) preamble.push(line)
+    else if (!trimmed) continue
+    else if (articles.length) pending.push(line) // 첫 조문 이후의 떠도는 라인 = 절 헤더 등
+    else preamble.push(line)
   }
+
+  if (pending.length && articles.length) articles[articles.length - 1].lines.push(...pending)
 
   return { articles, chapters, preamble }
 }
