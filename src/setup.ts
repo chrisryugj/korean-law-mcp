@@ -12,6 +12,7 @@ import { resolve, dirname } from "node:path"
 import { homedir, platform } from "node:os"
 import { stdin, stdout } from "node:process"
 import { getLawApiProtocol } from "./lib/law-url-config.js"
+import { withKeyReference, withVscodeKeyInput, type ProjectClient } from "./lib/project-mcp-config.js"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -21,6 +22,8 @@ interface ClientConfig {
   readonly name: string
   readonly configPath: string
   readonly format: "mcpServers" | "servers" | "context_servers"
+  /** 현재 디렉터리에 쓰는(커밋될 수 있는) 설정: 키 평문 대신 참조를 쓴다 */
+  readonly project?: ProjectClient
 }
 
 // ---------------------------------------------------------------------------
@@ -48,6 +51,7 @@ function detectClients(): readonly ClientConfig[] {
     name: "Claude Code (현재 디렉토리)",
     configPath: resolve(process.cwd(), ".mcp.json"),
     format: "mcpServers",
+    project: "claude-code",
   })
 
   // Cursor
@@ -62,6 +66,7 @@ function detectClients(): readonly ClientConfig[] {
     name: "VS Code (현재 디렉토리)",
     configPath: resolve(process.cwd(), ".vscode/mcp.json"),
     format: "servers",
+    project: "vscode",
   })
 
   // Windsurf
@@ -311,14 +316,20 @@ export async function runSetup(): Promise<void> {
     stepHeader(3, 3, "설정 파일 업데이트")
     const lawApiProtocol = getLawApiProtocol()
     const entry = buildServerEntry(apiKey, lawApiProtocol)
+    let wroteEnvReference = false
 
     for (const idx of indices) {
       const client = clients[idx]
       await sleep(150)
       try {
-        const config = await readJsonFile(client.configPath)
+        let config = await readJsonFile(client.configPath)
         const key = client.format
-        const serverEntry = key === "context_servers" ? buildZedEntry(apiKey, lawApiProtocol) : entry
+        let serverEntry = key === "context_servers" ? buildZedEntry(apiKey, lawApiProtocol) : entry
+        if (client.project && apiKey) {
+          serverEntry = withKeyReference(serverEntry, client.project)
+          if (client.project === "vscode") config = withVscodeKeyInput(config)
+          else wroteEnvReference = true
+        }
         const servers = (config[key] ?? {}) as Record<string, unknown>
         servers["korean-law"] = serverEntry
         config[key] = servers
@@ -331,6 +342,11 @@ export async function runSetup(): Promise<void> {
     }
 
     await printComplete(apiKey)
+    if (wroteEnvReference) {
+      console.log(`  ${c.yellow}!${c.reset} 프로젝트 ${c.bold}.mcp.json${c.reset} 에는 키 대신 ${c.bold}\${LAW_OC}${c.reset} 참조를 넣었습니다(git 커밋 시 키 노출 방지).`)
+      console.log(`    셸 설정(~/.zshrc 등)에 ${c.bold}export LAW_OC=발급받은키${c.reset} 를 추가하고 Claude Code 를 다시 여세요.`)
+      console.log()
+    }
   } finally {
     rl.close()
   }

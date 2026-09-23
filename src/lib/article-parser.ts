@@ -184,10 +184,18 @@ export function parseHangNumber(raw: unknown): number {
   return numMatch ? parseInt(numMatch[0], 10) : NaN
 }
 
-/** HTML 정리 - 엔티티 디코딩 순서 중요: &amp; 최후 처리 (이중 인코딩 방지) */
+/**
+ * HTML 정리 - 엔티티 디코딩 순서 중요: &amp; 최후 처리 (이중 인코딩 방지)
+ *
+ * 태그 제거는 영문 태그와 주석으로 한정한다. 조문 본문에는 `<개정 2012.8.1.>`·`<신설 2005.12.29>`·
+ * `부칙 <1999.01.11>` 같은 꺾쇠 표기가 원문 그대로 오는데, `<[^>]+>` 로 지우면 개정 시점이 통째로
+ * 사라졌다(민법 전문에서만 149개, 2026-09-23). 행위시법 판단의 근거라 남긴다. admin-rule 의
+ * markChangedParts 와 같은 규칙이다.
+ */
 export function cleanHtml(text: string): string {
   return text
-    .replace(/<[^>]+>/g, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<\/?[A-Za-z][^>]*>/g, '')
     .replace(/&nbsp;/g, ' ')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')

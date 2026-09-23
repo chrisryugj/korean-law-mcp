@@ -125,9 +125,12 @@ function extractTransitionExcerpts(
 
     const lines = flattenAddendum(unit?.부칙내용)
     if (lines.length === 0) continue
-    // 원문 첫 줄이 "부칙 <제N호,...>" 형식이면 사용, "부칙"만 있으면 공포번호·일자로 구성
-    const header = lines[0].startsWith("부칙") && /제\s*\d+\s*호/.test(lines[0]) ? lines[0]
-      : `부칙 <제${unit?.부칙공포번호}호, ${fmtYmd(String(unit?.부칙공포일자 || ""))}>`
+    // 공포번호·일자가 있으면 표준 표기(YYYY.MM.DD)로 조립한다. 원문 머리 줄("부칙 <제N호,2021.1.26>")은
+    // cleanHtml 이 꺾쇠 표기를 지우던 시절엔 "부칙"만 남아 늘 이 분기로 왔다. 이제 원문이 살아남으므로
+    // 표기를 맞추려면 데이터가 없을 때만 원문 줄을 쓴다.
+    const header = unit?.부칙공포번호
+      ? `부칙 <제${unit.부칙공포번호}호, ${fmtYmd(String(unit?.부칙공포일자 || ""))}>`
+      : lines[0].startsWith("부칙") ? lines[0] : "부칙"
 
     // 조문 지정 시: 해당 조문 언급 라인 최우선 → 경과규정 신호 라인
     const joHits = joDisplay ? lines.filter(l => l.includes(joDisplay)) : []

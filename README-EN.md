@@ -325,6 +325,8 @@ npx --ignore-scripts --omit=optional korean-law-mcp setup
 
 Interactive wizard handles API key input, client selection, and config file registration.
 Supports Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Gemini CLI, Zed, and Antigravity.
+Project-folder configs (Claude Code `.mcp.json`, VS Code `.vscode/mcp.json`) may be committed to git, so the key is not written in plain text:
+Claude Code gets a `${LAW_OC}` reference (add `export LAW_OC=your-key` to your shell profile), and VS Code prompts for the key on first run.
 
 **Manual setup:**
 

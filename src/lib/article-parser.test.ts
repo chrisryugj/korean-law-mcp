@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { parseHangNumber, extractHangContent, groupMokByReset } from "./article-parser.js"
+import { parseHangNumber, extractHangContent, groupMokByReset, cleanHtml } from "./article-parser.js"
 
 describe("parseHangNumber — 원숫자 21항 이상", () => {
   // 회귀: ①~⑳까지만 매핑해 ㉑+(다른 유니코드 블록)가 NaN → verify_citations가
@@ -73,5 +73,17 @@ describe("groupMokByReset", () => {
 
   it("'가'로 시작하지 않아도 첫 그룹을 만든다", () => {
     expect(groupMokByReset([{ 목번호: "나." }, { 목번호: "다." }]).length).toBe(1)
+  })
+})
+
+// 2026-09-23: `<[^>]+>` 로 태그를 지우면 조문 본문의 꺾쇠 표기(개정 시점)까지 사라졌다(민법 전문에서 149개)
+describe("cleanHtml: 영문 태그만 지우고 꺾쇠 표기는 남긴다", () => {
+  it("개정·신설 표기와 부칙 일자를 보존한다", () => {
+    expect(cleanHtml("① 선량한 풍속 <개정 2012.8.1.><img src=x>")).toBe("① 선량한 풍속 <개정 2012.8.1.>")
+    expect(cleanHtml("부칙 <제17907호,2021.1.26> <br/>제1조")).toBe("부칙 <제17907호,2021.1.26> 제1조")
+  })
+
+  it("HTML 태그·주석은 여전히 지운다", () => {
+    expect(cleanHtml("<p>본문</p><!-- 주석 --><strong class=\"x\">강조</strong>")).toBe("본문강조")
   })
 })
