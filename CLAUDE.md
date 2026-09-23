@@ -9,7 +9,7 @@
 >   - `.github/workflows/publish.yml`(GitHub Release → OIDC trusted publishing + provenance)은 **npm 쪽 trusted publisher 등록이 아직 안 됐다**. 그래서 게시는 위 로컬 `npm publish` 가 정규 경로이고, Release 는 그 뒤에 만든다 — 워크플로는 같은 버전이 이미 레지스트리에 있으면 게시를 건너뛰고 검증(typecheck·test·build·verify:package·audit)만 릴리스 시점에 재확인한다.
 > - **🚫 이 레포에서 `fly deploy` 직접 실행 절대 금지** — 통합 이미지를 law 단독 이미지로 덮어써 stats·patent·archhub·school까지 전부 죽는다. 자세한 배경: [docs/FLY-COST.md](docs/FLY-COST.md)
 
-Korean Law MCP Server v4.14.1 - 법제처 42개 API → 10개 통합 도구 (내부 99개) + 9개 시나리오 + 자연어 CLI + HTTP stateless + 판례 토큰 74% 감축 + **legal_research (체인 8종 통합, task 파라미터)** + **legal_analysis (인용검증·판례생사·행위시법·영향그래프 통합, mode 파라미터)** + **time_travel (시점 diff)** + **action_plan (이럴 땐 이렇게, 5단계 안내)** + **시행예정 감지 (search_law가 제명변경·미시행 개정 자동 병기)** + **ordinance_radar (조례 정비 레이더 — 근거 상위법 개정 자동 대조, v4.7.0)** + **인용 검증 표기 내성 (낫표·가운뎃점·`같은 법` 조응, v4.9.0)** + **폐지 감지 (검색 0건 시 폐지 법령·행정규칙 연혁 추적 — 폐지사유·후속 통합 규정 자동 안내, v4.10.0)** + **search_law_bulk (등록부 대량 조회 + MST diff 감시, v4.13.0)** + **행정규칙 부분 조회 (get_admin_rule 의 jo·chapter·keyword·page — 통짜 전문을 조문 단위로, v4.14.0)**
+Korean Law MCP Server v4.14.2 - 법제처 42개 API → 10개 통합 도구 (내부 99개) + 9개 시나리오 + 자연어 CLI + HTTP stateless + 판례 토큰 74% 감축 + **legal_research (체인 8종 통합, task 파라미터)** + **legal_analysis (인용검증·판례생사·행위시법·영향그래프 통합, mode 파라미터)** + **time_travel (시점 diff)** + **action_plan (이럴 땐 이렇게, 5단계 안내)** + **시행예정 감지 (search_law가 제명변경·미시행 개정 자동 병기)** + **ordinance_radar (조례 정비 레이더 — 근거 상위법 개정 자동 대조, v4.7.0)** + **인용 검증 표기 내성 (낫표·가운뎃점·`같은 법` 조응, v4.9.0)** + **폐지 감지 (검색 0건 시 폐지 법령·행정규칙 연혁 추적 — 폐지사유·후속 통합 규정 자동 안내, v4.10.0)** + **search_law_bulk (등록부 대량 조회 + MST diff 감시, v4.13.0)** + **행정규칙 부분 조회 (get_admin_rule 의 jo·chapter·keyword·page — 통짜 전문을 조문 단위로, v4.14.0)**
 
 ## Structure
 
@@ -151,7 +151,7 @@ get_law_text(mst, jo="006300") → 제63조(휴직) 조회
 4. **도구 추가**: `tool-registry.ts`의 `allTools` 배열에 추가
 5. **truncateResponse 필수**: 모든 도구의 최종 출력에 `truncateResponse()` 적용. 한도는 **5만 자(UTF-16 code unit)**이지 50KB가 아니다 — 한글은 UTF-8로 자당 3바이트라 5만 자는 최대 150KB다(#92). `MCP_MAX_TOOL_RESPONSE_CHARS`는 **tool-registry의 최종 출력 게이트에만** 적용된다 — 도구 내부 호출들이 쓰는 기본 상수(`MAX_RESPONSE_SIZE`, 5만)는 env 로 움직이지 않으므로, 상향은 내부 절단에 막혀 무효이고 **하향만 실효**한다
 6. **단일 객체 정규화**: API 응답의 배열 필드가 단일 객체로 올 수 있음 — `Array.isArray(x) ? x : [x]` 패턴 사용
-7. **cleanHtml 재사용**: HTML 엔티티 디코딩은 `article-parser.ts`의 `cleanHtml()` 사용 (수동 디코딩 금지)
+7. **cleanHtml 재사용**: HTML 엔티티 디코딩은 `article-parser.ts`의 `cleanHtml()` 사용 (수동 디코딩 금지). 태그 제거는 영문 태그·주석만이다: `<개정 2012.8.1.>`·`부칙 <제N호,…>` 같은 한글 꺾쇠 표기는 개정 시점 근거라 남긴다(v4.14.2)
 8. **console.log/error 금지**: STDIO 모드에서 간섭 방지. 에러는 throw로 전파. HTTP 모드 에러 로깅은 반드시 `scrubError()` 경유 (API 키 유출 방지)
 9. **String() 방어 코딩**: MCP 클라이언트가 숫자를 보낼 수 있음 — `URLSearchParams.append(key, String(value))` 사용
 10. **캐시 키 분리**: `lawtext:` (law-text.ts, 문자열, lawCache), `batch:` (batch-articles.ts, 파싱된 JSON 객체, **전용 `batchLawCache` 12건**: 전역 500건 캐시에 두면 큰 법령 한 건이 힙 4MB 대라 메모리를 먹는다), `admrulxml:` (admin-rule-views.ts, 전문 XML 문자열, 전용 캐시) — 타입 충돌 금지. lawId 만 준 "현행" 본문은 개정 시행일을 넘기면 낡으므로 TTL 1시간(MST·efYd 는 24시간)
