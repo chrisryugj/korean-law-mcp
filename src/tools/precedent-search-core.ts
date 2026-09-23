@@ -31,7 +31,6 @@ export interface PrecedentHit {
   court?: string
   date?: string
   decisionType?: string
-  link?: string
   sourceQuery?: string
   semanticAnchor?: string
   searchMode: PrecedentSearchMode
@@ -118,7 +117,8 @@ function toHit(
     court: item.법원명 || undefined,
     date: cleanDate(item.선고일자) || item.선고일자 || undefined,
     decisionType: item.판결유형 || undefined,
-    link: item.판례상세링크 || undefined,
+    // 판례상세링크는 싣지 않는다 (2026-09-23 리뷰 C5). 업스트림 링크는 요청 키(OC=)를 박은 채
+    // &amp; 로 인코딩돼 와서(실측) 찍으면 서버 폴백 키가 새고 링크로도 못 쓴다. 후속 조회는 id 로 한다.
     sourceQuery,
     semanticAnchor,
     searchMode,

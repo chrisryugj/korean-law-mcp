@@ -12,7 +12,7 @@ import { ErrorCodes, formatToolError, LawApiError, notFoundResponse } from "../l
 import { ExecutionLimitError } from "../lib/execution-limits.js"
 import { getRequestSignal } from "../lib/session-state.js"
 import { getLawSiteBaseUrl } from "../lib/law-url-config.js"
-import { fetchLawAnnexUnits, findMissingUnits, pickAnnexUnit } from "../lib/annex-canonical.js"
+import { fetchLawAnnexUnits, findMissingUnits, pickAnnexUnit, type LawAnnexUnit } from "../lib/annex-canonical.js"
 import { parseLawNameAndHint } from "../lib/annex-notation.js"
 import { collectAnnexList, collectAdminAnnexList, ANNEX_PAGE_SIZE, MAX_ANNEX_PAGES, type AnnexTruncationReason } from "./annex-list.js"
 import {
@@ -60,6 +60,17 @@ export async function getAnnexes(
       lawType = r.type
       listTruncated = r.truncated
       listReason = r.reason
+    }
+
+    // 2026-09-23 리뷰 C9: 현행 본문(target=law, 실측 3.8MB)을 목록 병합과 본문 추출이 각각 받았다(fetchApi 캐시 없음).
+    // 한 요청 안에서 MST 별로 기억한다. 실패는 기억하지 않아 종전처럼 추출 단계가 다시 시도한다.
+    const unitsByMst = new Map<string, LawAnnexUnit[]>()
+    const loadUnits = async (mst: string): Promise<LawAnnexUnit[]> => {
+      const hit = unitsByMst.get(mst)
+      if (hit) return hit
+      const units = await fetchLawAnnexUnits(apiClient, mst, input.apiKey)
+      unitsByMst.set(mst, units)
+      return units
     }
 
     // "rung이 던졌다(장애)"와 "정상 응답인데 0건(부존재)"은 다른 사실이다 (#150).
@@ -165,7 +176,7 @@ export async function getAnnexes(
 
     // 별표 선택값 지정 시 → 해당 별표 파일 다운로드 + 텍스트 추출
     if (annexSelector) {
-      return await extractAnnexContent(apiClient, filtered, annexSelector, normalizedLawName, lawType, input)
+      return await extractAnnexContent(apiClient, filtered, annexSelector, normalizedLawName, lawType, input, loadUnits)
     }
 
     // 별표 선택값 미지정 → 목록 반환. 법령은 현행 본문 별표단위와 대조해
@@ -177,7 +188,7 @@ export async function getAnnexes(
       const mst = msts.size === 1 ? [...msts][0] : ""
       if (mst) {
         try {
-          const units = await fetchLawAnnexUnits(apiClient, mst, input.apiKey)
+          const units = await loadUnits(mst)
           const missing = findMissingUnits(filtered, units)
           listForDisplay = [
             ...filtered,
@@ -208,7 +219,7 @@ export async function getAnnexes(
     const scoped = filterByAnnexQuery(byArticle.list, input.query)
     const onlySeq = scoped.list.length === 1 ? String(scoped.list[0].별표번호 || "").trim() : ""
     if (scoped.matched && scoped.keywords.length > 0 && onlySeq) {
-      return await extractAnnexContent(apiClient, scoped.list, onlySeq, normalizedLawName, lawType, input)
+      return await extractAnnexContent(apiClient, scoped.list, onlySeq, normalizedLawName, lawType, input, loadUnits)
     }
     return formatAnnexList(scoped.list, lawType, input, normalizedLawName, scoped, mergeIssue, listTruncated, listReason, byArticle)
   } catch (error) {
@@ -224,7 +235,8 @@ async function extractAnnexContent(
   annexSelector: string,
   normalizedLawName: string,
   lawType: string,
-  input: GetAnnexesInput
+  input: GetAnnexesInput,
+  loadUnits: (mst: string) => Promise<LawAnnexUnit[]> = (mst) => fetchLawAnnexUnits(apiClient, mst, input.apiKey)
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   const knd = input.knd
   // bylSeq / annexNo / lawName 내 힌트로 유연 매칭 (별표/서식 구분 위해 knd 전달)
@@ -237,7 +249,7 @@ async function extractAnnexContent(
     const mst = matched?.관련법령일련번호 || annexList[0]?.관련법령일련번호
     if (mst) {
       try {
-        const units = await fetchLawAnnexUnits(apiClient, String(mst), input.apiKey)
+        const units = await loadUnits(String(mst))
         const unit = pickAnnexUnit(units, {
           code6: matched?.별표번호 ? String(matched.별표번호).trim() : undefined,
           kind: matched?.별표종류 ? String(matched.별표종류) : undefined,

@@ -16,6 +16,8 @@
  * 안전성: 모든 함수는 매칭 실패 / 빈 입력 / 짧은 입력 시 **원본 그대로 반환**.
  */
 
+import { sliceWellFormed } from "./truncate-text.js"
+
 export interface CompactOptions {
   /** true 시 축약 비활성 → 원본 반환 */
   full?: boolean
@@ -56,7 +58,9 @@ export function compactBody(text: string, opts: CompactOptions = {}): string {
   ]
   const headCutCandidate = Math.max(...headBoundaries)
   const headCut = headCutCandidate > HEAD * 0.5 ? headCutCandidate + 2 : HEAD
-  const head = text.slice(0, headCut).trimEnd()
+  // 2026-09-23 리뷰 C10: 경계가 없으면 HEAD 자리에서 하드컷한다. 그 자리가 서로게이트 쌍 한가운데면
+  // lone surrogate 가 남아 JSON 직렬화에서 U+FFFD 로 변형된다(#150 과 같은 유형). 쌍 앞에서 끊는다.
+  const head = sliceWellFormed(text, headCut).trimEnd()
 
   // TAIL — 뒤에서 TAIL자 범위 중 문장 시작에서 자르기
   // ". " 경계는 소수점("1,234.00 원")/영문 약어("No. 3") 오탐 위험으로 제외.
@@ -74,10 +78,13 @@ export function compactBody(text: string, opts: CompactOptions = {}): string {
     .filter((i) => i >= 0)
     .sort((a, b) => a - b)[0]
 
-  const tailFrom =
+  let tailFrom =
     tailBoundaryIdx !== undefined && tailBoundaryIdx < TAIL * 0.5
       ? tailStart + tailBoundaryIdx + 2
       : tailStart
+  // 같은 이유로 꼬리 시작이 low surrogate 면 한 칸 당겨 온전한 글자로 시작한다 (리뷰 C10)
+  const firstUnit = text.charCodeAt(tailFrom)
+  if (firstUnit >= 0xdc00 && firstUnit <= 0xdfff) tailFrom--
   const tail = text.slice(tailFrom).trimStart()
 
   const omitted = text.length - head.length - tail.length
@@ -142,7 +149,9 @@ export function densifyPrecedentRefs(text: string): string {
     // (문서 중간 "제2020." 같은 오탐 방지)
     .replace(/(^|[\s,(\[;/])(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\./g, "$1$2.$3.$4.")
     // "[동지] ", "[공보 생략]" 같은 부가표기 제거
-    .replace(/\s*\[[^\]]{2,15}\]\s*/g, " ")
+    // 2026-09-23 리뷰 C10: 판시사항 번호 표식 [10] 이상도 2자 이상이라 함께 지워졌다([1]~[9]만 남음).
+    // 숫자만 든 괄호는 남긴다.
+    .replace(/\s*\[(?!\d+\])[^\]]{2,15}\]\s*/g, " ")
     // 연속 공백
     .replace(/[ \t]{2,}/g, " ")
     .replace(/\s*,\s*/g, ", ")

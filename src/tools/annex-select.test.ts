@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { annexQueryKeywords, buildSelectorCandidates, extractSelectorNumbers, filterByAnnexQuery, findMatchingAnnex, type AnnexItem } from "./annex-select.js"
+import { annexQueryKeywords, buildSelectorCandidates, extractParentLawName, extractSelectorNumbers, filterByAnnexQuery, findMatchingAnnex, type AnnexItem } from "./annex-select.js"
 import { parseLawNameAndHint } from "../lib/annex-notation.js"
 
 // 도로교통법 시행규칙 별표 목록 실측 발췌 (총 263건 중)
@@ -156,5 +156,40 @@ describe("제목 매칭 — '제N호의M'(호 중위) 표기 (#150)", () => {
   it("본번 selector가 여전히 본번 제목을 고른다 (회귀)", () => {
     // 패턴 확장이 본번 요청을 가지 제목으로 흘려보내면 안 된다
     expect(findMatchingAnnex([FORMS[0]], "59", "2")?.별표명).toContain("제59호서식")
+  })
+})
+
+// 2026-09-23 리뷰 C2: ANNEX_NOTATION_RE 의 선두 `\s*` 와 extractParentLawName 의 `\s*(시행규칙|시행령)$` 는
+// 공백 덩어리에서 제곱이었다(10만 자 기준 각각 6.3초·13.4초). get_annexes 의 query·lawName 은 길이 제한이 없다.
+describe("annexQueryKeywords·extractParentLawName: 공백 덩어리 (리뷰 C2)", () => {
+  it("공백 10만 자 query 도 즉시 토큰화한다", () => {
+    const t0 = performance.now()
+    const kw = annexQueryKeywords("과태료" + " ".repeat(100_000) + "부과기준")
+    expect(performance.now() - t0).toBeLessThan(200)
+    expect(kw).toEqual(["과태료", "부과기준"])
+  })
+
+  it("공백이 여럿인 정상 query 는 종전과 같다", () => {
+    expect(annexQueryKeywords("과태료  부과   기준")).toEqual(["과태료", "부과", "기준"])
+    expect(annexQueryKeywords("  서식  제3호  신청서 ")).toEqual(["신청서"])
+    expect(annexQueryKeywords("별지 제3호서식 신청서")).toEqual(["신청서"])
+  })
+
+  it("extractParentLawName: 공백 10만 자에서도 즉시 판정한다", () => {
+    const t0 = performance.now()
+    expect(extractParentLawName("관세법" + " ".repeat(100_000) + "가")).toBeNull()
+    expect(extractParentLawName("관세법" + " ".repeat(100_000) + "시행령")).toBe("관세법")
+    expect(performance.now() - t0).toBeLessThan(200)
+  })
+
+  it("extractParentLawName: 정상 입력은 종전과 같다", () => {
+    expect(extractParentLawName("여권법 시행규칙")).toBe("여권법")
+    expect(extractParentLawName("관세법 시행령")).toBe("관세법")
+    expect(extractParentLawName("여권법   시행령")).toBe("여권법")
+    expect(extractParentLawName("여권법\n시행규칙")).toBe("여권법")
+    expect(extractParentLawName("시행령시행규칙")).toBe("시행령")
+    expect(extractParentLawName("관세법")).toBeNull()
+    expect(extractParentLawName("여권법 시행규칙 ")).toBeNull()
+    expect(extractParentLawName("지방공무원 임용령")).toBeNull()
   })
 })

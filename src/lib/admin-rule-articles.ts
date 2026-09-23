@@ -103,7 +103,9 @@ export function parseAdminRuleArticles(body: string): ParsedAdminRule {
   let pending: string[] = []
 
   for (const rawLine of lines) {
-    const line = rawLine.replace(/\s+$/u, "")
+    // 2026-09-23 리뷰 C7: `/\s+$/u` 는 라인 안 공백 덩어리에서 제곱이다(10만 자 13초).
+    // trimEnd 는 같은 공백 집합을 선형으로 지운다.
+    const line = rawLine.trimEnd()
     const trimmed = line.trim()
 
     // 헤더 판정은 원 라인 기준(^ 앵커) — 들여쓰기된 라인은 본문이다.

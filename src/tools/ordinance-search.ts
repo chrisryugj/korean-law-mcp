@@ -33,8 +33,13 @@ export async function searchOrdinance(
   input: SearchOrdinanceInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
+    // 2026-09-23 리뷰 C3: normalizeLawSearchText(LexDiff 이식본)의 `\s*[-]\s*`·`\s*\.\s*` 는 공백 덩어리에서
+    // 제곱이다(10만 자 15.0초, fetch 전에 이벤트 루프 정지). 이식본은 두고 여기서 공백을 한 칸으로 접는다.
+    // 접어도 결과가 같다(ordinance-search.test.ts 고정 시드 퍼즈). expandOrdinanceQuery 도 같은 정규화를 탄다.
+    const collapsedQuery = input.query.replace(/\s+/g, " ")
+
     // 검색어 정규화 (약칭 해결, 오타 보정)
-    const normalizedQuery = normalizeLawSearchText(input.query)
+    const normalizedQuery = normalizeLawSearchText(collapsedQuery)
 
     // 1차 검색 시도
     let xmlText = await apiClient.searchOrdinance({
@@ -60,7 +65,7 @@ export async function searchOrdinance(
 
     // 검색 결과 없으면 확장 쿼리로 자동 재시도
     if (totalCount === 0) {
-      const { expanded } = expandOrdinanceQuery(input.query)
+      const { expanded } = expandOrdinanceQuery(collapsedQuery)
 
       for (const expandedQuery of expanded) {
         xmlText = await apiClient.searchOrdinance({
@@ -94,7 +99,7 @@ export async function searchOrdinance(
 
     if (totalCount === 0) {
       // 확장 검색도 실패한 경우, 시도한 쿼리들 안내
-      const { expanded } = expandOrdinanceQuery(input.query)
+      const { expanded } = expandOrdinanceQuery(collapsedQuery)
       const triedQueries = [normalizedQuery, ...expanded].slice(0, 3).join("', '")
       const keywords = input.query.trim().split(/\s+/)
       const hint = [`[NOT_FOUND] '${input.query}' 자치법규 검색 결과가 없습니다.`, `시도한 검색어: '${triedQueries}'`, "", "⚠️ LLM은 조례 내용을 추측하지 마세요. 사용자에게 '검색 실패'를 보고하세요."]

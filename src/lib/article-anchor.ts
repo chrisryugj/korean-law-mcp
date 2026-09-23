@@ -104,7 +104,9 @@ const INSTRUMENT_RE = /(시행규칙|시행령|규칙|규정|조례)$/
 const INTERPUNCT_RE = new RegExp(`[${INTERPUNCT_CHARS}]`, "g")
 
 function lawKey(name: string): string {
-  const resolved = resolveLawAlias(normalizeLawSearchText(name)).canonical
+  // 2026-09-23 리뷰 C3: normalizeLawSearchText(LexDiff)는 공백 덩어리에서 제곱이다(10만 자 15.0초).
+  // 공백을 먼저 접어도 결과가 같다(ordinance-search.test.ts 퍼즈). 대상 법령명은 호출자 입력이다.
+  const resolved = resolveLawAlias(normalizeLawSearchText(name.replace(/\s+/g, " "))).canonical
   return normalizeAliasKey(resolved).replace(INTERPUNCT_RE, "")
 }
 
@@ -147,7 +149,10 @@ function hasOldLawPrefix(text: string, lawNameStart: number): boolean {
 
 /** 텍스트가 앵커 조문을 가리키는지 판정. 조문 표기가 없으면 silent(판정 보류). */
 export function classifyArticleRefs(text: string, anchor: ArticleAnchor): AnchorVerdict {
-  const folded = foldNotation(text || "")
+  // 2026-09-23 리뷰 C7: ARTICLE_REF_RE 의 `\s*[」』】〕]?\s*` 는 공백 덩어리에서 세제곱이다(인용 앞
+  // 공백 800자 228ms, 1,600자 1.35초). 자치법규 원시 JSON 전체에 적용되므로 공백을 한 칸으로 접는다.
+  // `\s*` 판정은 길이와 무관해 결과가 같고(퍼즈 40만 건 차이 0), m.index 도 접힌 문자열 기준으로 일관된다.
+  const folded = foldNotation(text || "").replace(/\s+/g, " ")
 
   // 범위 표기를 먼저 본다 — 범위 안에 들면 양 끝 조번호가 달라도 인용된 것이 맞다.
   let r: RegExpExecArray | null

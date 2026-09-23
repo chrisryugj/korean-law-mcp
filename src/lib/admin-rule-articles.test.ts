@@ -193,3 +193,30 @@ describe("부분 조회 입력 방어", () => {
     expect(v.text).toContain("비어 있습니다")
   })
 })
+
+// 2026-09-23 리뷰 C7: 줄 끝 공백 제거 `/\s+$/u` 는 라인 안 공백 덩어리에서 제곱이었다(10만 자 13초).
+// 실측 외국환거래규정의 최장 라인 내부 공백은 6자라 지금은 발화하지 않지만, 업스트림 한 건이면 멈춘다.
+describe("parseAdminRuleArticles: 라인 안 공백 덩어리 (리뷰 C7)", () => {
+  it("라인 안 공백 10만 자에서도 선형이고 결과는 같다", () => {
+    const body = "제1조(목적) 가" + " ".repeat(100_000) + "나   \n제2조 본문\t"
+    const t0 = performance.now()
+    const p = parseAdminRuleArticles(body)
+    expect(performance.now() - t0).toBeLessThan(200)
+    expect(p.articles.map(a => a.key)).toEqual(["1", "2"])
+    expect(p.articles[0].lines[0]).toBe("제1조(목적) 가" + " ".repeat(100_000) + "나")
+    expect(p.articles[1].lines).toEqual(["제2조 본문"])
+  })
+
+  // 리뷰 전 구현으로 뽑은 기준값 (2026-09-23)
+  it("줄 끝 공백 제거는 종전과 같다", () => {
+    expect(parseAdminRuleArticles("제1장 총칙\n제1조(목적) 가.   \n  본문\t\n제2조 나\n제3조의2 다  \n")).toEqual({
+      articles: [
+        { key: "1", ord: [1, 0, 0], label: "제1조(목적) 가.", lines: ["제1조(목적) 가.", "  본문"], chapter: 1 },
+        { key: "2", ord: [2, 0, 0], label: "제2조 나", lines: ["제2조 나"], chapter: 1 },
+        { key: "3의2", ord: [3, 0, 2], label: "제3조의2 다", lines: ["제3조의2 다", ""], chapter: 1 },
+      ],
+      chapters: [{ num: 1, title: "제1장 총칙" }],
+      preamble: [],
+    })
+  })
+})

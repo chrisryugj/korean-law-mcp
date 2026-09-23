@@ -106,3 +106,32 @@ describe("findMatchingAnnex — 별지 제목도 번호로 잡힌다", () => {
     expect(findMatchingAnnex(list, "4", "1")?.별표명).toContain("[별표4]")
   })
 })
+
+// 2026-09-23 리뷰 C2: ANNEX_HINT_RE 의 `\s*` 들이 공백 덩어리에서 제곱으로 백트래킹했다
+// ("관세법 별표" + 공백 10만 자 → 23.6초). get_annexes 는 이 파싱을 fetch 전에 하므로
+// 요청 한 건이 업스트림 호출 없이 이벤트 루프를 멈췄다.
+describe("parseLawNameAndHint: 공백 덩어리 입력 (리뷰 C2)", () => {
+  it("별표 뒤 공백 10만 자에서도 즉시 번호를 뗀다", () => {
+    const t0 = performance.now()
+    const r = parseLawNameAndHint("관세법 별표" + " ".repeat(100_000) + "4")
+    expect(performance.now() - t0).toBeLessThan(200)
+    expect(r).toEqual({ normalizedLawName: "관세법", annexNo: "4" })
+  })
+
+  it("힌트가 없으면 공백 덩어리도 즉시 끝나고 원문(trim)을 그대로 돌려준다", () => {
+    const input = "관세법" + " ".repeat(100_000) + "가"
+    const t0 = performance.now()
+    const r = parseLawNameAndHint(input)
+    expect(performance.now() - t0).toBeLessThan(200)
+    expect(r).toEqual({ normalizedLawName: input })
+  })
+
+  it("공백이 섞인 정상 표기는 종전과 같다", () => {
+    expect(parseLawNameAndHint("관세법  시행령   별표  제4호")).toEqual({ normalizedLawName: "관세법 시행령", annexNo: "4" })
+    expect(parseLawNameAndHint("도로교통법\n시행규칙\t별표 28")).toEqual({ normalizedLawName: "도로교통법 시행규칙", annexNo: "28" })
+    expect(parseLawNameAndHint("  관세법   시행령  ")).toEqual({ normalizedLawName: "관세법   시행령" })
+    expect(parseLawNameAndHint("별표 4")).toEqual({ normalizedLawName: "별표 4", annexNo: "4" })
+    expect(parseLawNameAndHint("관세법 [별표 1의2]")).toEqual({ normalizedLawName: "관세법", annexNo: "000102" })
+    expect(parseLawNameAndHint("별표28 운전면허")).toEqual({ normalizedLawName: "운전면허", annexNo: "28" })
+  })
+})

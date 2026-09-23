@@ -74,14 +74,19 @@ export function fromAnnexCode(code: string): { main: number, sub: number } | und
  */
 export function parseLawNameAndHint(lawName: string): { normalizedLawName: string, annexNo?: string } {
   const trimmedLawName = lawName.trim()
-  const annexHintMatch = trimmedLawName.match(ANNEX_HINT_RE)
+  // 2026-09-23 리뷰 C2: ANNEX_HINT_RE 의 `\s*` 들은 공백 덩어리에서 제곱으로 백트래킹한다
+  // ("관세법 별표" + 공백 10만 자 → 23.6초, get_annexes 가 fetch 전에 멈췄다). 공백을 한 칸으로
+  // 접은 사본에서 찾는다. `\s*` 는 길이 1과 k를 구별하지 않으므로 번호·법령명 결과는 같다.
+  // 힌트가 없으면 종전처럼 원문(trim)을 그대로 돌려준다.
+  const collapsed = trimmedLawName.replace(/\s+/g, " ")
+  const annexHintMatch = collapsed.match(ANNEX_HINT_RE)
 
   if (!annexHintMatch) {
     return { normalizedLawName: trimmedLawName }
   }
 
   const parsed = parseAnnexNumber(annexHintMatch[0])
-  const normalizedLawName = trimmedLawName
+  const normalizedLawName = collapsed
     .replace(annexHintMatch[0], " ")
     .replace(/\s+/g, " ")
     .trim()

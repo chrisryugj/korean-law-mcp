@@ -203,3 +203,41 @@ describe("classifyArticleRefs — 구 법령 접두 보류 (#150)", () => {
     expect(classifyArticleRefs("구 매장및묘지등에관한법률 제17조 위헌소원", aJangsa)).toBe("mismatch")
   })
 })
+
+// 2026-09-23 리뷰 C7: ARTICLE_REF_RE 의 `\s*[」』】〕]?\s*` 는 공백 덩어리에서 세제곱이었다
+// (인용 앞 공백 800자 228ms, 1,600자 1.35초). 자치법규 본문 전체(원시 JSON)에 적용되므로
+// 업스트림 한 건에 긴 공백이 섞이면 그대로 멈춘다. 판정 입구에서 공백을 접는다.
+describe("classifyArticleRefs: 공백 덩어리 (리뷰 C7)", () => {
+  const anchor = parseArticleAnchor("제12조", "주차장법")!
+
+  it("인용 앞 공백 10만 자에서도 즉시 판정한다", () => {
+    const t0 = performance.now()
+    expect(classifyArticleRefs("이 조례는" + " ".repeat(100_000) + "「주차장법」제12조에 따라", anchor)).toBe("match")
+    expect(classifyArticleRefs("가" + " ".repeat(100_000) + "가", anchor)).toBe("silent")
+    expect(performance.now() - t0).toBeLessThan(200)
+  })
+
+  it("공백 길이는 판정에 영향이 없다 (종전과 같다)", () => {
+    const a103 = parseArticleAnchor("제103조", "민법")!
+    const a103NoLaw = parseArticleAnchor("제103조")!
+    const CASES: Array<[string, string, string]> = [
+      ["민법 제103조 위반", "match", "match"],
+      ["「민법」   제103조", "match", "match"],
+      ["민법 제1032조 위헌소원", "mismatch", "mismatch"],
+      ["형법  제103조", "law-mismatch", "match"],
+      ["구   민법 제103조", "match", "match"],
+      ["제100조부터\n\n제105조까지", "match", "match"],
+      ["손해배상(기)", "silent", "silent"],
+      ["민법  제 103 조", "match", "match"],
+    ]
+    for (const [text, withLaw, withoutLaw] of CASES) {
+      expect([classifyArticleRefs(text, a103), classifyArticleRefs(text, a103NoLaw)]).toEqual([withLaw, withoutLaw])
+    }
+  })
+
+  it("classifyLawName: 대상 법령명의 공백 덩어리도 즉시 끝난다", () => {
+    const t0 = performance.now()
+    expect(classifyLawName("민법", "민" + " ".repeat(100_000) + "법")).toBe("same")
+    expect(performance.now() - t0).toBeLessThan(200)
+  })
+})

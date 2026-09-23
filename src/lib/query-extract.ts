@@ -24,10 +24,20 @@ function formatArticle(no: string, sub?: string): string {
   return sub ? `제${no}조의${sub}` : `제${no}조`
 }
 
+/**
+ * 공백 덩어리를 한 칸으로 접는다 (2026-09-23 리뷰 C3).
+ * ARTICLE_RE·ARTICLE_TAIL_RE 의 `제?\s*\d+` 는 공백 덩어리의 시작 위치마다 끝까지 훑어 제곱이다
+ * (search_ordinance 질의 공백 10만 자: stripArticleTail 5.7초, extractArticleNumbers 13.4초).
+ * `\s*` 는 길이 1과 k를 구별하지 않고 추출기는 끝에서 공백을 다시 접으므로 결과는 같다.
+ */
+function collapseWhitespace(text: string): string {
+  return text.replace(/\s+/g, " ")
+}
+
 /** 쿼리에 등장하는 조문번호 전부 (등장 순서, 중복 제거) */
 export function extractArticleNumbers(query: string): string[] {
   const found: string[] = []
-  for (const m of query.matchAll(ARTICLE_RE)) {
+  for (const m of collapseWhitespace(query).matchAll(ARTICLE_RE)) {
     const jo = formatArticle(m[1], m[2])
     if (!found.includes(jo)) found.push(jo)
   }
@@ -37,7 +47,7 @@ export function extractArticleNumbers(query: string): string[] {
 /** 첫 번째 조문번호 (없으면 undefined) */
 /** 조문 표기(+항/호)를 걷어낸 나머지 — 법령명만 남기려는 호출자를 위한 공개 창구 */
 export function stripArticleTail(text: string): string {
-  return text.replace(ARTICLE_TAIL_RE, " ").replace(/\s+/g, " ").trim()
+  return collapseWhitespace(text).replace(ARTICLE_TAIL_RE, " ").replace(/\s+/g, " ").trim()
 }
 
 export function extractArticleNumber(query: string): string | undefined {
@@ -114,7 +124,7 @@ export function searchExtract(strip: RegExp) {
  * 단어 경계(\b에 해당하는 한글 패턴)를 고려하여 제거.
  */
 export function lawNameFromQuery(query: string): string {
-  return query
+  return collapseWhitespace(query)
     // 조문번호(+항/호) — 확정적 구문이라 먼저 제거
     .replace(ARTICLE_TAIL_RE, " ")
     // "별표 1", "별표" 등 독립적 사용만 제거

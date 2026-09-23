@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest"
 import { searchOrdinance } from "./ordinance-search.js"
 import { lawCache } from "../lib/cache.js"
+import { normalizeLawSearchText } from "../lib/search-normalizer.js"
 import type { LawApiClient } from "../lib/api-client.js"
 
 const EMPTY = `<?xml version="1.0" encoding="UTF-8"?><OrdinSearch><totalCnt>0</totalCnt><page>1</page></OrdinSearch>`
@@ -130,5 +131,40 @@ describe("searchOrdinance — 확장 질의", () => {
     const r = await searchOrdinance(client, { query: "광진구 휴직 조례", display: 10 })
     expect(seen.length).toBeGreaterThan(1)
     expect(r.content[0].text).toMatch(/확장/)
+  })
+})
+
+// 2026-09-23 리뷰 C3: normalizeLawSearchText(LexDiff 이식본)의 `\s*[-]\s*`·`\s*\.\s*` 가 공백 덩어리에서
+// 제곱으로 백트래킹했다(10만 자 15.0초, fetch 전). 이식본은 고치지 않고 호출부에서 공백을 접는다.
+// 아래 퍼즈가 "접어도 결과가 같다"는 전제를 고정한다. LexDiff 동기화로 전제가 깨지면 여기서 먼저 드러난다.
+function seeded(seed: number): () => number {
+  let s = seed >>> 0
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0
+    let t = Math.imul(s ^ (s >>> 15), 1 | s)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+describe("searchOrdinance: 공백 덩어리 질의 (리뷰 C3)", () => {
+  it("normalizeLawSearchText 는 공백을 미리 접어도 결과가 같다 (고정 시드 퍼즈)", () => {
+    const rnd = seeded(20260923)
+    const nbsp = String.fromCharCode(0xa0), ideo = String.fromCharCode(0x3000), dash = String.fromCharCode(0x2014)
+    const alphabet = [" ", "  ", "\t", "\n", nbsp, ideo, "-", dash, ".", "(", ")", "§", "=", "가", "법", "a", "B", "1"]
+    for (let i = 0; i < 20_000; i++) {
+      let s = ""
+      const n = Math.floor(rnd() * 16)
+      for (let j = 0; j < n; j++) s += alphabet[Math.floor(rnd() * alphabet.length)]
+      expect(normalizeLawSearchText(s.replace(/\s+/g, " "))).toBe(normalizeLawSearchText(s))
+    }
+  })
+
+  it("공백 10만 자 질의가 이벤트 루프를 멈추지 않는다", async () => {
+    const client = { searchOrdinance: async () => EMPTY } as unknown as LawApiClient
+    const t0 = performance.now()
+    const r = await searchOrdinance(client, { query: "서울" + " ".repeat(100_000) + "주차 제12조", display: 20 })
+    expect(performance.now() - t0).toBeLessThan(500)
+    expect(r.isError).toBe(true)
   })
 })

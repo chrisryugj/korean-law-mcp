@@ -32,7 +32,12 @@ export interface AnnexItem {
  * "여권법 시행규칙" → "여권법", "관세법 시행령" → "관세법"
  */
 export function extractParentLawName(lawName: string): string | null {
-  const cleaned = lawName.replace(/\s*(시행규칙|시행령)$/, '')
+  // 2026-09-23 리뷰 C2: 종전 `\s*(시행규칙|시행령)$` 는 공백 덩어리의 시작 위치마다 끝까지 훑어
+  // 제곱이었다(공백 10만 자 13.4초). 접미어만 끝에서 찾고 그 앞 공백은 trimEnd 로 걷는다.
+  // `\s` 와 trimEnd 는 같은 공백 집합이라 결과는 같다.
+  const suffix = /(?:시행규칙|시행령)$/.exec(lawName)
+  if (!suffix) return null
+  const cleaned = lawName.slice(0, suffix.index).trimEnd()
   return cleaned !== lawName ? cleaned : null
 }
 
@@ -312,7 +317,10 @@ export function filterByRelatedLawName(annexList: AnnexItem[], queryName: string
 export function annexQueryKeywords(query?: string): string[] {
   if (!query) return []
   // 표기 문법은 annex-notation 단일 원본이 쥔다 — 여기에 사본을 두면 어휘가 또 갈린다
+  // 2026-09-23 리뷰 C2: ANNEX_NOTATION_RE 의 선두 `\s*` 는 공백 덩어리에서 제곱이었다(10만 자 6.3초).
+  // 공백을 먼저 한 칸으로 접는다. 토큰은 어차피 공백으로 나누므로 결과는 같다.
   return query
+    .replace(/\s+/g, " ")
     .replace(ANNEX_NOTATION_RE, " ")
     .split(/[\s,·ㆍ]+/)
     .map((t) => t.trim())
