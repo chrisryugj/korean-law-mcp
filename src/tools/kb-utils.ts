@@ -84,41 +84,33 @@ export async function fallbackTermSearch(
   term: string,
   termType: string
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
-  try {
-    const xmlText = await apiClient.fetchApi({
-      endpoint: "lawSearch.do",
-      target: "lstrm",
-      extraParams: { query: term, display: "10" },
-    })
+  // 조회 오류는 삼키지 않고 호출부(도구의 catch → formatToolError)로 올린다. 종전엔 장애를
+  // "연계 정보를 찾을 수 없습니다"로 바꿔 부존재처럼 답했다 (2026-09-23 리뷰 D8).
+  const xmlText = await apiClient.fetchApi({
+    endpoint: "lawSearch.do",
+    target: "lstrm",
+    extraParams: { query: term, display: "10" },
+  })
 
-    const result = parseKBXML(xmlText, "LsTrmSearch")
-    const items = result.data || []
+  const result = parseKBXML(xmlText, "LsTrmSearch")
+  const items = result.data || []
 
-    if (items.length === 0) {
-      return {
-        content: [{
-          type: "text",
-          text: `[NOT_FOUND] '${term}' ${termType} 연계 정보를 찾을 수 없습니다.\n⚠️ LLM은 연계 정보를 추측하지 마세요.`,
-        }],
-        isError: true,
-      }
-    }
-
-    let output = `'${term}' 관련 용어 (폴백 검색):\n\n`
-    for (const item of items) {
-      if (item.법령용어명) {
-        output += `   • ${item.법령용어명}\n`
-      }
-    }
-
-    return { content: [{ type: "text", text: output }] }
-  } catch {
+  if (items.length === 0) {
     return {
       content: [{
         type: "text",
-        text: `'${term}' ${termType} 연계 정보를 찾을 수 없습니다.`,
+        text: `[NOT_FOUND] '${term}' ${termType} 연계 정보를 찾을 수 없습니다.\n⚠️ LLM은 연계 정보를 추측하지 마세요.`,
       }],
       isError: true,
     }
   }
+
+  let output = `'${term}' 관련 용어 (폴백 검색):\n\n`
+  for (const item of items) {
+    if (item.법령용어명) {
+      output += `   • ${item.법령용어명}\n`
+    }
+  }
+
+  return { content: [{ type: "text", text: output }] }
 }

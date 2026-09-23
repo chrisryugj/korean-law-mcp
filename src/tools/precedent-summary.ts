@@ -28,7 +28,11 @@ export async function summarizePrecedent(
     // 1. 판례 전문 조회
     const precedentResult = await getPrecedentText(apiClient, { id: input.id, apiKey: input.apiKey })
 
-    if (precedentResult.isError || precedentResult.content.length === 0) {
+    // 조회 실패는 원래 라벨 그대로 돌려준다. [UPSTREAM_NO_DATA]·[RATE_LIMITED]·API 오류를 "[NOT_FOUND] 판례를
+    // 찾을 수 없습니다"로 덮으면 실재하는 판례를 없다고 단정하게 된다 (2026-09-23 리뷰 D8, errors.ts UPSTREAM_NO_DATA).
+    if (precedentResult.isError) return precedentResult
+
+    if (precedentResult.content.length === 0) {
       return {
         content: [{
           type: "text",

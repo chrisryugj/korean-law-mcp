@@ -3,6 +3,7 @@ import type { LawApiClient } from "../lib/api-client.js";
 import { truncateResponse, formatDateDot } from "../lib/schemas.js";
 import { formatToolError } from "../lib/errors.js";
 import { flattenContent, formatArticleUnit } from "../lib/article-parser.js";
+import { fetchHistoricalVersionsFull } from "../lib/historical-utils.js";
 
 /** JSON 필드 안전 문자열화 — 객체/배열이 와도 "[object Object]"를 만들지 않는다 */
 function safeText(v: unknown): string {
@@ -27,17 +28,11 @@ function joLabel(a: any): string {
 /**
  * 법령 연혁 조회 도구
  * - lsHistory API (HTML만 지원) 사용
- * - LexDiff의 HTML 파싱 로직 이식
+ * - 행 파싱은 lib/historical-utils 단일 원본 (applicable_law·time_travel과 공용)
  */
 
-export interface LawHistoryEntry {
-  mst: string;
-  efYd: string;
-  ancNo: string;
-  ancYd: string;
-  lawNm: string;
-  rrCls: string;
-}
+/** lsHistory 한 페이지 원시 행 수 (applicable_law·time_travel이 쓰는 기본값과 같다) */
+const HISTORY_PAGE_SIZE = 500;
 
 // Search for law revision history
 export const searchHistoricalLawSchema = z.object({
@@ -53,18 +48,13 @@ export async function searchHistoricalLaw(
   args: SearchHistoricalLawInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const html = await apiClient.fetchApi({
-      endpoint: "lawSearch.do",
-      target: "lsHistory",
-      type: "HTML",
-      extraParams: {
-        query: args.lawName,
-        display: (args.display || 50).toString(),
-        sort: "efdes",
-      },
-      apiKey: args.apiKey,
-    });
-    const histories = parseHistoryHtml(html, args.lawName);
+    // 연혁 행 파싱을 historical-utils 단일 원본으로 돌린다. 로컬 사본은 무패딩 날짜("1961.12.8")를 못 읽어
+    // 공포일이 비고, "폐지제정"을 "폐지"로 오표시했다 (2026-09-23 리뷰 B12, 실측 지방세법 제827호).
+    // 원본은 원시 총계까지 페이지를 이어 받으므로(500행 단위) 동명 법령의 전체 버전 수를 알 수 있다.
+    // display는 종전처럼 원시 행 수가 아니라 표시할 버전 수 상한으로 쓴다.
+    const { versions, totalCount, fetchedPages } = await fetchHistoricalVersionsFull(apiClient, args.lawName, args.apiKey, HISTORY_PAGE_SIZE);
+    const displayCap = args.display || 50;
+    const histories = versions.slice(0, displayCap);
 
     if (histories.length === 0) {
       let errorMsg = `[NOT_FOUND] '${args.lawName}'의 연혁을 찾을 수 없습니다.\n⚠️ LLM은 연혁을 추측/생성하지 마세요. 법령명을 정확히 확인하거나 search_law로 먼저 검색하세요.`;
@@ -78,12 +68,10 @@ export async function searchHistoricalLaw(
       };
     }
 
-    // lsHistory는 서버측 총계를 제공하지 않아 "총 N개"로 단정할 수 없다.
-    // display 상한에 걸린 경우(정확히 상한만큼 조회) 이전 연혁이 더 있을 수 있음을 병기.
-    const displayCap = args.display || 50;
-    const capNote = histories.length >= displayCap
-      ? ` — display 상한(${displayCap}) 도달, 조회 범위 밖 연혁이 더 있을 수 있음`
-      : "";
+    // 전 페이지를 받았으면 전체 버전 수를 안다. 안전 상한(20페이지)에 걸려 못 받은 원시 행이 남은 경우만 미완으로 적는다.
+    const incomplete = totalCount > 0 && fetchedPages * HISTORY_PAGE_SIZE < totalCount;
+    let capNote = versions.length > displayCap ? `, 전체 ${versions.length}개 중 최근 ${displayCap}개 표시` : "";
+    if (incomplete) capNote += `. 법제처 연혁 ${totalCount}행 중 일부만 수집해 이전 연혁이 더 있을 수 있음`;
     let output = `${args.lawName} 연혁 (조회된 ${histories.length}개 버전${capNote}):\n\n`;
 
     for (const h of histories) {
@@ -231,78 +219,6 @@ export async function getHistoricalLaw(
   } catch (error) {
     return formatToolError(error, "get_historical_law");
   }
-}
-
-/**
- * HTML 파싱 함수 - LexDiff에서 이식
- * lsHistory API는 HTML만 반환하므로 정규식으로 파싱
- */
-function parseHistoryHtml(html: string, targetLawName: string): LawHistoryEntry[] {
-  const histories: LawHistoryEntry[] = [];
-
-  // 테이블 행에서 연혁 정보 추출
-  const rowPattern = /<tr[^>]*>[\s\S]*?<\/tr>/gi;
-  const rows = html.match(rowPattern) || [];
-
-  for (const row of rows) {
-    // MST와 efYd 추출
-    const linkMatch = row.match(/MST=(\d+)[^"]*efYd=(\d*)/);
-    if (!linkMatch) continue;
-
-    const mst = linkMatch[1];
-    const efYd = linkMatch[2] || '';
-
-    // 법령명 추출 (링크 텍스트)
-    const lawNmMatch = row.match(/<a[^>]+>([^<]+)<\/a>/);
-    const lawNm = lawNmMatch?.[1]?.trim() || '';
-
-    if (!lawNm) continue;
-
-    // 정확한 법령명 매칭 (시행령/시행규칙 제외)
-    const normalizedTarget = targetLawName.replace(/\s/g, '');
-    const normalizedLaw = lawNm.replace(/\s/g, '');
-
-    // 시행령/시행규칙 필터링
-    const targetHasDecree = targetLawName.includes('시행령') || targetLawName.includes('시행규칙');
-    const lawHasDecree = lawNm.includes('시행령') || lawNm.includes('시행규칙');
-
-    if (!targetHasDecree && lawHasDecree) {
-      continue;
-    }
-
-    // 정확히 일치하는지 확인
-    const isExactMatch = normalizedLaw === normalizedTarget;
-    if (!isExactMatch) continue;
-
-    // 공포번호 추출 (제 XXXXX호)
-    const ancNoMatch = row.match(/제\s*(\d+)\s*호/);
-    const ancNo = ancNoMatch?.[1] || '';
-
-    // 공포일자 추출
-    const dateCells = row.match(/<td[^>]*>(\d{4}[.\-]?\d{2}[.\-]?\d{2})<\/td>/g) || [];
-    let ancYd = '';
-    if (dateCells.length >= 1 && dateCells[0]) {
-      const dateMatch = dateCells[0].match(/(\d{4})[.\-]?(\d{2})[.\-]?(\d{2})/);
-      if (dateMatch) {
-        ancYd = `${dateMatch[1]}${dateMatch[2]}${dateMatch[3]}`;
-      }
-    }
-
-    // 제개정구분 추출
-    const rrClsMatch = row.match(/(제정|일부개정|전부개정|폐지|타법개정|타법폐지|일괄개정|일괄폐지)/);
-    const rrCls = rrClsMatch?.[1] || '';
-
-    histories.push({ mst, efYd, ancNo, ancYd, lawNm, rrCls });
-  }
-
-  // 시행일자 내림차순 정렬
-  histories.sort((a, b) => {
-    const aDate = parseInt(a.efYd || '0', 10);
-    const bDate = parseInt(b.efYd || '0', 10);
-    return bDate - aDate;
-  });
-
-  return histories;
 }
 
 // formatDate → schemas.ts의 formatDateDot 사용

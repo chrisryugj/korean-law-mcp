@@ -34,7 +34,11 @@ export async function parseArticleLinks(
       apiKey: input.apiKey
     })
 
-    if (articleResult.isError || articleResult.content.length === 0) {
+    // 조회 실패는 원인 라벨([UPSTREAM_NO_DATA]·API 오류 등)을 그대로 돌려준다. "조문을 찾을 수 없습니다"로 덮으면
+    // 장애가 부존재로 읽힌다 (2026-09-23 리뷰 D8).
+    if (articleResult.isError) return articleResult
+
+    if (articleResult.content.length === 0) {
       return {
         content: [{
           type: "text",

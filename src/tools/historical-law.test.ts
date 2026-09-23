@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { getHistoricalLaw } from "./historical-law.js"
+import { getHistoricalLaw, searchHistoricalLaw } from "./historical-law.js"
 import type { LawApiClient } from "../lib/api-client.js"
 
 // 실제 lawService(target=law) JSON 축약 — 법령명은 "법령명_한글" 키, 소관부처는 {content} 객체,
@@ -75,5 +75,39 @@ describe("getHistoricalLaw — 조문단위 래퍼를 풀어 읽는다 (#153)", 
     expect(t).toContain("[NOT_FOUND]")
     expect(t).toContain("- 제1조 목적")
     expect(t).toContain("- 제2조의3 적용범위")
+  })
+})
+
+// 2026-09-23 리뷰 B12: search_historical_law가 historical-utils의 고친 파서를 쓰지 않고 옛 사본을 들고 있었다.
+// 실측 lsHistory(query=지방세법, sort=efasc) 행 원문(OC만 치환). 날짜가 0패딩 없이 온다.
+const LSHISTORY_ROWS = [
+  `<tr> <td class="ce">5</td> <td><a href="/DRF/lawService.do?OC=test&amp;target=lsHistory&amp;MST=6418&amp;type=HTML&amp;mobileYn=&amp;efYd=19510401" >지방세법</a></td> <td class="ce">행정안전부</td> <td class="ce">일부개정</td> <td class="ce">법률</td> <td class="ce">제 00205호</td> <td class="ce">1951.6.2</td> <td class="ce">1951.4.1</td> <td class="ce">연혁</td> </tr>`,
+  `<tr> <td class="ce">25</td> <td><a href="/DRF/lawService.do?OC=test&amp;target=lsHistory&amp;MST=52908&amp;type=HTML&amp;mobileYn=&amp;efYd=19620101" >지방세법</a></td> <td class="ce">행정안전부</td> <td class="ce">폐지제정</td> <td class="ce">법률</td> <td class="ce">제 00827호</td> <td class="ce">1961.12.8</td> <td class="ce">1962.1.1</td> <td class="ce">연혁</td> </tr>`,
+  `<tr> <td class="ce">27</td> <td><a href="/DRF/lawService.do?OC=test&amp;target=lsHistory&amp;MST=28290&amp;type=HTML&amp;mobileYn=&amp;efYd=19620101" >지방세법시행령</a></td> <td class="ce">행정안전부</td> <td class="ce">폐지제정</td> <td class="ce">각령</td> <td class="ce">제 00334호</td> <td class="ce">1961.12.30</td> <td class="ce">1962.1.1</td> <td class="ce">연혁</td> </tr>`,
+]
+const lsHistoryPage = (total: number) =>
+  `<html><body><strong>${total}</strong> 건<table>${LSHISTORY_ROWS.join("\n")}</table></body></html>`
+
+describe("searchHistoricalLaw: historical-utils 파서 공용 (B12)", () => {
+  const historyClient = { fetchApi: async () => lsHistoryPage(3) } as unknown as LawApiClient
+
+  it("'폐지제정'을 '폐지'로 줄이지 않는다", async () => {
+    const t = (await searchHistoricalLaw(historyClient, { lawName: "지방세법", display: 50 })).content[0].text
+    expect(t).toContain("시행: 1962.01.01 | 폐지제정")
+    expect(t).not.toMatch(/\| 폐지\n/)
+  })
+
+  it("0패딩 없는 공포일(1951.6.2)을 읽는다 (종전: N/A)", async () => {
+    const t = (await searchHistoricalLaw(historyClient, { lawName: "지방세법", display: 50 })).content[0].text
+    expect(t).toContain("공포: 1951.06.02 (제00205호)")
+    expect(t).toContain("공포: 1961.12.08 (제00827호)")
+    expect(t).not.toContain("공포: N/A")
+    expect(t).not.toContain("MST: 28290")          // 시행령 행은 본법 연혁에서 뺀다
+  })
+
+  it("display는 표시 버전 수 상한이며 전체 버전 수를 밝힌다", async () => {
+    const t = (await searchHistoricalLaw(historyClient, { lawName: "지방세법", display: 1 })).content[0].text
+    expect(t).toContain("조회된 1개 버전, 전체 2개 중 최근 1개 표시")
+    expect(t).toContain("MST: 52908")                // 시행일 내림차순 첫 버전
   })
 })

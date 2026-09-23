@@ -99,7 +99,10 @@ const SEARCH_HANDLERS: Record<Domain, (api: LawApiClient, args: any) => Promise<
  * 이미 compactBody가 적용된 도메인 — get_decision_text 후처리 축약 skip
  * (precedents.ts, constitutional-decisions.ts, admin-appeals.ts에서 자체 적용)
  */
-const ALREADY_COMPACTED: ReadonlySet<Domain> = new Set(["precedent", "constitutional", "admin_appeal"])
+// interpretation: 해석례는 "이유"가 본문의 핵심이다. 라벨을 "관계법령"에서 "이유"로 바로잡자
+// compactLongSections 가 그 섹션을 기본으로 절반 가까이 잘랐다(실측 ID 338575: 4,608자 → 2,279자).
+// 라벨 정정 전처럼 축약하지 않는다(2026-09-23 독립 리뷰).
+const ALREADY_COMPACTED: ReadonlySet<Domain> = new Set(["precedent", "constitutional", "admin_appeal", "interpretation"])
 
 // Get handler dispatch table
 const GET_HANDLERS: Record<Domain, (api: LawApiClient, args: any) => Promise<LooseToolResponse>> = {

@@ -17,8 +17,8 @@ import { formatToolError, noResultHint } from "../lib/errors.js"
 // 이 세 응답은 항목을 한글 래퍼(<연계용어>/<연계법령>/<관련법령>)에 담고 필드명도
 // 다르다. 공유 parseKBXML은 항목 태그를 ["lstrm","lstrmAI","law","jo","rel","item"]로
 // 고정하므로 여기서는 언제나 0건이 된다. parseKBXML은 정상 동작 중인 다른 도구
-// (get_legal_term_kb·get_daily_term·fallbackTermSearch)가 함께 쓰므로 손대지 않고,
-// 이 파일의 연계 도구 4개만 쓰는 파서를 둔다.
+// (get_legal_term_kb·fallbackTermSearch)가 함께 쓰므로 손대지 않고,
+// 이 파일의 연계 도구 4개와 get_daily_term(dlytrm, <일상용어> 래퍼)만 쓰는 파서를 둔다.
 //
 // <검색결과개수>는 기준 용어·기준 법령의 개수(항상 1)이지 연계 항목 수가 아니라
 // 총건수로 쓸 수 없다. 파싱한 항목 수를 총건수로 쓴다.
@@ -197,21 +197,22 @@ export async function getDailyTerm(
   args: GetDailyTermInput
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
   try {
+    // 일상용어는 전용 target(dlytrm)에 있다. 종전 lstrm+dicKndCd=011402는 도구 예시 '월세'부터 0건이었다:
+    // 011402는 일상용어 코드가 아니다(필터 없는 lstrm '월세' 2건이 모두 사전구분코드 011402인데 그 필터로는 0건).
+    // dlytrm은 같은 질의에 일상용어 15건을 준다 (2026-09-23 리뷰 D12 실측).
     const xmlText = await apiClient.fetchApi({
       endpoint: "lawSearch.do",
-      target: "lstrm",
+      target: "dlytrm",
       extraParams: {
         query: args.query,
         display: (args.display || 20).toString(),
         page: (args.page || 1).toString(),
-        dicKndCd: "011402",
       },
       apiKey: args.apiKey,
     });
-    const result = parseKBXML(xmlText, "LsTrmSearch");
-
-    const totalCount = parseInt(result.totalCnt || "0");
-    const items = result.data || [];
+    // 응답: <dlytrmSearch><검색결과개수>N</검색결과개수><일상용어 id="1"><일상용어명>…</일상용어명>…</일상용어>
+    const items = parseRelationXML(xmlText, "일상용어", mapRelatedTerm);
+    const totalCount = parseInt(extractTag(xmlText, "검색결과개수") || extractTag(xmlText, "totalCnt") || "0", 10);
 
     if (totalCount === 0 || items.length === 0) {
       return noResultHint(args.query, "일상용어")
@@ -220,9 +221,7 @@ export async function getDailyTerm(
     let output = `일상용어 검색 결과 (${totalCount}건):\n\n`;
 
     for (const item of items) {
-      output += `${item.법령용어명 || item.용어명}\n`;
-      if (item.법령용어ID) output += `   ID: ${item.법령용어ID}\n`;
-      output += `\n`;
+      output += `${item.연계용어명}\n\n`;
     }
 
     return { content: [{ type: "text", text: truncateResponse(output) }] };
@@ -244,17 +243,15 @@ export async function getDailyToLegal(
   args: GetDailyToLegalInput
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
   try {
-    let xmlText: string;
-    try {
-      xmlText = await apiClient.fetchApi({
-        endpoint: "lawService.do",
-        target: "lstrmRlt",
-        extraParams: { query: args.dailyTerm },
-        apiKey: args.apiKey,
-      });
-    } catch {
-      return await fallbackTermSearch(apiClient, args.dailyTerm, "일상용어");
-    }
+    // 일상용어 → 법령용어 연계는 dlytrmRlt다. lstrmRlt는 법령용어를 기준으로 찾아서 일상용어를 넣으면
+    // "일치하는 법령용어가 없습니다"만 온다(실측 '월세보증금'). dlytrmRlt는 도구 예시 '월세'에 임대차 등 10건을 준다.
+    // 조회 오류는 폴백으로 덮지 않고 그대로 올린다: 장애가 "연계 정보 없음"으로 읽혔다 (2026-09-23 리뷰 D8·D12).
+    const xmlText = await apiClient.fetchApi({
+      endpoint: "lawService.do",
+      target: "dlytrmRlt",
+      extraParams: { query: args.dailyTerm },
+      apiKey: args.apiKey,
+    });
     const items = parseRelationXML(xmlText, "연계용어", mapRelatedTerm);
 
     if (items.length === 0) {
@@ -288,17 +285,13 @@ export async function getLegalToDaily(
   args: GetLegalToDailyInput
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
   try {
-    let xmlText: string;
-    try {
-      xmlText = await apiClient.fetchApi({
-        endpoint: "lawService.do",
-        target: "lstrmRlt",
-        extraParams: { query: args.legalTerm },
-        apiKey: args.apiKey,
-      });
-    } catch {
-      return await fallbackTermSearch(apiClient, args.legalTerm, "법령용어");
-    }
+    // 조회 오류는 폴백으로 덮지 않고 그대로 올린다. 폴백은 연계 항목이 0건일 때만 탄다 (2026-09-23 리뷰 D8).
+    const xmlText = await apiClient.fetchApi({
+      endpoint: "lawService.do",
+      target: "lstrmRlt",
+      extraParams: { query: args.legalTerm },
+      apiKey: args.apiKey,
+    });
     const items = parseRelationXML(xmlText, "연계용어", mapRelatedTerm);
 
     if (items.length === 0) {

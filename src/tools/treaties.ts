@@ -2,7 +2,7 @@ import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 import { parseTreatyXML } from "../lib/xml-parser.js"
 import { truncateResponse } from "../lib/schemas.js"
-import { formatToolError } from "../lib/errors.js"
+import { formatToolError, notFoundResponse } from "../lib/errors.js"
 
 export const searchTreatiesSchema = z.object({
   query: z.string().optional().describe("검색 키워드 (예: '투자보장', '범죄인인도')"),
@@ -74,7 +74,9 @@ export async function searchTreaties(
       output += `\n`
     }
 
-    output += `\n전문 조회: execute_tool(tool_name="get_treaty_text", params={treatySeq:"조약번호"})\n`
+    // 조회 키는 조약일련번호다. 종전 안내(treatySeq:"조약번호")는 파라미터명도 틀렸고, 조약번호를
+    // ID로 넣으면 다른 조약이 조회됐다: 조약번호 234 = ICSID(일련번호 4037)인데 ID=234는 GSTP (2026-09-23 리뷰 D1).
+    output += `\n전문 조회: get_decision_text(domain="treaty", id="대괄호 안 조약일련번호"). 조약번호는 조회 키가 아닙니다.\n`
 
     return { content: [{ type: "text", text: truncateResponse(output) }] }
   } catch (error) {
@@ -116,33 +118,65 @@ export async function getTreatyText(
       throw new Error("Failed to parse JSON response from API")
     }
 
-    // API는 BothTrtyService 또는 TrtyService로 응답
-    const trty = data.BothTrtyService || data.TrtyService
+    // 루트 키가 조약 종류별로 다르다: 양자 BothTrtyService, 다자 MultTrtyService (2026-09-23 실측).
+    // 두 이름만 받던 종전 코드는 다자조약 전건을 "not found"로 떨어뜨렸다 (리뷰 D1).
+    const rootKey = Object.keys(data ?? {}).find((k) => k.endsWith("TrtyService"))
+    const trty = rootKey ? data[rootKey] : undefined
     if (!trty) {
-      throw new Error("Treaty not found or invalid response format")
+      // 없는 조약일련번호는 "{}"로 온다(실측 ID=99999999). 조약번호를 ID로 넣는 실수가 흔해 식별자 종류를 짚는다.
+      if (data && typeof data === "object" && Object.keys(data).length === 0) {
+        return notFoundResponse(`조약일련번호 '${args.id}'에 해당하는 조약이 없습니다.`, [
+          "search_decisions(domain=\"treaty\") 결과의 대괄호 안 조약일련번호를 쓰세요. 조약번호는 조회 키가 아닙니다.",
+        ])
+      }
+      throw new Error(`조약 응답 형식을 인식하지 못했습니다 (최상위 키: ${Object.keys(data ?? {}).join(", ") || "없음"})`)
     }
 
     // 조약내용이 중첩 객체일 수 있음
     const bodyObj = trty.조약내용 || {}
     const bodyText = typeof bodyObj === "string" ? bodyObj : bodyObj.조약내용 || ""
 
+    // 메타데이터는 최상위가 아니라 조약기본정보·추가정보에 들어 있다. 최상위를 읽던 종전 코드는
+    // 조약명까지 전부 N/A였다. 추가정보의 빈 값은 문자열 "null"로 온다 (2026-09-23 실측).
+    const info = trty.조약기본정보 || trty
+    const extra = trty.추가정보 || {}
+    const val = (v: unknown): string => {
+      const s = v == null ? "" : String(v).trim()
+      return s === "null" ? "" : s
+    }
+    const kindByCode: Record<string, string> = { "440101": "양자조약", "440102": "다자조약" }
+    const kind = val(info.조약구분명) || kindByCode[val(info.조약구분코드)] ||
+      (rootKey === "MultTrtyService" ? "다자조약" : rootKey === "BothTrtyService" ? "양자조약" : "")
+    const partnerName = val(extra.체결대상국가한글)
+    const partnerCode = val(extra.체결대상국가)
+    const partner = partnerName && partnerCode && partnerCode !== partnerName ? `${partnerName} (${partnerCode})` : partnerName || partnerCode
+
     const basic = {
-      조약명: trty.조약명,
-      조약번호: trty.조약번호,
-      체결일자: trty.체결일자,
-      발효일자: trty.발효일자,
-      조약구분: trty.조약구분명,
-      체결상대국: trty.체결상대국,
+      조약명: val(info.조약명_한글) || val(info.조약명),
+      조약명영문: val(info.조약명_영문),
+      조약일련번호: val(info.조약일련번호),
+      조약번호: val(info.조약번호),
+      체결일자: val(info.서명일자) || val(extra.체결일자) || val(info.체결일자),
+      발효일자: val(info.발효일자),
+      조약구분: kind,
+      체결상대국: partner || val(info.체결상대국),
+      분야: val(extra.다자조약분야명) || val(extra.양자조약분야명),
     }
 
-    let output = `=== ${basic.조약명 || "조약"} ===\n\n`
+    let output = `=== ${basic.조약명 || "조약"} ===\n`
+    if (basic.조약명영문) output += `(${basic.조약명영문})\n`
+    output += `\n`
 
     output += `기본 정보:\n`
+    if (basic.조약일련번호) output += `  조약일련번호: ${basic.조약일련번호}\n`
     output += `  조약번호: ${basic.조약번호 || "N/A"}\n`
     output += `  체결일: ${basic.체결일자 || "N/A"}\n`
     output += `  발효일: ${basic.발효일자 || "N/A"}\n`
     output += `  구분: ${basic.조약구분 || "N/A"}\n`
-    output += `  체결상대국: ${basic.체결상대국 || "N/A"}\n\n`
+    // 다자조약에는 체결상대국이 없다. "N/A"로 찍으면 미상으로 읽히므로 값이 있을 때만 싣는다.
+    if (basic.체결상대국) output += `  체결상대국: ${basic.체결상대국}\n`
+    if (basic.분야) output += `  분야: ${basic.분야}\n`
+    output += `\n`
 
     if (bodyText) {
       output += `조약 본문:\n${bodyText}\n`

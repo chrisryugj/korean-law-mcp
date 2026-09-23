@@ -8,6 +8,7 @@ import type { LawApiClient } from "../lib/api-client.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError } from "../lib/errors.js"
 import { normalizeAliasKey, resolveLawAlias } from "../lib/search-normalizer.js"
+import { buildJO } from "../lib/law-parser.js"
 
 /**
  * JO 코드를 읽기 쉬운 형식으로 변환
@@ -88,7 +89,13 @@ export async function getArticleHistory(
     const noDateFilter = !input.regDt && !input.fromRegDt && !input.toRegDt
     const dateDefaults = noDateFilter ? { fromRegDt: "19480101", toRegDt: "20991231" } : {}
 
-    const xmlText = await apiClient.getArticleHistory({ ...input, ...dateDefaults, lawId, apiKey: input.apiKey })
+    // 업스트림 JO는 6자리 코드만 알아듣는다. 스키마 예시 그대로 '제38조'를 보내면 조문 필터가 안 걸려
+    // 법령 버전만 오고 조문 기록은 0건이라, 실존 개정 이력에 거짓 NOT_FOUND가 났다
+    // (2026-09-23 리뷰 D5, 실측 관세법: JO=제38조 → jo 0건, JO=003800 → 6건). 이미 코드면 그대로 둔다:
+    // buildJO("003800")은 3800조로 읽어 "380000"이 된다.
+    const jo = input.jo && !/^\d{6}$/.test(input.jo) ? buildJO(input.jo) : input.jo
+
+    const xmlText = await apiClient.getArticleHistory({ ...input, ...dateDefaults, lawId, jo, apiKey: input.apiKey })
 
     const parser = new DOMParser()
     const doc = parser.parseFromString(xmlText, "text/xml")

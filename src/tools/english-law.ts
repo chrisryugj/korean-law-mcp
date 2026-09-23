@@ -3,6 +3,7 @@ import type { LawApiClient } from "../lib/api-client.js";
 import { truncateResponse } from "../lib/schemas.js";
 import { parseSearchXML, extractTag, stripHtml } from "../lib/xml-parser.js";
 import { formatToolError, noResultHint } from "../lib/errors.js";
+import { cleanHtml } from "../lib/article-parser.js";
 
 // English law search tool - Search for English translations of Korean laws
 export const searchEnglishLawSchema = z.object({
@@ -40,7 +41,9 @@ export async function searchEnglishLaw(
       xmlText, "", "law",
       (content) => ({
         법령ID: extractTag(content, "법령ID"),
-        영문법령명: extractTag(content, "법령명영문"),
+        // 영문명에도 검색어 하이라이트(`<strong class="tbl_tx_type">CUSTOMS</strong> ACT`)가 실려 온다.
+        // 한글명만 벗기고 있어 태그가 그대로 노출됐다 (2026-09-23 리뷰 D9, 실측 query=Customs).
+        영문법령명: cleanHtml(extractTag(content, "법령명영문")),
         한글법령명: stripHtml(extractTag(content, "법령명한글")),
         시행일자: extractTag(content, "시행일자"),
         법령구분: extractTag(content, "법령구분명"),
