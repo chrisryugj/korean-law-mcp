@@ -26,29 +26,52 @@ function abandonBody(response: Response): void {
   void response.body?.cancel().catch(() => {})
 }
 
+/**
+ * 청크 사이 무응답 한도. 헤더가 온 뒤 본문이 멈추면 fetchWithRetry 의 시도 타이머는 이미
+ * 풀려 있어 undici 기본 bodyTimeout(300초)까지 기다렸다(2026-09-23 리뷰 A5, 재현: timeout
+ * 1초로 둔 요청이 5초 넘게 본문을 기다림). 3.8MB 법령 본문도 전송은 1초 안쪽이다(실측 832ms).
+ */
+export const BODY_IDLE_TIMEOUT_MS = 20_000
+
+export class UpstreamBodyStallError extends Error {
+  constructor() {
+    super(`업스트림 본문 수신이 ${BODY_IDLE_TIMEOUT_MS / 1000}초간 멈췄습니다 (법제처 응답 지연)`)
+    this.name = "UpstreamBodyStallError"
+  }
+}
+
 async function readChunk(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   signal: AbortSignal | undefined,
 ): ReturnType<ReadableStreamDefaultReader<Uint8Array>["read"]> {
-  if (!signal) return reader.read()
-  if (signal.aborted) {
+  if (signal?.aborted) {
     abandonReader(reader)
     throw requestCancelledError(signal.reason)
   }
 
   return new Promise<Awaited<ReturnType<ReadableStreamDefaultReader<Uint8Array>["read"]>>>((resolve, reject) => {
-    const onAbort = () => {
-      abandonReader(reader)
-      reject(requestCancelledError(signal.reason))
+    const cleanup = () => {
+      clearTimeout(idle)
+      signal?.removeEventListener("abort", onAbort)
     }
-    signal.addEventListener("abort", onAbort, { once: true })
+    const idle = setTimeout(() => {
+      cleanup()
+      abandonReader(reader)
+      reject(new UpstreamBodyStallError())
+    }, BODY_IDLE_TIMEOUT_MS)
+    const onAbort = () => {
+      cleanup()
+      abandonReader(reader)
+      reject(requestCancelledError(signal?.reason))
+    }
+    signal?.addEventListener("abort", onAbort, { once: true })
     reader.read().then(
       value => {
-        signal.removeEventListener("abort", onAbort)
+        cleanup()
         resolve(value)
       },
       error => {
-        signal.removeEventListener("abort", onAbort)
+        cleanup()
         reject(error)
       },
     )

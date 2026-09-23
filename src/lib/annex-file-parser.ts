@@ -8,7 +8,8 @@
  * @see https://github.com/chrisryugj/kordoc
  */
 
-import { parse } from "kordoc"
+// kordoc 은 별표 파일을 실제로 파싱할 때만 불러온다. 정적 import 면 기동 즉시 RSS 가
+// 27MB 늘어난다(로컬 실측). 5종이 1GB 를 나눠 쓰는 통합 호스트에선 큰 몫이다.
 import type { ParseResult, FileType } from "kordoc"
 
 // ─── 기존 인터페이스 호환 ────────────────────────────
@@ -27,6 +28,7 @@ export interface AnnexParseResult {
 // ─── 메인 엔트리 ─────────────────────────────────────
 
 export async function parseAnnexFile(buffer: ArrayBuffer): Promise<AnnexParseResult> {
+  const { parse } = await import("kordoc")
   const result: ParseResult = await parse(buffer)
 
   if (result.success) {

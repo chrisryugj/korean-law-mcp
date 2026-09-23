@@ -11,7 +11,7 @@ import type { LawApiClient } from "../lib/api-client.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { noResultHint } from "../lib/errors.js"
 import { isRegionToken } from "../lib/query-extract.js"
-import { buildUpcomingNotes, fetchUpcomingLaws } from "../lib/upcoming-laws.js"
+import { buildUpcomingNotes, fetchUpcomingLaws, UPCOMING_CHECK_FAILED_NOTE, type UpcomingLaw } from "../lib/upcoming-laws.js"
 import { buildAbolishedLawNotes, findAbolishedLaws } from "../lib/abolished-laws.js"
 import { searchAdminRule } from "./admin-rule.js"
 import { searchOrdinance } from "./ordinance-search.js"
@@ -34,11 +34,20 @@ export function looksLikeOrdinanceQuery(query: string): boolean {
 
 export async function searchLawFallbacks(
   apiClient: LawApiClient,
-  input: { query: string, display: number, apiKey?: string }
+  input: { query: string, display: number, apiKey?: string },
+  upcomingPromise: Promise<UpcomingLaw[] | null> = fetchUpcomingLaws(apiClient, input.query, input.apiKey),
 ): Promise<ToolResult> {
-  // 공포됐지만 미시행인 신규 법령은 현행(target=law) 검색에 안 잡힘 → 시행예정 보조검색
-  const upcomingOnly = await fetchUpcomingLaws(apiClient, input.query, input.apiKey)
-  if (upcomingOnly.length > 0) {
+  // 공포됐지만 미시행인 신규 법령은 현행(target=law) 검색에 안 잡힘 → 시행예정 보조검색.
+  // 폐지 이력(eflaw 연혁) 확인과 서로 독립이라 같이 기다린다(종전 순차 2왕복, 리뷰 A3).
+  const [upcomingOnly, abolishedR] = await Promise.all([
+    upcomingPromise,
+    // 폐지 조회가 예산 소진으로 던져도 시행예정 결과가 있으면 그걸 먼저 돌려준다(아래에서 재전파)
+    findAbolishedLaws(apiClient, input.query, input.apiKey).then(
+      laws => ({ laws, error: undefined }),
+      (error: unknown) => ({ laws: [], error }),
+    ),
+  ])
+  if (upcomingOnly && upcomingOnly.length > 0) {
     return asText(
       `현행 법령 0건 — 단, 공포 후 시행 대기 중인 법령이 있습니다:\n\n` +
       buildUpcomingNotes([], upcomingOnly) +
@@ -47,7 +56,8 @@ export async function searchLawFallbacks(
   }
 
   // 폐지된 법령은 현행 검색에 안 잡힘 → eflaw 연혁에서 폐지 이력 확인 (사법시험법 등)
-  const abolishedLaws = await findAbolishedLaws(apiClient, input.query, input.apiKey)
+  if (abolishedR.error) throw abolishedR.error
+  const abolishedLaws = abolishedR.laws
   if (abolishedLaws.length > 0) {
     return asText(buildAbolishedLawNotes(input.query, abolishedLaws))
   }
@@ -84,5 +94,8 @@ export async function searchLawFallbacks(
     }
   }
 
-  return noResultHint(input.query, "법령")
+  const none = noResultHint(input.query, "법령")
+  // 시행예정 확인이 실패한 채 "없음"만 말하면 공포 후 미시행 법령을 부존재로 단정하게 된다
+  if (upcomingOnly === null) none.content[0].text += `\n${UPCOMING_CHECK_FAILED_NOTE}`
+  return none
 }

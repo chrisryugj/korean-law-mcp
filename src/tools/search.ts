@@ -9,7 +9,7 @@ import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError } from "../lib/errors.js"
 import { expandLawQuery } from "../lib/search-normalizer.js"
 import { formatHit, hasRelatedHit, parseLawsXml, sortCurrentFirst, splitExactPartial } from "./search-hits.js"
-import { buildUpcomingNotes, fetchUpcomingLaws } from "../lib/upcoming-laws.js"
+import { buildUpcomingNotes, fetchUpcomingLaws, UPCOMING_CHECK_FAILED_NOTE } from "../lib/upcoming-laws.js"
 import { searchLawFallbacks } from "./search-fallbacks.js"
 
 export const SearchLawSchema = z.object({
@@ -51,13 +51,19 @@ export async function searchLaw(
     }
 
     const upstreamDisplay = Math.max(input.display, UPSTREAM_DISPLAY_FLOOR)
+    // 시행예정 보조검색은 주 검색과 독립이라 같이 출발시킨다. 종전엔 주 검색이 끝난 뒤에야
+    // 시작해 캐시 미스마다 왕복 1회가 더 붙었다(2026-09-23 리뷰 A3). 0건 폴백에도 이 약속을
+    // 넘겨 같은 eflaw 검색을 두 번 치지 않는다. catch 는 주 검색이 먼저 실패할 때 미처리 거부 방지용.
+    const upcomingForQuery = fetchUpcomingLaws(apiClient, input.query, input.apiKey)
+    upcomingForQuery.catch(() => {})
     let xmlText = await apiClient.searchLaw(input.query, input.apiKey, upstreamDisplay)
     let laws = parseLawsXml(xmlText)
     let usedQuery = input.query
 
     // 0건이면 약칭/오타 확장 쿼리로 자동 재시도
     if (laws.length === 0) {
-      const { expanded } = expandLawQuery(input.query)
+      // LexDiff 원본 정규식의 공백 백트래킹 회피 (api-client.searchLaw 와 같은 이유, 리뷰 C3)
+      const { expanded } = expandLawQuery(input.query.replace(/\s+/gu, " "))
       for (const expandedQuery of expanded) {
         if (expandedQuery === input.query) continue
         const candidateXml = await apiClient.searchLaw(expandedQuery, input.apiKey, upstreamDisplay)
@@ -73,7 +79,7 @@ export async function searchLaw(
     }
 
     if (laws.length === 0) {
-      return await searchLawFallbacks(apiClient, input)
+      return await searchLawFallbacks(apiClient, input, upcomingForQuery)
     }
 
     // 현행 우선 정렬 + 정확매칭 분리 (판정은 search-hits.ts — search_law_bulk 와 공용)
@@ -113,9 +119,11 @@ export async function searchLaw(
 
     // 시행예정 병기: 제명변경 개정(구명칭→신명칭)이 공포~시행 사이면 신명칭 검색 시
     // "정확매칭 없음"만 떠서 LLM이 "법령 없음"으로 오판 → 신·구 명칭 매핑을 명시
-    const upcoming = await fetchUpcomingLaws(apiClient, usedQuery, input.apiKey)
-    const upcomingNotes = buildUpcomingNotes(laws, upcoming)
-    if (upcomingNotes) resultText += upcomingNotes
+    const upcoming = usedQuery === input.query
+      ? await upcomingForQuery
+      : await fetchUpcomingLaws(apiClient, usedQuery, input.apiKey)
+    if (upcoming === null) resultText += UPCOMING_CHECK_FAILED_NOTE
+    else resultText += buildUpcomingNotes(laws, upcoming)
 
     // 다음 단계 힌트: 정확매칭이 있으면 그 첫 항목, 없으면 부분매칭 첫 항목 안내
     const primary = exact[0] || partial[0]
@@ -129,9 +137,10 @@ export async function searchLaw(
       resultText += `⚠️ 정확매칭 없음 — 법제처 API의 부분 LIKE 검색 특성상 위 결과는 법령명에 "${input.query}"가 포함된 모든 법령입니다. 의도한 법령이 없으면 정식 법령명으로 재검색하세요.\n`
     }
 
-    // Cache the result (1 hour TTL)
+    // 1시간 캐시. 시행예정 확인이 실패한 결과는 1분만 둔다: 1시간 두면 업스트림이 돌아와도
+    // "확인 실패" 응답이 한 시간 동안 같은 쿼리의 모든 사용자에게 나간다(리뷰 A4).
     const truncated = truncateResponse(resultText)
-    lawCache.set(cacheKey, truncated, 60 * 60 * 1000)
+    lawCache.set(cacheKey, truncated, upcoming === null ? 60 * 1000 : 60 * 60 * 1000)
 
     return {
       content: [{

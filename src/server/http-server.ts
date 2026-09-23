@@ -57,6 +57,21 @@ export function exceedsBatchLimit(body: unknown, maxBatchCalls: number): boolean
   return countToolCalls(body) > maxBatchCalls
 }
 
+/** 로그용 봉투 요약: method 와 id·params 의 '타입'만 싣는다(값은 안 싣는다) */
+export function describeEnvelope(body: unknown): string {
+  const messages = Array.isArray(body) ? body : [body]
+  const typeOf = (v: unknown) => (v === null ? "null" : Array.isArray(v) ? "array" : typeof v)
+  const one = (m: unknown): string => {
+    if (typeof m !== "object" || m === null) return typeOf(m)
+    const r = m as Record<string, unknown>
+    // method 는 클라이언트가 보낸 문자열이라 개행을 넣어 로그 줄을 위조할 수 있다: 안전한 문자만 남긴다
+    const kind = typeof r.method === "string" ? r.method.slice(0, 40).replace(/[^\w/.:-]/g, "?") : ("result" in r || "error" in r) ? "response" : "?"
+    return `${kind}(id:${typeOf(r.id)},params:${typeOf(r.params)})`
+  }
+  const head = messages.slice(0, 3).map(one).join(" ")
+  return messages.length > 3 ? `${head} +${messages.length - 3}` : head
+}
+
 export async function startHTTPServer(
   createServer: (executionLimits: ExecutionLimits) => Server,
   port: number,
@@ -321,6 +336,13 @@ export async function startHTTPServer(
         sessionIdGenerator: undefined,  // ← stateless 모드
         enableJsonResponse: true,
       })
+      // SDK 가 요청을 거절한 사유(400 등)는 onerror 로만 나온다. 안 받으면 로그엔 launcher 의
+      // `[edge] … -> 400` 만 남아 원인을 가를 수 없다. 2026-09-23 실측: claude.ai 커넥터 POST 의
+      // 약 15% 가 400 이었고 직후 재초기화로 성공하는 패턴이었다(사유 미상).
+      server.onerror = (error) => {
+        const pv = String(req.headers["mcp-protocol-version"] ?? "-").slice(0, 40)
+        console.error(`[mcp] ${scrubError(error).message.replace(/\s+/g, " ").slice(0, 200)} body=${describeEnvelope(req.body)} pv=${pv} ua="${req.headers["user-agent"] ?? "-"}"`)
+      }
 
       // Disconnecting the HTTP client must stop its upstream work.  This is
       // deliberately separate from MCP's item cancellation signal: sibling

@@ -6,7 +6,7 @@ import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { buildJO, formatJO } from "../lib/law-parser.js"
-import { cleanHtml, flattenContent, groupMokByReset } from "../lib/article-parser.js"
+import { cleanHtml, flattenContent, groupMokByReset, parseHangNumber } from "../lib/article-parser.js"
 import { formatToolError } from "../lib/errors.js"
 import { toArray } from "../lib/xml-parser.js"
 
@@ -35,20 +35,15 @@ export async function getArticleDetail(
       joCode = buildJO(joCode)
     }
 
-    const extraParams: Record<string, string> = {}
-    if (input.mst) extraParams.MST = String(input.mst)
-    if (input.lawId) extraParams.ID = String(input.lawId)
-    extraParams.JO = String(joCode)
-    if (input.hang) extraParams.HANG = String(input.hang)
-    if (input.ho) extraParams.HO = String(input.ho)
-    if (input.mok) extraParams.MOK = String(input.mok)
-
-    const jsonText = await apiClient.fetchApi({
-      endpoint: "lawService.do",
-      target: "eflaw",
-      type: "JSON",
-      extraParams,
-      apiKey: input.apiKey
+    // eflaw 를 직접 부르면 MST 경로가 #153 이후 매번 HTML 로 실패했다(재시도 4회 뒤 오류).
+    // impact_map 은 대상 조문을 늘 NOT_FOUND 로 받아 정방향 인용 갈래가 통째로 비었다
+    // (2026-09-23 리뷰 B2·D6). getLawText 가 MST 단독은 target=law, lawId 는 eflaw 로 보낸다.
+    // HANG·HO·MOK 은 업스트림이 무시한다(실측: HANG=2 에도 7개 항 전부) → 아래에서 직접 거른다.
+    const jsonText = await apiClient.getLawText({
+      mst: input.mst,
+      lawId: input.lawId,
+      jo: String(joCode),
+      apiKey: input.apiKey,
     })
 
     const json = JSON.parse(jsonText)
@@ -85,6 +80,7 @@ export async function getArticleDetail(
       }
     }
 
+    const misses = new Set<string>()
     for (const unit of articleUnits) {
       if (unit.조문여부 !== "조문") continue
 
@@ -108,34 +104,35 @@ export async function getArticleDetail(
 
       // 항 내용 — 항내용/호내용/목내용도 조문내용과 같이 (중첩)배열로 올 수 있어 flattenContent 필수
       if (unit.항) {
-        const hangList = Array.isArray(unit.항) ? unit.항 : [unit.항]
+        const sel = selectUnits(toArray(unit.항), input, misses)
         const renderMok = (mokList: any[]) => {
-          for (const mok of mokList) {
+          for (const mok of sel.mok ? mokList.filter(sel.mok) : mokList) {
             const mokContent = flattenContent(mok.목내용)
             if (mokContent) resultText += `      ${mok.목번호 || ""} ${cleanHtml(mokContent)}\n`
           }
         }
-        for (const hang of hangList) {
+        for (const hang of sel.hangs) {
           const hangNum = hang.항번호 || ""
           const hangContent = flattenContent(hang.항내용)
           if (hangContent) {
             resultText += `  ${hangNum ? `(${hangNum})` : ""} ${cleanHtml(hangContent)}\n`
           }
 
-          const hoList = hang.호 ? (Array.isArray(hang.호) ? hang.호 : [hang.호]) : []
+          const hoList = toArray(hang.호)
           // 법제처 JSON은 목을 호가 아닌 항 레벨 형제 배열로 준다 (article-parser.groupMokByReset 참조)
-          const hangMokList = hang.목 ? (Array.isArray(hang.목) ? hang.목 : [hang.목]) : []
+          const hangMokList = toArray(hang.목)
           const mokGroups = groupMokByReset(hangMokList)
           const alignable = hoList.length > 0 && mokGroups.length === hoList.length
 
           for (let i = 0; i < hoList.length; i++) {
             const ho = hoList[i]
+            if (sel.ho && !sel.ho(ho)) continue
             const hoContent = flattenContent(ho.호내용)
             if (hoContent) {
               resultText += `    ${ho.호번호 || ""} ${cleanHtml(hoContent)}\n`
             }
 
-            if (ho.목) renderMok(Array.isArray(ho.목) ? ho.목 : [ho.목])
+            if (ho.목) renderMok(toArray(ho.목))
             if (alignable) renderMok(mokGroups[i])
           }
 
@@ -149,10 +146,57 @@ export async function getArticleDetail(
       resultText += `\n`
     }
 
+    if (misses.size > 0) {
+      resultText += `[주의] ${[...misses].join(", ")}을(를) 이 조문에서 찾지 못해 해당 단위 전체를 표시했습니다.\n`
+    }
+
     return {
       content: [{ type: "text", text: truncateResponse(resultText) }]
     }
   } catch (error) {
     return formatToolError(error, "get_article_detail")
   }
+}
+
+/** 호·목 번호 정규화: "3." → "3", "3의2." → "3의2", "가." → "가" */
+function unitNumber(raw: unknown): string {
+  return String(raw ?? "").trim().replace(/\.$/, "")
+}
+
+const MOK_ORDER = "가나다라마바사아자차카타파하"
+
+/**
+ * 요청한 항·호·목만 남기는 선택기. 각 단위는 조문 전체에서 먼저 존재를 확인한다:
+ * 있으면 그것만, 없으면 거르지 않고 misses 에 남긴다(없는 단위를 조용히 비우면
+ * "그 호는 내용이 없다"로 읽힌다). 항을 안 정하고 호만 물으면 그 호가 있는 항으로 좁힌다.
+ * 목은 숫자로 물어도 받는다(1 → 가).
+ */
+function selectUnits(allHangs: any[], input: { hang?: string; ho?: string; mok?: string }, misses: Set<string>) {
+  let hangs = allHangs
+  if (input.hang) {
+    const matched = allHangs.filter(h => parseHangNumber(h.항번호) === Number(unitNumber(input.hang)))
+    if (matched.length > 0) hangs = matched
+    else misses.add(`제${input.hang}항`)
+  }
+
+  let ho: ((ho: any) => boolean) | undefined
+  if (input.ho) {
+    const want = unitNumber(input.ho)
+    const isWanted = (h: any) => unitNumber(h.호번호) === want
+    const withHo = hangs.filter(h => toArray(h.호).some(isWanted))
+    if (withHo.length > 0) { hangs = withHo; ho = isWanted }
+    else misses.add(`제${input.ho}호`)
+  }
+
+  let mok: ((mok: any) => boolean) | undefined
+  if (input.mok) {
+    const raw = unitNumber(input.mok)
+    const want = /^\d+$/.test(raw) ? (MOK_ORDER[Number(raw) - 1] ?? raw) : raw
+    const isWanted = (m: any) => unitNumber(m.목번호) === want
+    const allMok = hangs.flatMap(h => [...toArray(h.목), ...toArray(h.호).flatMap(x => toArray(x.목))])
+    if (allMok.some(isWanted)) mok = isWanted
+    else misses.add(`${input.mok}목`)
+  }
+
+  return { hangs, ho, mok }
 }

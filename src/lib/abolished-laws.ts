@@ -13,6 +13,7 @@ import type { LawApiClient } from "./api-client.js"
 import { lawCache } from "./cache.js"
 import { extractTag } from "./xml-parser.js"
 import { normalizeAliasKey } from "./search-normalizer.js"
+import { rethrowIfFatal } from "./fatal-errors.js"
 
 const fmtDate = (d: string) => (d.length === 8 ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}` : d)
 
@@ -76,7 +77,9 @@ export async function findAbolishedLaws(
     const parsed = parseAbolishedLawsXml(xml, query)
     lawCache.set(cacheKey, parsed, 60 * 60 * 1000)
     return parsed
-  } catch {
+  } catch (error) {
+    // 예산 소진·취소까지 "폐지 이력 없음"으로 삼키지 않는다(2026-09-23 리뷰)
+    rethrowIfFatal(error)
     return []
   }
 }

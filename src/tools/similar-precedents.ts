@@ -11,7 +11,7 @@ import { formatToolError } from "../lib/errors.js"
 import { escapeRegex } from "../lib/escape-regex.js"
 
 export const FindSimilarPrecedentsSchema = z.object({
-  query: z.string().describe("검색 키워드 또는 판례 내용"),
+  query: z.string().describe("검색 키워드 또는 판례 내용 (발췌는 2,000자 이내: 서버 공통 인자 상한)"),
   display: z.number().optional().default(5).describe("최대 결과 개수 (기본값: 5)"),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달")
 })

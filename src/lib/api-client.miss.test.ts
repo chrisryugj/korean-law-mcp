@@ -17,6 +17,25 @@ const LSSTMD_NOTICE_HTML =
 
 const emptyJson = () => new Response("", { status: 200, headers: { "content-type": "application/json" } })
 
+/**
+ * 가짜 시계로 돌린다: 백오프를 실시간으로 기다리면 이 파일 하나가 23초를 썼다(2026-09-23 리뷰 D14).
+ * 경과 시간 단정은 가짜 시계 기준이라 오히려 결정적이다.
+ */
+async function underFakeClock<T>(call: () => Promise<T>) {
+  vi.useFakeTimers()
+  try {
+    const started = Date.now()
+    let settledAt = 0
+    const outcome = call()
+      .finally(() => { settledAt = Date.now() })
+      .then(value => ({ ok: true as const, value, error: undefined }), error => ({ ok: false as const, value: undefined, error }))
+    await vi.advanceTimersByTimeAsync(60_000)
+    return { ...(await outcome), elapsed: settledAt - started }
+  } finally {
+    vi.useRealTimers()
+  }
+}
+
 describe("lawService.do 단건 조회 미스 — 확인 1회 후 표면화", () => {
   afterEach(() => vi.unstubAllGlobals())
 
@@ -25,12 +44,12 @@ describe("lawService.do 단건 조회 미스 — 확인 1회 후 표면화", () 
     vi.stubGlobal("fetch", vi.fn(async () => { n++; return emptyJson() }))
 
     const client = new LawApiClient({ apiKey: "test" })
-    const started = Date.now()
-    await expect(client.getThreeTier({ mst: "99999999" })).rejects.toThrow()
+    const r = await underFakeClock(() => client.getThreeTier({ mst: "99999999" }))
 
+    expect(r.ok).toBe(false)
     expect(n).toBe(2)                              // 최초 + 확인 재시도 1회
-    expect(Date.now() - started).toBeLessThan(1000) // 사다리(1+2+4s) 소진 아님
-  }, 30000)
+    expect(r.elapsed).toBeLessThan(1000)           // 사다리(1+2+4s) 소진 아님
+  })
 
   it("일시 장애로 한 번 비었다가 회복되면 정상 응답을 돌려준다 (미스 오탐 방지)", async () => {
     let n = 0
@@ -40,9 +59,10 @@ describe("lawService.do 단건 조회 미스 — 확인 1회 후 표면화", () 
     }))
 
     const client = new LawApiClient({ apiKey: "test" })
-    await expect(client.getThreeTier({ mst: "288689" })).resolves.toContain("기본정보")
+    const r = await underFakeClock(() => client.getThreeTier({ mst: "288689" }))
+    expect(r.value).toContain("기본정보")
     expect(n).toBe(2)
-  }, 30000)
+  })
 
   it("lsStmd 권한 안내 HTML 미스: 문구 매칭 없이 2회로 끊는다", async () => {
     let n = 0
@@ -52,23 +72,25 @@ describe("lawService.do 단건 조회 미스 — 확인 1회 후 표면화", () 
     }))
 
     const client = new LawApiClient({ apiKey: "test" })
-    await expect(client.fetchApi({
+    const r = await underFakeClock(() => client.fetchApi({
       endpoint: "lawService.do",
       target: "lsStmd",
       type: "XML",
       extraParams: { MST: "99999999" },
-    })).rejects.toThrow()
+    }))
+    expect(r.ok).toBe(false)
     expect(n).toBe(2)
-  }, 30000)
+  })
 
   it("검색(lawSearch.do)의 빈 본문은 여전히 일시 장애로 보고 사다리를 유지한다", async () => {
     let n = 0
     vi.stubGlobal("fetch", vi.fn(async () => { n++; return emptyJson() }))
 
     const client = new LawApiClient({ apiKey: "test" })
-    await expect(client.searchLaw("민법")).rejects.toThrow()
+    const r = await underFakeClock(() => client.searchLaw("민법"))
+    expect(r.ok).toBe(false)
     expect(n).toBe(4)                              // 1회 + 재시도 3회 = 기존 방어 그대로
-  }, 30000)
+  })
 
   // #150-2: "빈 본문 = 미스일 수 있다"는 실측표상 prec·thdCmp·lsStmd 뿐이다.
   // endpoint 단위 배선은 target=law까지 사다리를 2회로 자르고, 오류 문안에
@@ -78,23 +100,25 @@ describe("lawService.do 단건 조회 미스 — 확인 1회 후 표면화", () 
     vi.stubGlobal("fetch", vi.fn(async () => { n++; return emptyJson() }))
 
     const client = new LawApiClient({ apiKey: "test" })
-    await expect(client.fetchApi({
+    const r = await underFakeClock(() => client.fetchApi({
       endpoint: "lawService.do",
       target: "law",
       type: "JSON",
       extraParams: { MST: "160001" },
-    })).rejects.toThrow(/빈 응답/)
+    }))
+    expect(String(r.error)).toMatch(/빈 응답/)
     expect(n).toBe(4)                              // 미스 확정(2회)이 아니라 장애 사다리(4회)
-  }, 30000)
+  })
 
-  it("getLawText(eflaw)도 빈 본문에서 미스 확정 대신 사다리를 유지한다", async () => {
+  it("getLawText 도 빈 본문에서 미스 확정 대신 사다리를 유지한다", async () => {
     let n = 0
     vi.stubGlobal("fetch", vi.fn(async () => { n++; return emptyJson() }))
 
     const client = new LawApiClient({ apiKey: "test" })
-    await expect(client.getLawText({ mst: "160001" })).rejects.toThrow(/빈 응답/)
+    const r = await underFakeClock(() => client.getLawText({ mst: "160001" }))
+    expect(String(r.error)).toMatch(/빈 응답/)
     expect(n).toBe(4)
-  }, 30000)
+  })
 })
 
 describe("빈 응답 가드 — 파서가 아니라 여기서 잡힌다", () => {
@@ -113,8 +137,9 @@ describe("빈 응답 가드 — 파서가 아니라 여기서 잡힌다", () => 
   for (const [name, call] of searches) {
     it(`${name}: 빈 응답을 명시적 메시지로 전환한다`, async () => {
       vi.stubGlobal("fetch", vi.fn(async () => emptyJson()))
-      await expect(call(new LawApiClient({ apiKey: "test" }))).rejects.toThrow(/빈 응답/)
-    }, 30000)
+      const r = await underFakeClock(() => call(new LawApiClient({ apiKey: "test" })))
+      expect(String(r.error)).toMatch(/빈 응답/)
+    })
   }
 })
 
@@ -128,15 +153,15 @@ describe("백오프 상수 — 업스트림 왕복 대비 비율", () => {
     vi.stubGlobal("fetch", vi.fn(async () => { n++; return new Response("Not Found", { status: 404 }) }))
 
     const client = new LawApiClient({ apiKey: "test" })
-    const started = Date.now()
-    await expect(client.fetchApi({
+    const r = await underFakeClock(() => client.fetchApi({
       endpoint: "lawSearch.do",
       target: "lsHistory",
       type: "HTML",
       extraParams: { query: "소득세법" },
-    })).rejects.toThrow(/404/)
+    }))
 
+    expect(String(r.error)).toMatch(/404/)
     expect(n).toBe(4)                               // 버스트 404 워크어라운드 유지
-    expect(Date.now() - started).toBeLessThan(5000)
-  }, 30000)
+    expect(r.elapsed).toBeLessThan(5000)
+  })
 })

@@ -7,6 +7,7 @@
 import { followLawAntibot } from "./law-antibot.js"
 import { ExecutionLimitError } from "./execution-limits.js"
 import { classifyOkBody, MISS_CONFIRM_DELAY_MS, UpstreamRecordMissingError } from "./upstream-miss.js"
+import { BODY_IDLE_TIMEOUT_MS, UpstreamBodyStallError } from "./response-body.js"
 import { combineAbortSignals, getRequestSignal, requestCancelledError, requestContext, throwIfRequestCancelled } from "./session-state.js"
 
 /**
@@ -19,9 +20,33 @@ export function maskSensitiveUrl(url: string): string {
   return url.replace(/([?&](?:oc|apikey|api_key|authkey|auth_key|key)=)[^&]+/gi, "$1***")
 }
 
+/**
+ * 도구 출력 전체에서 API 키를 가린다(tool-registry 최종 게이트 전용).
+ * 법제처 검색 응답의 상세링크(판례상세링크 등)에는 그 요청에 쓴 OC 가 그대로 실려 오고,
+ * 여러 렌더러가 그 링크를 출력했다. 무키 요청이면 서버 LAW_OC 가 노출돼 폴백 한도를
+ * 우회할 수 있었다(2026-09-23 리뷰 C5, 실측 `링크: /DRF/lawService.do?OC=…`).
+ * 링크가 `&amp;` 로 인코딩된 모양은 maskSensitiveUrl 의 [?&] 앞자리 조건을 비껴가므로,
+ * 영숫자가 아닌 문자 뒤의 키 파라미터를 모두 잡는다. 알려진 키 값(8자 이상)은 형태와
+ * 무관하게 한 번 더 지운다.
+ */
+export function maskKeysInText(text: string, knownKeys: Array<string | undefined> = []): string {
+  // 값은 키에 쓰이는 문자만 잡는다. [^&\s]+ 로 두면 "OC=abc)입니다" 의 ")입니다" 까지 삼켰다(독립 리뷰)
+  let out = text.replace(/(^|[^A-Za-z0-9_])(oc|apikey|api_key|authkey|auth_key)=([A-Za-z0-9._@%+-]+)/gi, "$1$2=***")
+  for (const key of knownKeys) {
+    if (key && key.length >= 8) out = out.split(key).join("***")
+  }
+  return out
+}
+
 export interface FetchWithRetryOptions extends RequestInit {
   /** Request timeout in ms (default: 30000) */
   timeout?: number
+  /**
+   * 재시도를 포함한 전체 시간 한도 ms (기본 45000). 시도마다 timeout 을 새로 주면 업스트림이
+   * 매달릴 때 4회×30초+백오프로 약 122초가 걸려, 60초에 포기하는 MCP 클라이언트가 오류
+   * 문구 없이 끊겼다(2026-09-23 리뷰 A6). 뒤 시도는 남은 시간만 받고, 모자라면 재시도하지 않는다.
+   */
+  deadline?: number
   /** Max retry attempts (default: 3) */
   retries?: number
   /** Base delay for exponential backoff in ms (default: 300 — DEFAULT_RETRY_DELAY 참조) */
@@ -46,6 +71,9 @@ export interface FetchWithRetryOptions extends RequestInit {
 }
 
 const DEFAULT_TIMEOUT = 30000
+const DEFAULT_DEADLINE = 45000
+/** 이보다 짧게 남으면 새 시도를 시작하지 않는다 (왕복 p50 0.4~1.1초) */
+const MIN_ATTEMPT_MS = 1500
 const DEFAULT_RETRIES = 3
 /**
  * 지수 백오프 base. 업스트림 왕복은 검색 ~0.45초 / 단건 조회 ~0.9초인데(04_qa_verification.md
@@ -109,6 +137,7 @@ export async function fetchWithRetry(
 ): Promise<Response> {
   const {
     timeout = DEFAULT_TIMEOUT,
+    deadline = DEFAULT_DEADLINE,
     retries = DEFAULT_RETRIES,
     retryDelay = DEFAULT_RETRY_DELAY,
     retryOn = DEFAULT_RETRY_ON,
@@ -122,15 +151,21 @@ export async function fetchWithRetry(
   let lastError: Error | null = null
   // 단건 조회의 미스 확정용: 빈 본문/HTML 관측 이력 (시도 순번과 무관)
   let sawBadBody = false
+  const deadlineAt = Date.now() + deadline
+  /** 대기 뒤에도 한 번 더 시도할 시간이 남는가 */
+  const hasTimeFor = (delayMs: number) => Date.now() + delayMs + MIN_ATTEMPT_MS <= deadlineAt
+  let attempts = 0
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     throwIfRequestCancelled()
+    attempts = attempt + 1
+    const attemptTimeout = Math.max(1, Math.min(timeout, deadlineAt - Date.now()))
     const controller = new AbortController()
     let timedOut = false
     const timeoutId = setTimeout(() => {
       timedOut = true
       controller.abort()
-    }, timeout)
+    }, attemptTimeout)
     const signal = combineAbortSignals(controller.signal, externalSignal, getRequestSignal())
 
     const headers = new Headers(fetchOptions.headers)
@@ -155,12 +190,13 @@ export async function fetchWithRetry(
         // 로컬/등록 IP에서는 no-op. Fly 등 클라우드 배포에서 UA/Referer로 안 뚫릴 때의 방어층.
         if (response.ok && isLawGoKrHost(url)) {
           try {
-            const bypassed = await followLawAntibot(response, url, headers, timeout)
+            const bypassed = await followLawAntibot(response, url, headers, attemptTimeout)
             if (bypassed) response = bypassed
           } catch (error) {
             // Cancellation and budget exhaustion must stop the request rather
             // than silently falling through to more work.
-            if (error instanceof ExecutionLimitError || getRequestSignal()?.aborted || externalSignal?.aborted) {
+            // 본문 정지도 원본으로 진행하지 않는다: 같은 본문이라 판정 프로브에서 다시 20초를 멈춘다
+            if (error instanceof ExecutionLimitError || error instanceof UpstreamBodyStallError || getRequestSignal()?.aborted || externalSignal?.aborted) {
               await response.body?.cancel().catch(() => {})
               throw error
             }
@@ -173,23 +209,25 @@ export async function fetchWithRetry(
         if (response.ok && attempt < retries) {
           const bad = await classifyOkBody(response, externalSignal)
           if (bad === "empty" || (bad === "html" && !allowHtmlBody)) {
-            await response.body?.cancel().catch(() => {})
             // 단건 조회에서 이 본문은 대개 "그 레코드 없음"이다. 본문만으로는 미스와
             // 일시 장애를 가를 수 없으므로 짧게 한 번 더 확인하고, 같은 답이면 사다리를
             // 마저 태우지 않고 미스로 표면화한다(빈 결과를 성공으로 반환하지 않는다).
             // 판정 기준은 시도 순번이 아니라 "비정상 본문을 이미 봤는가"다 — 503·네트워크
             // 오류 뒤의 첫 빈 본문(관측 1회)이 미스로 확정되면 안 된다.
             if (singleRecordLookup && sawBadBody) {
+              await response.body?.cancel().catch(() => {})
               throw new UpstreamRecordMissingError(maskSensitiveUrl(url), bad)
             }
             sawBadBody = true
             lastError = new Error(
               `법제처 API 비정상 응답(${bad === "empty" ? "빈 본문" : "HTML 페이지"}) - ${maskSensitiveUrl(url)}`
             )
-            await sleep(
-              singleRecordLookup ? MISS_CONFIRM_DELAY_MS : getRetryDelay(response, retryDelay, attempt),
-              combineAbortSignals(externalSignal, getRequestSignal()),
-            )
+            const delay = singleRecordLookup ? MISS_CONFIRM_DELAY_MS : getRetryDelay(response, retryDelay, attempt)
+            // 다시 물을 시간이 없으면 이 응답으로 끝낸다. 호출부의 빈 본문/HTML 가드가 표면화한다.
+            // classifyOkBody 는 복제본만 읽으므로 원본 본문은 그대로 남아 있다.
+            if (!hasTimeFor(delay)) return response
+            await response.body?.cancel().catch(() => {})
+            await sleep(delay, combineAbortSignals(externalSignal, getRequestSignal()))
             continue
           }
         }
@@ -199,6 +237,7 @@ export async function fetchWithRetry(
       // Retryable error - check if we have retries left
       if (attempt < retries) {
         const delay = getRetryDelay(response, retryDelay, attempt)
+        if (!hasTimeFor(delay)) return response
         // This response will never be returned to a caller. Dispose its body
         // before backoff so the connection can be reused, and let either MCP
         // item cancellation or HTTP disconnect interrupt the wait.
@@ -213,6 +252,8 @@ export async function fetchWithRetry(
       clearTimeout(timeoutId)
 
       if (getRequestSignal()?.aborted || externalSignal?.aborted) {
+        // 업스트림이 매달려 클라이언트가 먼저 떠난 경우에도 원인은 남긴다(#161 로그가 이 경로에선 안 찍혔다)
+        if (lastError) console.error(`[upstream] 취소 전 ${attempts}회 시도 실패: ${lastError.message}`)
         throw requestCancelledError(getRequestSignal()?.reason ?? externalSignal?.reason)
       }
       if (error instanceof ExecutionLimitError) throw error
@@ -222,7 +263,7 @@ export async function fetchWithRetry(
       // Timeout or network error — URL에서 API 키 제거 후 에러 생성
       if (error instanceof Error) {
         if (error.name === "AbortError" && timedOut) {
-          lastError = new Error(`Request timeout after ${timeout}ms for ${maskSensitiveUrl(url)}`)
+          lastError = new Error(`Request timeout after ${attemptTimeout}ms for ${maskSensitiveUrl(url)}`)
         } else {
           // fetch 네이티브 에러 메시지에도 URL이 포함될 수 있음. `fetch failed` 는 cause 를 풀어 쓴다
           const described = describeFetchError(error, url)
@@ -233,7 +274,16 @@ export async function fetchWithRetry(
       // Retry on network errors
       if (attempt < retries) {
         const delay = getRetryDelay(null, retryDelay, attempt)
-        await sleep(delay, combineAbortSignals(externalSignal, getRequestSignal()))
+        if (!hasTimeFor(delay)) break
+        // 본문이 멈췄던 시도 뒤에는 정지 창(20초)이 한 번 더 들어갈 시간이 있을 때만 다시 묻는다.
+        // 아니면 다음 시도가 또 멈춰 전체 한도를 넘긴다(독립 리뷰 재현: 45초 한도에 61~80초).
+        if (error instanceof UpstreamBodyStallError && !hasTimeFor(delay + BODY_IDLE_TIMEOUT_MS)) break
+        try {
+          await sleep(delay, combineAbortSignals(externalSignal, getRequestSignal()))
+        } catch (cancelled) {
+          if (lastError) console.error(`[upstream] 취소 전 ${attempts}회 시도 실패: ${lastError.message}`)
+          throw cancelled
+        }
         continue
       }
     }
@@ -241,7 +291,7 @@ export async function fetchWithRetry(
 
   // 재시도를 다 태우고도 못 붙은 건 서버 로그에 남긴다 — 사용자 보고(#161)만으로는 시각과
   // "fetch failed" 뿐이라, 같은 시각 서버가 본 원인 코드가 있어야 리전·업스트림을 가른다.
-  if (lastError) console.error(`[upstream] ${retries + 1}회 시도 실패: ${lastError.message}`)
+  if (lastError) console.error(`[upstream] ${attempts}회 시도 실패: ${lastError.message}`)
   throw lastError || new Error("Request failed after retries")
 }
 

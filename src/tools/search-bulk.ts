@@ -48,6 +48,8 @@ interface BulkRow {
   /** 정확매칭이 없어 부분매칭 첫 항목을 집은 경우 — 다른 법령일 수 있다 */
   looseMatch: boolean
   upcoming: UpcomingLaw[]
+  /** 시행예정 확인이 일시 장애로 실패. diff 에서 "본문 동일, 생략"으로 세면 오탐이 된다(리뷰 B6) */
+  upcomingUnknown?: boolean
   error?: string
 }
 
@@ -68,10 +70,9 @@ async function lookupOne(
   if (!hit) return { query, looseMatch: false, upcoming: [] }
 
   // 같은 법령ID의 시행예정만 — 등록부 감시에서 알고 싶은 건 "이 법령이 곧 바뀌는가"다
-  const upcoming = includeUpcoming
-    ? (await fetchUpcomingLaws(apiClient, query, apiKey)).filter(u => u.lawId === hit.lawId)
-    : []
-  return { query, hit, looseMatch: exact.length === 0, upcoming }
+  const all = includeUpcoming ? await fetchUpcomingLaws(apiClient, query, apiKey) : []
+  const upcoming = (all ?? []).filter(u => u.lawId === hit.lawId)
+  return { query, hit, looseMatch: exact.length === 0, upcoming, upcomingUnknown: all === null }
 }
 
 function upcomingLine(u: UpcomingLaw): string {
@@ -97,6 +98,7 @@ function renderFull(rows: BulkRow[]): string {
     out += `${n}. ${r.hit.name}${status}${loose}\n`
     out += `   ID ${r.hit.lawId} | MST ${r.hit.mst} | 시행 ${fmtDate(r.hit.effDate)}\n`
     for (const u of r.upcoming) out += upcomingLine(u) + "\n"
+    if (r.upcomingUnknown) out += `   ⚠️ 시행예정 확인 실패(일시 장애), 재조회 필요\n`
   }
   return out
 }
@@ -113,6 +115,8 @@ function renderDiff(rows: BulkRow[], previous: Record<string, string>): string {
       if (r.upcoming.length > 0) {
         changed.push(`🔜 ${r.hit.name} | ID ${r.hit.lawId} | 본문 동일(MST ${r.hit.mst}) — 시행예정 있음\n`
           + r.upcoming.map(upcomingLine).join("\n") + "\n")
+      } else if (r.upcomingUnknown) {
+        changed.push(`？ ${r.hit.name} | ID ${r.hit.lawId} | 본문 동일(MST ${r.hit.mst}): 시행예정 확인 실패, 재조회 필요\n`)
       } else same++
       continue
     }
@@ -123,8 +127,13 @@ function renderDiff(rows: BulkRow[], previous: Record<string, string>): string {
     changed.push(`△ ${r.hit.name} | ID ${r.hit.lawId} | MST ${prev} → ${r.hit.mst} | 시행 ${fmtDate(r.hit.effDate)}\n`
       + r.upcoming.map(upcomingLine).join("\n") + (r.upcoming.length > 0 ? "\n" : ""))
   }
-  return (changed.length > 0 ? changed.join("") : "변경 없음 — MST가 달라진 법령이 없습니다.\n")
-    + `\n(본문 동일 ${same}건은 생략)\n`
+  // 확인된 법령이 하나도 없으면(전부 실패·0건) "변경 없음"이라 단정하지 않는다
+  const verdict = changed.length > 0
+    ? changed.join("")
+    : rows.some(r => r.hit)
+      ? "변경 없음 — MST가 달라진 법령이 없습니다.\n"
+      : "확인된 법령이 없어 변경 여부를 판단할 수 없습니다.\n"
+  return verdict + `\n(본문 동일 ${same}건은 생략)\n`
 }
 
 export async function searchLawBulk(

@@ -186,10 +186,16 @@ describe("#121 대형 입력에서 라우팅이 선형 시간에 가깝다", () 
   it("길이를 4배로 늘려도 비용이 제곱으로 뛰지 않는다", () => {
     // O(n²) 였을 때 9k자 487ms / 36k자 7.6초. 선형이면 4배 길이에 4배 남짓이어야 한다.
     const build = (n: number) => "광진구 " + "가나다라마바사아자차카타파하 ".repeat(n)
+    // 평균 대신 최솟값: 병렬 테스트 중 GC·스케줄링 스파이크 한 번이 평균을 밀어 올려 간헐 실패했다
+    // (2026-09-23, 4회 중 1회). 최솟값은 잡음에 강하고, 선형 4배 대 제곱 16배를 가르는 기준 8배는 그대로 유효하다.
     const time = (s: string) => {
-      const t = performance.now()
-      for (let i = 0; i < 5; i++) routeQuery(s)
-      return (performance.now() - t) / 5
+      let best = Infinity
+      for (let i = 0; i < 7; i++) {
+        const t = performance.now()
+        routeQuery(s)
+        best = Math.min(best, performance.now() - t)
+      }
+      return best
     }
     time(build(100)) // warm-up
     const a = time(build(600))

@@ -6,7 +6,7 @@
 import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 import { buildJO } from "../lib/law-parser.js"
-import { lawCache } from "../lib/cache.js"
+import { SimpleCache } from "../lib/cache.js"
 import { formatArticleUnit } from "../lib/article-parser.js"
 import { truncateResponse } from "../lib/schemas.js"
 import type { ToolResponse } from "../lib/types.js"
@@ -84,6 +84,13 @@ interface LawResponse {
 }
 
 /**
+ * 파싱된 법령 전문 캐시. 전역 lawCache(500건, 건수만 셈)에 두면 도로교통법 시행규칙 한 건이
+ * 힙 4.3MiB 라 큰 법령 50건이면 호스트 여유 메모리를 다 쓴다(2026-09-23 리뷰 A8 실측).
+ * adminRuleXmlCache 처럼 건수를 작게 둔 전용 캐시로 뗀다.
+ */
+const batchLawCache = new SimpleCache(12)
+
+/**
  * 단일 법령에서 조문 추출
  */
 async function fetchArticlesForLaw(
@@ -96,7 +103,7 @@ async function fetchArticlesForLaw(
   const cacheKey = `batch:${lawReq.mst || lawReq.lawId}:full:${efYd || 'current'}`
   let fullLawData: LawResponse
 
-  const cached = lawCache.get<LawResponse>(cacheKey)
+  const cached = batchLawCache.get<LawResponse>(cacheKey)
   if (cached) {
     fullLawData = cached
   } else {
@@ -107,7 +114,8 @@ async function fetchArticlesForLaw(
       apiKey: apiKey,
     })
     fullLawData = JSON.parse(jsonText) as LawResponse
-    lawCache.set(cacheKey, fullLawData)
+    // lawId 만 준 현행 조회는 시행일을 넘기면 낡으므로 1시간(law-text 와 같은 기준)
+    batchLawCache.set(cacheKey, fullLawData, lawReq.mst || efYd ? 24 * 60 * 60 * 1000 : 60 * 60 * 1000)
   }
 
   const lawData = fullLawData?.법령

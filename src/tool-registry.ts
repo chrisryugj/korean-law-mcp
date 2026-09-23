@@ -8,7 +8,8 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprot
 import { z } from "zod"
 import type { LawApiClient } from "./lib/api-client.js"
 import type { McpTool } from "./lib/types.js"
-import { formatToolError } from "./lib/errors.js"
+import { ErrorCodes, formatToolError, LawApiError } from "./lib/errors.js"
+import { maskKeysInText } from "./lib/fetch-with-retry.js"
 import { RequestExecutionBudget, readExecutionLimits, type ExecutionLimits } from "./lib/execution-limits.js"
 import { truncateResponse } from "./lib/schemas.js"
 import { getRequestSignal, requestContext, runWithRequestContext, throwIfRequestCancelled } from "./lib/session-state.js"
@@ -805,13 +806,11 @@ const exposedTools = allTools.filter(t => V3_EXPOSED.has(t.name))
 /** 노출/전체 도구 수 — 헬스체크 등 표기용 파생값 (하드코딩 금지) */
 export const TOOL_COUNTS = { exposed: exposedTools.length, total: allTools.length }
 
-export function registerTools(
-  server: Server,
-  apiClient: LawApiClient,
-  executionLimits: ExecutionLimits = readExecutionLimits(),
-) {
-  // ListTools 핸들러
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+// tools/list 응답은 정적이다. HTTP stateless 모드는 POST 마다 서버를 새로 만들어 매번
+// Zod → JSON Schema 변환을 10회씩 반복했다. 첫 요청에 한 번 만들고 재사용한다.
+let listToolsResult: { tools: object[] } | undefined
+function listTools() {
+  listToolsResult ??= {
     tools: exposedTools.map(tool => ({
       name: tool.name,
       description: `${SERVICE_NAME} — ${tool.description}`,
@@ -823,7 +822,53 @@ export function registerTools(
         openWorldHint: true,
       }
     }))
-  }))
+  }
+  return listToolsResult
+}
+
+/**
+ * 인자 문자열 길이 상한. 스키마 대부분에 .max() 가 없어 100KB 인자가 그대로 정규식에
+ * 들어갔고, 공백·쉼표·숫자 반복만으로 이벤트 루프가 12~24초 멈췄다(2026-09-23 리뷰 C1~C4,
+ * 실측: get_annexes lawName 10만 자 19.3초, legal_research document_review 11.9초).
+ * 본문을 받는 `text` 만 5만 자, 나머지는 2천 자(체인 query 의 기존 상한 #121 과 같다).
+ * execute_tool 의 params 처럼 중첩된 인자도 본다.
+ */
+export const MAX_ARG_CHARS = 2_000
+export const MAX_TEXT_ARG_CHARS = 50_000
+/**
+ * 조문·별표 번호류는 정상값이 수십 자다. buildJO(LexDiff, 수정 금지)의 정규식이 숫자 연속에
+ * O(n²) 라 2천 자에서도 1회 94ms 였고, articles 배열로 여러 번 부르면 수 초가 된다(2026-09-23 독립 리뷰).
+ */
+export const MAX_SHORT_ARG_CHARS = 100
+const SHORT_ARG_KEYS = new Set(["jo", "articles", "annexNo", "bylSeq", "hang", "ho", "mok"])
+
+export function findOversizedArg(value: unknown, key = "", depth = 0): string | null {
+  if (typeof value === "string") {
+    const limit = key === "text" ? MAX_TEXT_ARG_CHARS : SHORT_ARG_KEYS.has(key) ? MAX_SHORT_ARG_CHARS : MAX_ARG_CHARS
+    return value.length > limit ? `${key || "인자"} ${value.length}자 (상한 ${limit}자)` : null
+  }
+  if (depth >= 5 || value === null || typeof value !== "object") return null
+  const entries: Array<[string, unknown]> = Array.isArray(value) ? value.map(v => [key, v]) : Object.entries(value)
+  for (const [k, v] of entries) {
+    const hit = findOversizedArg(v, k, depth + 1)
+    if (hit) return hit
+  }
+  return null
+}
+
+/** 출력 최종 게이트: 키 마스킹 → 길이 절단 (마스킹이 길이를 늘리지 않으므로 이 순서가 안전) */
+function finalizeText(text: string, maxChars: number): string {
+  const keys = [requestContext.getStore()?.apiKey, process.env.LAW_OC, process.env.KOREAN_LAW_API_KEY]
+  return truncateResponse(maskKeysInText(text, keys), maxChars)
+}
+
+export function registerTools(
+  server: Server,
+  apiClient: LawApiClient,
+  executionLimits: ExecutionLimits = readExecutionLimits(),
+) {
+  // ListTools 핸들러
+  server.setRequestHandler(ListToolsRequestSchema, async () => listTools())
 
   // CallTool 핸들러 — 전체 도구 실행 가능 (execute_tool 프록시 지원)
   server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
@@ -844,10 +889,16 @@ export function registerTools(
 
       try {
         throwIfRequestCancelled()
+        const oversized = findOversizedArg(args)
+        if (oversized) {
+          throw new LawApiError(`인자가 너무 깁니다: ${oversized}`, ErrorCodes.INVALID_PARAM, [
+            `조문·별표 번호는 ${MAX_SHORT_ARG_CHARS}자, 법령명·검색어는 ${MAX_ARG_CHARS}자, 본문(text)은 ${MAX_TEXT_ARG_CHARS}자까지 받습니다. 필요한 부분만 잘라 다시 호출하세요.`,
+          ])
+        }
         const input = tool.schema.parse(args)
         const result = await tool.handler(apiClient, input)
         throwIfRequestCancelled()
-        const text = truncateResponse(
+        const text = finalizeText(
           result.content.map(content => content.text).join("\n"),
           executionLimits.maxToolResponseChars,
         )
@@ -864,7 +915,7 @@ export function registerTools(
         return {
           content: [{
             type: "text" as const,
-            text: truncateResponse(
+            text: finalizeText(
               errResult.content.map(content => content.text).join("\n"),
               executionLimits.maxToolResponseChars,
             ),

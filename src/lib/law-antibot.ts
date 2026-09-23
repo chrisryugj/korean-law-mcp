@@ -13,7 +13,7 @@
  * 원본 재시도 성공" 경로는 제한적이다. 주 경로는 토큰 URL 직접 파싱이다.
  */
 
-import { readBodyPrefix } from "./response-body.js"
+import { readBodyPrefix, UpstreamBodyStallError } from "./response-body.js"
 import { ExecutionLimitError } from "./execution-limits.js"
 import { combineAbortSignals, getRequestSignal, requestContext, throwIfRequestCancelled } from "./session-state.js"
 
@@ -96,7 +96,9 @@ export async function followLawAntibot(
       // 청구하므로 여기서 세면 이중 계상). 마커가 잘려 못 읽으면 원본 진행이다.
       ;({ text } = await readBodyPrefix(inspection, ANTIBOT_PROBE_BYTES))
     } catch (error) {
-      if (error instanceof ExecutionLimitError || getRequestSignal()?.aborted) {
+      // 본문 정지(UpstreamBodyStallError)도 여기서 끝낸다. "안티봇 아님, 계속"으로 넘기면 뒤의
+      // classifyOkBody 가 같은 정지를 20초 더 기다려 시도당 40초를 썼다(2026-09-23 독립 리뷰, 재현 80초).
+      if (error instanceof ExecutionLimitError || error instanceof UpstreamBodyStallError || getRequestSignal()?.aborted) {
         // `clone()` tees the body; cancelling one branch can wait for the
         // other. Release both concurrently on terminal request errors.
         await Promise.allSettled([

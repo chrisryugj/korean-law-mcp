@@ -47,6 +47,9 @@ export async function getLawText(
 
     // Check cache first (efYd 정규화: 미지정 → 'current'로 통일)
     const cacheKey = `lawtext:${input.mst || input.lawId}:${joCode || 'full'}:${input.efYd || 'current'}`
+    // MST·efYd 는 버전을 못박으므로 하루를 둔다. lawId 만 준 "현행" 조회는 개정 시행일을 넘기면
+    // 다른 본문이 현행이 되므로 1시간만 둔다(24시간이면 시행일 당일 옛 본문이 나갔다, 리뷰 A8).
+    const cacheTtl = input.mst || input.efYd ? 24 * 60 * 60 * 1000 : 60 * 60 * 1000
     const cached = lawCache.get<string>(cacheKey)
     if (cached) {
       return {
@@ -215,7 +218,7 @@ export async function getLawText(
 
       // 절단본을 캐시 — 캐시 히트 경로는 절단 없이 반환하므로 미절단 캐시 시 5만 자 제한 우회됨
       const truncatedToc = truncateResponse(tocText)
-      lawCache.set(cacheKey, truncatedToc)
+      lawCache.set(cacheKey, truncatedToc, cacheTtl)
       return {
         content: [{
           type: "text",
@@ -287,7 +290,7 @@ export async function getLawText(
     }
 
     // Cache the result
-    lawCache.set(cacheKey, resultText)
+    lawCache.set(cacheKey, resultText, cacheTtl)
 
     return {
       content: [{

@@ -16,7 +16,7 @@
  */
 
 import { ExecutionLimitError } from "./execution-limits.js"
-import { readBodyPrefix } from "./response-body.js"
+import { readBodyPrefix, UpstreamBodyStallError } from "./response-body.js"
 import { getRequestSignal } from "./session-state.js"
 import { isBlankBody, isHtmlPage } from "./body-shape.js"
 
@@ -57,7 +57,9 @@ export async function classifyOkBody(
     // 프로브 구간이 전부 공백인데 본문이 더 남아 있다면 "빈 본문"이라 단정할 수 없다.
     return bad === "empty" && !complete ? null : bad
   } catch (error) {
-    if (error instanceof ExecutionLimitError || getRequestSignal()?.aborted || externalSignal?.aborted) {
+    // 본문이 멈춘 응답은 원본을 읽어도 같은 자리에서 멈춘다. 정상으로 넘기지 말고 던져서
+    // fetchWithRetry 가 다음 시도로 가게 한다(2026-09-23 리뷰 A5).
+    if (error instanceof ExecutionLimitError || error instanceof UpstreamBodyStallError || getRequestSignal()?.aborted || externalSignal?.aborted) {
       // 요청 자체가 끝난다 — 아무도 원본을 읽지 않으므로 여기서 같이 버려야 소켓이 돈다.
       void response.body?.cancel().catch(() => {})
       throw error

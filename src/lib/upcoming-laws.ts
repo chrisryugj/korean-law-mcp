@@ -10,6 +10,7 @@
 import type { LawApiClient } from "./api-client.js"
 import { lawCache } from "./cache.js"
 import { extractTag } from "./xml-parser.js"
+import { rethrowIfFatal } from "./fatal-errors.js"
 
 export interface UpcomingLaw {
   name: string
@@ -54,24 +55,37 @@ export function parseUpcomingXml(xmlText: string): UpcomingLaw[] {
   return out
 }
 
-/** 시행예정 법령 조회 — 보조 정보이므로 실패는 전파하지 않고 빈 배열 */
+/**
+ * 시행예정 법령 조회. 보조 정보라 일시 장애는 전파하지 않되, "확인했고 없음"([])과
+ * "확인 못 함"(null)을 구분한다. 종전엔 둘 다 [] 여서 장애 한 번이 "시행예정 없음"으로
+ * 바뀌었고, search_law 는 그 결과를 1시간 캐시했으며 search_law_bulk diff 는 해당 법령을
+ * "본문 동일, 생략"으로 넘겼다(2026-09-23 리뷰 A4·B6, 재현). 예산 소진·취소는 다시 던진다.
+ */
 export async function fetchUpcomingLaws(
   apiClient: LawApiClient,
   query: string,
   apiKey?: string
-): Promise<UpcomingLaw[]> {
+): Promise<UpcomingLaw[] | null> {
   const cacheKey = `upcoming:${query.toLowerCase().trim()}`
   const cached = lawCache.get<UpcomingLaw[]>(cacheKey)
   if (cached) return cached
   try {
-    const xml = await apiClient.searchLaw(query, apiKey, 30, "eflaw")
+    // nw=2(시행예정만)·display=100. nw 없이 30건을 받으면 연혁 행이 창을 채운다. 실측(2026-09-23,
+    // 도로교통법): 전체 489건 중 첫 30건이 연혁 27·현행 1·시행예정 2여서 시행규칙 개정 2건이
+    // 빠졌다. nw=2 로는 시행예정 4건이 정확히 온다(리뷰 A2).
+    const xml = await apiClient.searchLaw(query, apiKey, 100, "eflaw", "2")
     const parsed = parseUpcomingXml(xml)
     lawCache.set(cacheKey, parsed, 60 * 60 * 1000)
     return parsed
-  } catch {
-    return []
+  } catch (error) {
+    rethrowIfFatal(error)
+    return null
   }
 }
+
+/** 시행예정 확인이 실패했을 때 결과에 붙이는 한 줄. 침묵하면 "시행예정 없음"으로 읽힌다 */
+export const UPCOMING_CHECK_FAILED_NOTE =
+  "⚠️ 시행예정(공포 후 미시행) 개정 확인이 일시 장애로 실패했습니다. 시행예정 여부가 중요하면 잠시 후 다시 조회하세요.\n"
 
 /** 병기 상한 — 초과분은 침묵하지 않고 "외 N건"으로 알린다 (#156) */
 const MAX_UPCOMING_NOTES = 5
