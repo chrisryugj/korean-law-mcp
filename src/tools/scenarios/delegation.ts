@@ -2,13 +2,23 @@
  * Scenario: delegation — 위임입법 미이행 감시기
  * 호스트 체인: chain_law_system
  *
- * 추가 조회: 위임법령(미제정) + 법체계(행정규칙 포함) + 조문 이력
+ * 추가 조회: 법체계(행정규칙 포함) + 조문 이력
  */
 import type { ScenarioContext, ScenarioResult, ScenarioSection } from "./types.js"
-import { callTool } from "./types.js"
-import { getDelegatedLaws } from "../law-linkage.js"
+import { callTool, pushResultSection } from "./types.js"
 import { getLawSystemTree } from "../law-system-tree.js"
 import { getArticleHistory } from "../article-history.js"
+
+/**
+ * 위임법령 연계(lnkDep) 조회는 뺐다 (2026-09-23 리뷰 B#9).
+ * 이 목록 API 는 query 를 무시하고 전체 목록(실측 109,918건)을 돌려줘, 1페이지 100건 안에서만
+ * 법령명을 거를 수 있다. 실측 '관세법' 매칭 0건: "위임입법 현황" 섹션은 사실상 실리지 못한 채
+ * 업스트림 1회만 썼고, 빠진 사실도 알리지 않았다. 대신 무엇을 보라는지 밝힌다.
+ */
+const DELEGATION_STATUS_NOTE =
+  "자동 대조 미제공: 법제처 위임 연계 목록이 법령명 검색 필터를 지원하지 않아 미제정 하위법령을 자동으로 집계하지 못합니다. " +
+  "위 '3단 비교' 섹션의 위임 조문(대통령령·부령으로 정한다)과 아래 법체계의 하위법령을 대조하세요. " +
+  "LLM은 이 섹션을 근거로 '미이행 위임 없음'이라고 단정하지 마세요."
 
 export async function runDelegationScenario(ctx: ScenarioContext): Promise<ScenarioResult> {
   const sections: ScenarioSection[] = []
@@ -20,41 +30,21 @@ export async function runDelegationScenario(ctx: ScenarioContext): Promise<Scena
 
   const { lawName, lawId, mst } = ctx.law
 
-  // 병렬: 위임법령 + 법체계(행정규칙 포함) + 조문 이력
-  const promises: Promise<{ text: string; isError: boolean }>[] = [
-    // 위임법령 (소관부처별 미이행 현황)
-    callTool(getDelegatedLaws, ctx.apiClient, {
-      query: lawName,
-      display: 20,
-      apiKey: ctx.apiKey,
-    }),
+  // 병렬: 법체계(행정규칙 포함) + 조문 이력
+  const [treeR, histR] = await Promise.all([
     // 법체계도 (행정규칙=훈령/예규/고시 포함)
     callTool(getLawSystemTree, ctx.apiClient, {
       mst,
       apiKey: ctx.apiKey,
     }),
-  ]
+    lawId
+      ? callTool(getArticleHistory, ctx.apiClient, { lawId, apiKey: ctx.apiKey })
+      : Promise.resolve(null),
+  ])
 
-  if (lawId) {
-    promises.push(
-      callTool(getArticleHistory, ctx.apiClient, { lawId, apiKey: ctx.apiKey })
-    )
-  }
-
-  const results = await Promise.all(promises)
-  const [delegR, treeR, histR] = results
-
-  if (!delegR.isError && delegR.text.trim()) {
-    sections.push({ title: "위임입법 현황 (미제정 포함)", content: delegR.text })
-  }
-
-  if (!treeR.isError && treeR.text.trim()) {
-    sections.push({ title: "법체계 + 행정규칙", content: treeR.text })
-  }
-
-  if (histR && !histR.isError && histR.text.trim()) {
-    sections.push({ title: "조문별 개정이력 (위임 조항 변동 추적)", content: histR.text })
-  }
+  sections.push({ title: "위임입법 현황 (미제정 포함)", content: DELEGATION_STATUS_NOTE })
+  pushResultSection(sections, "법체계 + 행정규칙", treeR)
+  pushResultSection(sections, "조문별 개정이력 (위임 조항 변동 추적)", histR)
 
   // 후속 액션
   suggestedActions.push(

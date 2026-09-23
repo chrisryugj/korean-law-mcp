@@ -231,9 +231,129 @@ function formatCitationLabel(c: ParsedCitation, officialName?: string): string {
   return label
 }
 
+/** 인용된 법령명 하나를 법제처 법령으로 특정한 결과. 같은 법령명의 인용들이 이 결과를 공유한다. */
+type LawResolution =
+  | { kind: "no_candidates" }
+  | { kind: "chosen"; law: LawInfo }
+  | { kind: "repealed"; law: LawInfo }
+  | { kind: "not_found" }
+  | { kind: "loose_only"; fallback: LawInfo }
+  | { kind: "error"; message: string }
+
+async function resolveCitedLaw(
+  apiClient: LawApiClient,
+  lawName: string,
+  apiKey?: string
+): Promise<LawResolution> {
+  // 1단계: 법령 검색 — findLaws가 관련도 정렬까지 처리 (민법→난민법 오매칭 방지)
+  // 앞 수식어가 남은 캡처("절도죄는 형법")도 후보를 순차 축약하며 실제 법령명을 찾는다.
+  let fallback: LawInfo | undefined   // 어떤 후보도 looseMatch 실패 시 ⚠ 메시지용 (전체 캡처 기준)
+  // 후보가 하나도 없으면(접미사뿐인 캡처, #70) 검색을 시도하지 않는다 — 시도하면 무관 법령이
+  // 물려오고, 검색 결과가 0이면 ✗ NOT_FOUND 로 낙인돼 '법령명 미상'이 '환각'으로 오보된다.
+  const candidates = lawNameCandidates(lawName)
+  if (candidates.length === 0) return { kind: "no_candidates" }
+  try {
+    for (const cand of candidates) {
+      // searchDisplay=100: "상법"처럼 짧은 법령명이 부분매칭에 밀려 기본 20건에 안 들어올 때 대비
+      const results = await findLaws(apiClient, cand, apiKey, 5, 100)
+      if (results.length === 0) continue
+      if (!fallback) fallback = results[0]
+      if (looseMatchLawName(cand, results[0].lawName)) return { kind: "chosen", law: results[0] }
+    }
+    // 현행(target=law)에서 이 법령을 특정하지 못함 → 폐지된 법령인지 연혁(eflaw)에서 확인.
+    // '지어낸 인용(환각)'과 '실존했으나 폐지된 법령'을 구분(존재≠생존).
+    //
+    // fallback 유무와 무관하게 확인한다 — 후보 축약이 만드는 꼬리 후보('기본법',
+    // '관한 법률')는 어떤 문서에서든 무언가를 물어와 fallback을 세우므로, fallback을
+    // 조건으로 걸면 다어절 폐지 법령이 ⌛ 대신 ⚠로 강등된다(pickRepealed가 완전일치·
+    // 접두만 허용해 꼬리 후보가 엉뚱한 폐지본을 물어올 여지는 없다).
+    for (const cand of candidates) {
+      const repealed = await findRepealedLaw(apiClient, cand, apiKey)
+      if (repealed) return { kind: "repealed", law: repealed }
+    }
+    return fallback ? { kind: "loose_only", fallback } : { kind: "not_found" }
+  } catch (e) {
+    return { kind: "error", message: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+/** 조문 범위 힌트 " (존재 범위: 제N조~제M조)". 장식 정보라 실패는 빈 문자열로 둔다(판정을 바꾸지 않는다). */
+async function articleRangeHint(apiClient: LawApiClient, mst: string, apiKey?: string): Promise<string> {
+  try {
+    const fullJson = JSON.parse(await apiClient.getLawText({ mst, apiKey }))
+    const fullRaw = fullJson?.법령?.조문?.조문단위
+    const fullUnits = toArray<any>(fullRaw)
+    const nums = fullUnits
+      .filter((u: any) => u.조문여부 === "조문" && u.조문번호)
+      .map((u: any) => parseInt(u.조문번호, 10))
+      .filter((n: number) => !isNaN(n))
+    if (nums.length > 0) {
+      return ` (존재 범위: 제${Math.min(...nums)}조~제${Math.max(...nums)}조)`
+    }
+  } catch { /* ignore */ }
+  return ""
+}
+
+/**
+ * 한 번의 verify_citations 호출 안에서 공유하는 조회 메모 (2026-09-23 리뷰 B#3).
+ * 같은 법령을 여러 번 인용한 문서가 흔하다("민법 제750조, 민법 제751조 …"). 인용마다 법령 확인과
+ * 전문 조회(범위 힌트)를 따로 하면 같은 업스트림 요청이 인용 수만큼 반복돼 요청 예산이 먼저 바닥난다.
+ */
+interface VerifyMemo {
+  resolveLaw(lawName: string): Promise<LawResolution>
+  rangeHint(mst: string): Promise<string>
+}
+
+function createVerifyMemo(apiClient: LawApiClient, apiKey?: string): VerifyMemo {
+  const laws = new Map<string, Promise<LawResolution>>()
+  const ranges = new Map<string, Promise<string>>()
+  return {
+    resolveLaw(lawName) {
+      let p = laws.get(lawName)
+      if (!p) {
+        p = resolveCitedLaw(apiClient, lawName, apiKey)
+        laws.set(lawName, p)
+      }
+      return p
+    },
+    rangeHint(mst) {
+      let p = ranges.get(mst)
+      if (!p) {
+        p = articleRangeHint(apiClient, mst, apiKey)
+        ranges.set(mst, p)
+      }
+      return p
+    },
+  }
+}
+
+/**
+ * 인용 검증 동시 실행 상한 (2026-09-23 리뷰 B#3).
+ * 전건을 Promise.all 로 한꺼번에 띄우면 모든 인용의 재시도 사다리가 나란히 진행하다가 요청 예산이
+ * 바닥나는 순간 전부가 함께 실패한다(실측 재현: 같은 법령 인용 12건 이상이면 ✓ 0건). 풀로 돌리면
+ * 앞선 인용은 끝까지 검증되고 예산 초과는 뒤쪽 일부에만 남는다. 업스트림 예의도 같은 방향이다.
+ */
+// 4 로 두면 업스트림이 느릴 때(왕복 2초) 인용 30건이 20초가 걸렸다. 법령명 메모로 중복 검색은 이미 없으므로
+// 8 이면 호출 수는 같고 대기만 절반이다(2026-09-23 독립 리뷰).
+const VERIFY_CONCURRENCY = 8
+
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let next = 0
+  const worker = async (): Promise<void> => {
+    while (next < items.length) {
+      const index = next++
+      results[index] = await fn(items[index])
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  return results
+}
+
 async function verifyOne(
   apiClient: LawApiClient,
   cite: ParsedCitation,
+  memo: VerifyMemo,
   apiKey?: string
 ): Promise<string> {
   const inputLabel = formatCitationLabel(cite)
@@ -242,50 +362,25 @@ async function verifyOne(
     return `⚠ ${inputLabel} — 법령명 추출 실패 (앞 문맥에 법령명 명시 필요)`
   }
 
-  // 1단계: 법령 검색 — findLaws가 관련도 정렬까지 처리 (민법→난민법 오매칭 방지)
-  // 앞 수식어가 남은 캡처("절도죄는 형법")도 후보를 순차 축약하며 실제 법령명을 찾는다.
-  let chosen: LawInfo | undefined
-  let fallback: LawInfo | undefined   // 어떤 후보도 looseMatch 실패 시 ⚠ 메시지용 (전체 캡처 기준)
-  // 후보가 하나도 없으면(접미사뿐인 캡처, #70) 검색을 시도하지 않는다 — 시도하면 무관 법령이
-  // 물려오고, 검색 결과가 0이면 ✗ NOT_FOUND 로 낙인돼 '법령명 미상'이 '환각'으로 오보된다.
-  const candidates = lawNameCandidates(cite.lawName)
-  if (candidates.length === 0) {
+  const resolution = await memo.resolveLaw(cite.lawName)
+  if (resolution.kind === "no_candidates") {
     return `⚠ ${inputLabel} — 법령명 불명확 ('${cite.lawName}'은(는) 법령명으로 특정할 수 없음. 앞 문맥에 법령명 명시 필요)`
   }
-  try {
-    for (const cand of candidates) {
-      // searchDisplay=100: "상법"처럼 짧은 법령명이 부분매칭에 밀려 기본 20건에 안 들어올 때 대비
-      const results = await findLaws(apiClient, cand, apiKey, 5, 100)
-      if (results.length === 0) continue
-      if (!fallback) fallback = results[0]
-      if (looseMatchLawName(cand, results[0].lawName)) {
-        chosen = results[0]
-        break
-      }
-    }
-    if (!chosen) {
-      // 현행(target=law)에서 이 법령을 특정하지 못함 → 폐지된 법령인지 연혁(eflaw)에서 확인.
-      // '지어낸 인용(환각)'과 '실존했으나 폐지된 법령'을 구분(존재≠생존).
-      //
-      // fallback 유무와 무관하게 확인한다 — 후보 축약이 만드는 꼬리 후보('기본법',
-      // '관한 법률')는 어떤 문서에서든 무언가를 물어와 fallback을 세우므로, fallback을
-      // 조건으로 걸면 다어절 폐지 법령이 ⌛ 대신 ⚠로 강등된다(pickRepealed가 완전일치·
-      // 접두만 허용해 꼬리 후보가 엉뚱한 폐지본을 물어올 여지는 없다).
-      for (const cand of candidates) {
-        const repealed = await findRepealedLaw(apiClient, cand, apiKey)
-        if (repealed) {
-          const d = formatYmd(repealed.effectiveDate)
-          return `⌛ ${formatCitationLabel(cite, repealed.lawName)} — [REPEALED] 「${repealed.lawName}」은(는) 폐지된 법령입니다(연혁${d ? `, 최종시행 ${d}` : ""}). 실존했으나 현행 법령이 아님 — 후속·대체 법령 확인 필요`
-        }
-      }
-      if (!fallback) {
-        return `✗ ${inputLabel} — [NOT_FOUND] 법제처 DB에 해당 법령 없음 (법령명 오탈자 또는 존재하지 않는 법령)`
-      }
-      return `⚠ ${inputLabel} — 법제처 검색은 '${fallback.lawName}'(으)로만 매칭됨. 법령명 정확성 재확인 필요`
-    }
-  } catch (e) {
-    return `⚠ ${inputLabel} — 법령 검색 실패: ${e instanceof Error ? e.message : String(e)}`
+  if (resolution.kind === "error") {
+    return `⚠ ${inputLabel} — 법령 검색 실패: ${resolution.message}`
   }
+  if (resolution.kind === "repealed") {
+    const repealed = resolution.law
+    const d = formatYmd(repealed.effectiveDate)
+    return `⌛ ${formatCitationLabel(cite, repealed.lawName)} — [REPEALED] 「${repealed.lawName}」은(는) 폐지된 법령입니다(연혁${d ? `, 최종시행 ${d}` : ""}). 실존했으나 현행 법령이 아님 — 후속·대체 법령 확인 필요`
+  }
+  if (resolution.kind === "not_found") {
+    return `✗ ${inputLabel} — [NOT_FOUND] 법제처 DB에 해당 법령 없음 (법령명 오탈자 또는 존재하지 않는 법령)`
+  }
+  if (resolution.kind === "loose_only") {
+    return `⚠ ${inputLabel} — 법제처 검색은 '${resolution.fallback.lawName}'(으)로만 매칭됨. 법령명 정확성 재확인 필요`
+  }
+  const chosen = resolution.law
 
   if (!chosen?.mst) return `⚠ ${inputLabel} — MST 추출 실패`
 
@@ -305,20 +400,8 @@ async function verifyOne(
     })
 
     if (!found) {
-      // 전체 조회로 범위 힌트
-      let rangeHint = ""
-      try {
-        const fullJson = JSON.parse(await apiClient.getLawText({ mst: chosen.mst, apiKey }))
-        const fullRaw = fullJson?.법령?.조문?.조문단위
-        const fullUnits = toArray<any>(fullRaw)
-        const nums = fullUnits
-          .filter((u: any) => u.조문여부 === "조문" && u.조문번호)
-          .map((u: any) => parseInt(u.조문번호, 10))
-          .filter((n: number) => !isNaN(n))
-        if (nums.length > 0) {
-          rangeHint = ` (존재 범위: 제${Math.min(...nums)}조~제${Math.max(...nums)}조)`
-        }
-      } catch { /* ignore */ }
+      // 전체 조회로 범위 힌트 (같은 법령의 없는 조문이 여럿이어도 전문은 한 번만 받는다)
+      const rangeHint = await memo.rangeHint(chosen.mst)
       return `✗ ${formatCitationLabel(cite, chosen.lawName)} — [NOT_FOUND] 해당 조문 없음${rangeHint}`
     }
 
@@ -367,8 +450,10 @@ export async function verifyCitations(
     const citations = parseCitations(input.text, input.maxCitations ?? 15)
     // 판례 인용은 법령 인용과 독립 축이다 — 사건번호를 추출조차 않으면 [HALLUCINATION_DETECTED]
     // 배너가 "전체 인용이 검증됐다"로 오독된다(#93).
+    // 같은 법령명은 한 번만 특정하고, 인용은 상한 동시 실행으로 검증한다 (2026-09-23 리뷰 B#3)
+    const memo = createVerifyMemo(apiClient, input.apiKey)
     const [results, cases] = await Promise.all([
-      Promise.all(citations.map((c) => verifyOne(apiClient, c, input.apiKey))),
+      mapWithConcurrency(citations, VERIFY_CONCURRENCY, (c) => verifyOne(apiClient, c, memo, input.apiKey)),
       verifyCaseCitations(apiClient, input.text, input.apiKey),
     ])
 

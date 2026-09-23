@@ -10,7 +10,8 @@
  */
 import { findLaws, type LawInfo } from "../lib/law-search.js"
 import { lawNameFromQuery } from "../lib/query-extract.js"
-import { searchAiLawStructured } from "./life-law.js"
+import { rethrowIfFatal } from "../lib/fatal-errors.js"
+import { searchAiLawStructured, type AiLawArticleSignal } from "./life-law.js"
 import type { LawApiClient } from "../lib/api-client.js"
 
 export interface ChainBaseLawResult {
@@ -21,14 +22,26 @@ export interface ChainBaseLawResult {
   attempts: string[]
 }
 
+export interface ChainBaseLawOptions {
+  /**
+   * 체인이 이미 띄운 같은 질의의 의미검색 결과 (2026-09-23 리뷰 B#10).
+   * 넘기면 3단계에서 의미검색을 다시 치지 않는다: full_research·procedure_detail 이 같은 요청을
+   * 한 번 더 보내던 것을 없앤다. 호출부가 거부되지 않는 promise 로 넘긴다(실패는 빈 배열).
+   */
+  aiSignals?: Promise<AiLawArticleSignal[]>
+}
+
 /** 의미검색이 지목한 법령명 (등장 순, 중복 제거) */
 async function aiLawNames(
   apiClient: LawApiClient,
   query: string,
-  apiKey?: string
+  apiKey?: string,
+  aiSignals?: Promise<AiLawArticleSignal[]>
 ): Promise<string[]> {
   try {
-    const { articleSignals } = await searchAiLawStructured(apiClient, { query, search: "0", display: 5, page: 1, apiKey })
+    const articleSignals = aiSignals
+      ? await aiSignals
+      : (await searchAiLawStructured(apiClient, { query, search: "0", display: 5, page: 1, apiKey })).articleSignals
     const names: string[] = []
     for (const s of articleSignals) {
       const n = s.lawName?.trim()
@@ -38,7 +51,9 @@ async function aiLawNames(
     // 의미검색은 조문 적합도 순이라 "도로교통법 시행규칙"이 "도로교통법"보다 먼저 오기 쉽다
     const isSubordinate = (n: string) => /시행령|시행규칙|규정|규칙$/.test(n)
     return [...names.filter(n => !isSubordinate(n)), ...names.filter(isSubordinate)]
-  } catch {
+  } catch (error) {
+    // 예산 소진·요청 취소를 여기서 삼키면 체인이 "관련 법령 없음(NOT_FOUND)"으로 끝난다 (B#11)
+    rethrowIfFatal(error)
     // 의미검색은 보조 경로다 — 실패해도 체인의 실패 사유를 덮어쓰지 않는다
     return []
   }
@@ -48,7 +63,8 @@ export async function resolveChainBaseLaw(
   apiClient: LawApiClient,
   query: string,
   apiKey?: string,
-  max = 3
+  max = 3,
+  options: ChainBaseLawOptions = {}
 ): Promise<ChainBaseLawResult> {
   const attempts: string[] = []
   const tried = new Set<string>()
@@ -73,7 +89,7 @@ export async function resolveChainBaseLaw(
   if (byQuery.length) return { laws: byQuery, searchedWith: query.trim(), attempts }
 
   // 3) 주제어 → 법령: 의미검색이 지목한 법령명으로 재검색
-  for (const name of await aiLawNames(apiClient, query, apiKey)) {
+  for (const name of await aiLawNames(apiClient, query, apiKey, options.aiSignals)) {
     const byAi = await attempt(name)
     if (byAi.length) return { laws: byAi, searchedWith: name, attempts }
   }

@@ -15,10 +15,19 @@ export const MAX_PRECEDENT_DETAIL_LIMIT = 5
 // 균형 있게 살아남도록 한다. 헤더·제목·구분자 몫으로 약간 여유를 둔다.
 const EVIDENCE_BUDGET = MAX_RESPONSE_SIZE - 2000
 
+/**
+ * 한 체인 호출 안에서 같은 판례 상세를 두 번 받지 않게 하는 메모 (2026-09-23 리뷰 B#10).
+ * 검색 결과 검증(validatePrecedentSearchResult)이 상위 1건 상세를 받고, 곧이어 근거 조회가 같은 판례를
+ * 다시 받았다. 키에 full 을 넣는다: full 여부로 렌더가 달라 서로 대신할 수 없다.
+ * 체인이 호출마다 새로 만들어 넘긴다(전역 캐시 아님).
+ */
+export type PrecedentDetailMemo = Map<string, Promise<PrecedentEvidenceItem>>
+
 export interface PrecedentEvidenceOptions {
   apiKey?: string
   detailLimit?: number
   full?: boolean
+  detailMemo?: PrecedentDetailMemo
 }
 
 export interface PrecedentEvidenceItem {
@@ -150,6 +159,7 @@ export async function validatePrecedentSearchResult(
         apiKey: options.apiKey,
         detailLimit: 1,
         full: input.attempt.search === 2 || options.full === true,
+        detailMemo: options.detailMemo,
       }
     )
     if (!evidence || evidence.isError) return false
@@ -165,6 +175,7 @@ export async function validatePrecedentSearchResult(
       apiKey: options.apiKey,
       detailLimit: 1,
       full: input.attempt.search === 2 || options.full === true,
+      detailMemo: options.detailMemo,
     }
   )
   if (!evidence || evidence.isError) return false
@@ -183,9 +194,20 @@ export async function fetchPrecedentEvidence(
 
   if (hits.length === 0) return null
 
-  const items = await Promise.all(
-    hits.map(hit => fetchOnePrecedentDetail(apiClient, hit, options))
-  )
+  const memo = options.detailMemo
+  const fetchDetail = (hit: PrecedentHit): Promise<PrecedentEvidenceItem> => {
+    if (!memo) return fetchOnePrecedentDetail(apiClient, hit, options)
+    const key = `${hit.id}:${options.full ? "full" : "compact"}`
+    let pending = memo.get(key)
+    if (!pending) {
+      pending = fetchOnePrecedentDetail(apiClient, hit, options)
+      memo.set(key, pending)
+    }
+    return pending
+  }
+  // 아래에서 item.text 를 호출마다 다른 예산으로 자른다. 메모가 넘긴 객체를 그대로 고치면
+  // 다른 호출의 결과까지 바뀌므로 사본으로 다룬다.
+  const items = (await Promise.all(hits.map(fetchDetail))).map(item => ({ ...item }))
   const failures = items.filter(item => item.isError).length
 
   // 성공 항목 본문에만 건당 예산을 균등 배분 (실패 항목은 짧은 안내라 제외).

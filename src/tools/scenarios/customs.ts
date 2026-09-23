@@ -5,7 +5,7 @@
  * 추가 조회: 관세3법 체계 + 관세청 해석례 + FTA 조약 + 세율 별표 + 조세심판
  */
 import type { ScenarioContext, ScenarioResult, ScenarioSection, ScenarioResource } from "./types.js"
-import { callTool } from "./types.js"
+import { callTool, pushResultSection } from "./types.js"
 
 /** 이 시나리오가 응답에 싣는 자원 — ctx.law 기준 별표(세율표)를 싣는다 */
 export const PROVIDES: ScenarioResource[] = ["annex"]
@@ -49,25 +49,13 @@ export async function runCustomsScenario(ctx: ScenarioContext): Promise<Scenario
   const results = await Promise.all(promises)
   const [customsR, taxR, treatyR, annexR, threeTierR] = results
 
-  if (!customsR.isError && customsR.text.trim()) {
-    sections.push({ title: "관세청 해석례", content: customsR.text })
-  }
-
-  if (!taxR.isError && taxR.text.trim()) {
-    sections.push({ title: "조세심판원 (관세 사건)", content: taxR.text })
-  }
-
-  if (!treatyR.isError && treatyR.text.trim()) {
-    sections.push({ title: "관련 조약/FTA", content: treatyR.text })
-  }
-
-  if (annexR && !annexR.isError && annexR.text.trim()) {
-    sections.push({ title: "세율표/별표", content: annexR.text })
-  }
-
-  if (threeTierR && !threeTierR.isError && threeTierR.text.trim()) {
-    sections.push({ title: "관세법 체계 (법률·시행령·시행규칙)", content: threeTierR.text })
-  }
+  // 조회 실패는 조용히 빼지 않고 실패 섹션으로 남긴다 (2026-09-23 리뷰 B#9). 이 시나리오가 별표를
+  // 싣는다고 선언해(PROVIDES) 체인이 제 별표 조회를 건너뛰므로, 여기서 빠지면 흔적이 없다.
+  pushResultSection(sections, "관세청 해석례", customsR)
+  pushResultSection(sections, "조세심판원 (관세 사건)", taxR)
+  pushResultSection(sections, "관련 조약/FTA", treatyR)
+  pushResultSection(sections, "세율표/별표", annexR ?? null)
+  pushResultSection(sections, "관세법 체계 (법률·시행령·시행규칙)", threeTierR ?? null)
 
   // 후속 액션
   const lawName = ctx.law?.lawName || "관세법"

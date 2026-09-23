@@ -91,3 +91,49 @@ describe("extractHolding — 응답 필드 shape 변동 (CLAUDE.md 규칙 6)", (
     expect(long.text.endsWith("…")).toBe(true)
   })
 })
+
+// 2026-09-23 리뷰 B#11: 후속 판례 본문 조회가 실패하면 스캔 결과에서 조용히 빠졌고, 전합 후속이
+// 없으면 판정이 ✅ "계속 인용되는 것으로 추정"으로 나갔다.
+describe("citeCheck: 정밀 스캔 실패를 '변경 신호 없음'으로 둔갑시키지 않는다 (B#11)", () => {
+  const CITING_TWO_XML = `<?xml version="1.0" encoding="UTF-8"?><PrecSearch><totalCnt>2</totalCnt><page>1</page>` +
+    `<prec><판례일련번호>300001</판례일련번호><사건명><![CDATA[손해배상]]></사건명><사건번호>2020다11111</사건번호>` +
+    `<법원명>대법원</법원명><선고일자>20210101</선고일자><판결유형>판결</판결유형></prec>` +
+    `<prec><판례일련번호>300002</판례일련번호><사건명><![CDATA[손해배상]]></사건명><사건번호>2021다22222</사건번호>` +
+    `<법원명>대법원</법원명><선고일자>20220101</선고일자><판결유형>판결</판결유형></prec></PrecSearch>`
+  const CITING_DETAIL_JSON = JSON.stringify({
+    PrecService: { 사건번호: "2020다11111", 판례내용: "원심판결 이유를 살펴본다. 대법원 2013다61381 판결 참조." },
+  })
+
+  function client(opts: { citingDetail: "ok" | "fail"; targetDetail?: "ok" | "fail" }): LawApiClient {
+    return {
+      fetchApi: async (params: { endpoint: string; extraParams?: Record<string, string> }) => {
+        if (params.endpoint === "lawService.do") {
+          const isTarget = params.extraParams?.ID === "204201"
+          const mode = isTarget ? (opts.targetDetail ?? "ok") : opts.citingDetail
+          if (mode === "fail") throw new Error("법제처 서버 오류 (500) - fetchApi(prec)")
+          return isTarget ? TARGET_DETAIL_JSON : CITING_DETAIL_JSON
+        }
+        if (params.extraParams?.nb) return TARGET_SEARCH_XML
+        return CITING_TWO_XML
+      },
+    } as unknown as LawApiClient
+  }
+
+  it("후속 판례 본문을 못 받으면 ✅ 대신 '미확정'으로 판정하고 실패 건을 밝힌다", async () => {
+    const r = await citeCheck(client({ citingDetail: "fail" }), { caseNumber: "2013다61381", display: 20, deepScan: true })
+    const text = r.content[0].text
+    expect(text).not.toContain("✅")
+    expect(text).toContain("본문 확인 불가: 변경·폐기 여부 미확정")
+    expect(text).toContain("2021다22222: 본문 확인 불가 (조회 실패 또는 본문 미제공, 스캔 못 함)")
+  })
+
+  it("본문을 받아 스캔했으면 종전대로 ✅ 추정 판정이다", async () => {
+    const r = await citeCheck(client({ citingDetail: "ok" }), { caseNumber: "2013다61381", display: 20, deepScan: true })
+    expect(r.content[0].text).toContain("✅ 후속 인용 2건")
+  })
+
+  it("대상 판례 본문을 못 받으면 판시사항이 조용히 빠지지 않고 실패를 밝힌다", async () => {
+    const r = await citeCheck(client({ citingDetail: "ok", targetDetail: "fail" }), { caseNumber: "2013다61381", display: 20, deepScan: true })
+    expect(r.content[0].text).toContain("⚠ 대상 판례 본문 조회 실패")
+  })
+})

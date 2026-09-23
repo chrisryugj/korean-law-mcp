@@ -25,11 +25,20 @@ export interface BucketStat {
   lawConfirmed: number
   /** 조번호는 맞으나 법령명 판정 불가로 보류한 건수 (제외하지 않고 유지) */
   lawHeld: number
+  /** 하위 검색 자체가 실패했다 (업스트림 오류·예산 소진 등). 이때의 0은 "인용 없음"이 아니라 "모름"이다 */
+  failed?: boolean
 }
 
 const EMPTY: BucketStat = {
   verified: 0, searchCount: 0, topItems: [], excludedArticle: 0, excludedLaw: 0, covered: true, lawConfirmed: 0, lawHeld: 0,
 }
+
+/**
+ * 조회 실패 버킷 (2026-09-23 리뷰 B#5).
+ * 종전엔 isError 를 전부 EMPTY(covered:true)로 접어 "0건"으로 찍었다. 하위 검색이 5xx·HTML 안내
+ * 페이지·예산 소진으로 실패해도 "이 조문을 인용한 판례 0건"이라는 사실 주장이 되어 나갔다.
+ */
+const FAILED: BucketStat = { ...EMPTY, covered: false, failed: true }
 
 // 사건명이 비어 `[111] `만 오는 항목도 항목이다. `\S`를 요구하면 그 항목과 딸린
 // 사건번호 줄이 통째로 사라져 표본 수가 줄고 covered 판정까지 뒤집힌다.
@@ -75,6 +84,8 @@ export function parseBucket(
   anchor: ArticleAnchor,
   maxItems: number
 ): BucketStat {
+  // 0건 응답은 각 검색 도구가 [NOT_FOUND] 로 표시한다. 그 표시 없는 isError 는 "검색 실패"다 (B#5)
+  if (result.isError && !/\[NOT_FOUND\]/.test(result.text || "")) return FAILED
   if (result.isError || !result.text || !result.text.trim()) return EMPTY
   if (/\[NOT_FOUND\]/.test(result.text)) return EMPTY
 
@@ -117,6 +128,7 @@ export function exclusionPhrase(stat: Pick<BucketStat, "excludedArticle" | "excl
 }
 
 export function bucketLine(stat: BucketStat): string {
+  if (stat.failed) return `조회 실패 (업스트림 오류로 확인 못 함, 0건이 아님)`
   const phrase = exclusionPhrase(stat)
   const excl = phrase ? ` (${phrase} 제외)` : ""
   if (stat.covered) return `${stat.verified}건${excl}`
@@ -163,6 +175,8 @@ export function buildMermaid(
     constitutional: number
     ordinances: number
     citedLaws: string[]
+    /** 조회 실패한 축의 표시명. 그래프에서 가지가 조용히 빠지면 "인용 없음"으로 읽힌다 (B#5) */
+    failed?: string[]
   }
 ): string {
   const center = safeMermaidId(centerLabel) || "CENTER"
@@ -173,6 +187,10 @@ export function buildMermaid(
   if (buckets.interpretations > 0) lines.push(`    ${center} --> I["📑 법령해석 ${buckets.interpretations}건"]`)
   if (buckets.appeals > 0) lines.push(`    ${center} --> A["📋 행정심판 ${buckets.appeals}건"]`)
   if (buckets.ordinances > 0) lines.push(`    ${center} --> O["🏛️ 자치법규 ${buckets.ordinances}건"]`)
+  const failedLabels = buckets.failed || []
+  failedLabels.forEach((label, i) => {
+    lines.push(`    ${center} -.-> F${i}["❓ ${label} 조회 실패"]`)
+  })
   if (buckets.citedLaws.length > 0) {
     buckets.citedLaws.slice(0, 5).forEach((law, i) => {
       lines.push(`    ${center} -.인용.-> L${i}["📖 ${law}"]`)

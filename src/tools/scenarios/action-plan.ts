@@ -22,6 +22,7 @@ import { searchAdminRule } from "../admin-rule.js"
 import { searchPrecedents } from "../precedents.js"
 import { searchInterpretations } from "../interpretations.js"
 import { findLaws } from "../../lib/law-search.js"
+import { rethrowIfFatal } from "../../lib/fatal-errors.js"
 
 /** 시민 시나리오 → 핵심 명사구 추출 + 도메인 매핑 */
 export function extractActionKeyword(query: string): { keyword: string; domain?: string } {
@@ -73,7 +74,11 @@ export async function runActionPlanScenario(ctx: ScenarioContext): Promise<Scena
     try {
       const found = await findLaws(ctx.apiClient, domain, ctx.apiKey, 1)
       if (found.length > 0) lawName = found[0].lawName
-    } catch { /* ignore */ }
+    } catch (error) {
+      // 예산 소진·요청 취소를 "적용 법령을 자동 식별하지 못했습니다"로 둔갑시키지 않는다 (2026-09-23 리뷰 B#11).
+      // 올리면 runScenario 가 시나리오 [FAILED] 섹션으로 밝힌다
+      rethrowIfFatal(error)
+    }
   }
 
   // 병렬: 절차 행정규칙 + 별표/서식 + 판례 + 해석례

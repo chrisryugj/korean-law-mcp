@@ -17,6 +17,7 @@ import { formatToolError, notFoundResponse } from "../lib/errors.js"
 import { parsePrecedentXML, type PrecedentItem } from "../lib/xml-parser.js"
 import { extractCaseNumbers, fieldHasExactCase } from "../lib/case-citation.js"
 import { extractHolding, scanTreatment, fieldText } from "../lib/precedent-body.js"
+import { rethrowIfFatal } from "../lib/fatal-errors.js"
 import type { ToolResponse } from "../lib/types.js"
 
 export const CiteCheckSchema = z.object({
@@ -51,7 +52,10 @@ async function fetchPrecedentDetail(apiClient: LawApiClient, id: string, apiKey?
     })
     const json = JSON.parse(text)
     return json?.PrecService || json || null
-  } catch {
+  } catch (error) {
+    // 예산 소진·요청 취소는 "본문 없음"이 아니다 (2026-09-23 리뷰 B#11). 그 밖의 실패(null)는
+    // 호출부가 "스캔 못 함"으로 밝힌다: 조용히 빠지면 판정이 ✅ "계속 인용 추정"으로 나간다.
+    rethrowIfFatal(error)
     return null
   }
 }
@@ -109,6 +113,8 @@ export async function citeCheck(
 
     // 4단계: 정밀 스캔 — 전원합의체 > 대법원 > 최신 순으로 최대 3건
     const scanResults: Array<{ item: CitingCase; signals: string[]; context?: string }> = []
+    // 본문을 받지 못해 스캔하지 못한 후속 판례 (B#11). "변경 문구 없음"과 섞으면 안 된다
+    const scanFailed: CitingCase[] = []
     if (input.deepScan && citing.length > 0) {
       const prioritized = [...citing].sort((a, b) => {
         if (a.isEnBanc !== b.isEnBanc) return a.isEnBanc ? -1 : 1
@@ -125,7 +131,10 @@ export async function citeCheck(
         // String()으로 뭉개면 `{#text:…}` 본문이 "[object Object]"가 되는데, 이건 비어 있지
         // 않아 아래 가드를 통과한다 → 변경 문구를 못 찾고 "계속 인용 추정"으로 인증된다.
         const body = fieldText(d?.판례내용)
-        if (!body) return
+        if (!body) {
+          scanFailed.push(prioritized[idx])
+          return
+        }
         const { changeSignals, context } = scanTreatment(body, caseNo)
         scanResults.push({ item: prioritized[idx], signals: changeSignals, context })
       })
@@ -142,6 +151,9 @@ export async function citeCheck(
     } else if (enBancUnscanned.length > 0) {
       // 스캔 안 된 전합 후속이 남아있을 때만 경고 (판례 변경은 전원합의체에서만 가능, 법원조직법 제7조)
       verdict = `⚠️ 미스캔 전원합의체 후속 판결 ${enBancUnscanned.length}건 존재 — 법리 변경 여부 본문 확인 권장 (${enBancUnscanned.slice(0, 3).map(c => c.사건번호).join(", ")})`
+    } else if (citing.length > 0 && scanFailed.length > 0) {
+      // 스캔을 못 한 건이 남았는데 ✅ 를 주면 조회 실패가 "변경 신호 없음"으로 둔갑한다 (B#11)
+      verdict = `⚠️ 후속 인용 ${citing.length}건, 정밀 스캔 대상 ${scanResults.length + scanFailed.length}건 중 ${scanFailed.length}건 본문 확인 불가: 변경·폐기 여부 미확정 (${scanFailed.map(c => c.사건번호).join(", ")}). get_decision_text 로 해당 판결 전문을 확인하세요.`
     } else if (citing.length > 0) {
       const enBancNote = enBancCiting.length > 0 ? ` (전원합의체 ${enBancCiting.length}건 포함 정밀 스캔 완료)` : ""
       verdict = `✅ 후속 인용 ${citing.length}건, 변경·폐기 신호 미감지 — 계속 인용되는 것으로 추정${enBancNote}`
@@ -164,6 +176,8 @@ export async function citeCheck(
     // 사건명만으로는 판결의 정체성을 알 수 없다 — 생사만 답하면 오소개로 이어진다(#95).
     const holding = extractHolding(targetDetail)
     if (holding) lines.push(`${holding.label}: ${holding.text}`)
+    // 대상 본문을 못 받으면 판시사항·참조판례가 조용히 빠진다. 없는 것과 못 받은 것을 가른다 (B#11)
+    if (!targetDetail) lines.push(`⚠ 대상 판례 본문 조회 실패: 판시사항·참조판례를 확인하지 못했습니다 (get_decision_text 로 재조회).`)
     lines.push("")
     lines.push(`📊 판정: ${verdict}`)
 
@@ -177,14 +191,17 @@ export async function citeCheck(
       if (citing.length > input.display) lines.push(`  … 외 ${citing.length - input.display}건`)
     }
 
-    if (scanResults.length > 0) {
+    if (scanResults.length > 0 || scanFailed.length > 0) {
       lines.push("")
-      lines.push(`▶ 본문 정밀 스캔 (${scanResults.length}건)`)
+      lines.push(scanFailed.length > 0
+        ? `▶ 본문 정밀 스캔 (${scanResults.length + scanFailed.length}건, 본문 확인 불가 ${scanFailed.length}건)`
+        : `▶ 본문 정밀 스캔 (${scanResults.length}건)`)
       for (const r of scanResults) {
         const mark = r.signals.length > 0 ? `🚨 ${r.signals.join(", ")}` : "인용 확인 (변경 문구 없음)"
         lines.push(`  - ${r.item.사건번호}: ${mark}`)
         if (r.context) lines.push(`    맥락: "…${r.context}…"`)
       }
+      for (const c of scanFailed) lines.push(`  - ${c.사건번호}: 본문 확인 불가 (조회 실패 또는 본문 미제공, 스캔 못 함)`)
     }
 
     if (refCases.length > 0) {

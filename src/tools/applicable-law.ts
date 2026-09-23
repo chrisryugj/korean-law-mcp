@@ -24,6 +24,7 @@ import { fetchHistoricalVersionsFull, fetchEffectiveSlices, type HistoricalVersi
 import { buildJO } from "../lib/law-parser.js"
 import { cleanHtml } from "../lib/article-parser.js"
 import { toArray } from "../lib/xml-parser.js"
+import { rethrowIfFatal } from "../lib/fatal-errors.js"
 import type { ToolResponse } from "../lib/types.js"
 
 export const ApplicableLawSchema = z.object({
@@ -212,7 +213,10 @@ export async function applicableLaw(
         effective = later
         staggered = true
       }
-    } catch {
+    } catch (error) {
+      // 예산 소진·요청 취소는 올린다: 삼키면 보정을 건너뛴 옛 공포본이 "기준일 시행 버전"으로
+      // 확신 출력된다 (2026-09-23 리뷰 B#11). 그 밖의 슬라이스 조회 실패는 기존 동작을 보존한다.
+      rethrowIfFatal(error)
       // 슬라이스 조회 실패는 보정 없이 lsHistory 결과로 진행 (기존 동작 보존)
     }
 
@@ -245,10 +249,15 @@ export async function applicableLaw(
     if (joDisplay) {
       const joCode = buildJO(joDisplay)
       // eflaw는 MST 단독 조회 불가 — 해당 버전의 efYd 동반 필수 (없으면 "일치하는 법령이 없습니다")
+      // 예산 소진·요청 취소는 "해당 버전에서 조문을 찾지 못함"으로 적지 않고 올린다 (B#11)
+      const softFail = (error: unknown): string => {
+        rethrowIfFatal(error)
+        return ""
+      }
       const [thenJson, nowJson] = await Promise.all([
-        apiClient.getLawText({ mst: effective.mst, jo: joCode, efYd: effective.efYd, apiKey: input.apiKey }).catch(() => ""),
+        apiClient.getLawText({ mst: effective.mst, jo: joCode, efYd: effective.efYd, apiKey: input.apiKey }).catch(softFail),
         current && current.mst !== effective.mst
-          ? apiClient.getLawText({ mst: current.mst, jo: joCode, efYd: current.efYd, apiKey: input.apiKey }).catch(() => "")
+          ? apiClient.getLawText({ mst: current.mst, jo: joCode, efYd: current.efYd, apiKey: input.apiKey }).catch(softFail)
           : Promise.resolve(""),
       ])
       const thenText = thenJson ? extractJoText(thenJson, joCode) : ""

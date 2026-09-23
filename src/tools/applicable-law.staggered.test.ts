@@ -232,3 +232,31 @@ describe("applicableLaw — 조문 응답 정직성 (jo 검증)", () => {
     expect(text).not.toContain("제1조(목적)")
   })
 })
+
+// 2026-09-23 리뷰 B#11: 슬라이스 조회의 catch 가 예산 소진까지 삼켜, 분리시행 보정을 건너뛴 옛 공포본을
+// "기준일 시행 버전"으로 확신 출력했다. 예산 소진·취소는 오류로 올린다(그 밖의 실패는 종전대로 보정 생략).
+describe("applicableLaw: 예산 소진을 '보정 없음'으로 삼키지 않는다 (B#11)", () => {
+  beforeEach(() => lawCache.clear())
+
+  it("분리시행 슬라이스 조회가 예산 소진이면 보정 전 버전을 확신 출력하지 않는다", async () => {
+    const { ExecutionLimitError } = await import("../lib/execution-limits.js")
+    const client = {
+      searchLaw: async () => searchXml("소득세법", "94269"),
+      fetchApi: async (p: FetchApiParams) => {
+        if (p.target === "lsHistory") {
+          return histPage(2, [
+            histRow("소득세법", "94269", "20100310", "9763", "2009.06.09", "타법개정"),
+            histRow("소득세법", "98343", "20100101", "9924", "2010.01.01", "타법개정"),
+          ])
+        }
+        if (p.target === "eflaw") throw new ExecutionLimitError("Request upstream work budget exceeded (max 48 attempts).")
+        if (p.target === "law") return `{"법령":{"부칙":{"부칙단위":[]}}}`
+        throw new Error(`unexpected target: ${p.target}`)
+      },
+    } as unknown as LawApiClient
+
+    const r = await applicableLaw(client, { lawName: "소득세법", date: "2010-05-01" })
+    expect(r.isError).toBe(true)
+    expect(r.content[0].text).not.toContain("[시행 2010.03.10]")
+  })
+})

@@ -65,6 +65,25 @@ export async function callTool(
   }
 }
 
+/**
+ * 조회 결과 하나를 섹션으로 싣는다 (2026-09-23 리뷰 B#9).
+ * 0건([NOT_FOUND])·빈 결과는 종전대로 싣지 않되, 조회 실패는 isError 섹션으로 남긴다. 종전엔 실패도
+ * 조용히 빠졌는데, 별표를 싣는 시나리오(PROVIDES annex)가 붙으면 체인이 제 별표 조회를 건너뛰므로
+ * 시나리오의 별표 실패가 흔적 없이 사라졌다.
+ */
+export function pushResultSection(
+  sections: ScenarioSection[],
+  title: string,
+  result: { text: string; isError: boolean } | null
+): void {
+  if (!result) return
+  if (!result.isError && result.text.trim()) {
+    sections.push({ title, content: result.text })
+  } else if (result.isError && !/\[NOT_FOUND\]/.test(result.text)) {
+    sections.push({ title, content: result.text || "원인 미상", isError: true })
+  }
+}
+
 /** ScenarioSection → 포맷팅된 문자열 */
 export function formatSections(sections: ScenarioSection[]): string {
   return sections

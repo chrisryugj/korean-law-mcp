@@ -115,9 +115,10 @@ export async function impactMap(
       safeCall(searchInterpretations, apiClient, { query: searchQuery, display: 10, apiKey: input.apiKey }),
       safeCall(searchAdminAppeals, apiClient, { query: searchQuery, display: 10, apiKey: input.apiKey }),
       safeCall(searchConstitutionalDecisions, apiClient, { query: searchQuery, display: 10, apiKey: input.apiKey }),
+      // 요청하지 않은 축은 "빈 결과"다. isError 로 두면 조회 실패 축으로 집계된다 (B#5)
       input.includeOrdinances
         ? safeCall(searchOrdinance, apiClient, { query: searchQuery, display: 10, apiKey: input.apiKey })
-        : Promise.resolve({ text: "", isError: true } as CallResult),
+        : Promise.resolve({ text: "", isError: false } as CallResult),
     ])
 
     // 3. 결과 집계 (경계 앵커 통과분만)
@@ -127,6 +128,8 @@ export async function impactMap(
     const appeal = parseBucket(appealR, anchor, 3)
     const ordinance = parseBucket(ordinanceR, anchor, 5)
     const citedLaws = articleR.isError ? [] : extractCitedLaws(articleR.text)
+    // 조문 조회가 [NOT_FOUND] 없이 실패했으면 업스트림 장애다. "법령명·조문번호 확인" 안내는 오진이 된다 (B#5)
+    const articleFailed = articleR.isError && !/\[NOT_FOUND\]/.test(articleR.text || "")
 
     // 4. 텍스트 트리 출력
     const parts: string[] = []
@@ -136,6 +139,9 @@ export async function impactMap(
     if (!articleR.isError && articleR.text.trim()) {
       const snippet = articleR.text.slice(0, 400).replace(/\n+/g, "\n")
       parts.push(`▶ 대상 조문 본문\n${snippet}${articleR.text.length > 400 ? "...\n" : "\n"}`)
+    } else if (articleFailed) {
+      const reason = (articleR.text || "원인 미상").replace(/\s+/g, " ").slice(0, 150)
+      parts.push(`▶ 대상 조문 본문 [FAILED] 조문 조회 실패 (업스트림 오류로 확인 못 함, 법령명·조문번호 문제가 아닐 수 있음): ${reason}\n`)
     } else {
       parts.push(`▶ 대상 조문 본문 [NOT_FOUND] 조문 조회 실패 — 법령명·조문번호 확인 필요\n`)
     }
@@ -170,15 +176,24 @@ export async function impactMap(
 
     // 5. 합산 통계 — 경계 통과분만 더한다. 총건수를 섞으면 오탐이 합계에 되살아난다.
     const total = prec.verified + interp.verified + appeal.verified + cons.verified + ordinance.verified
-    const partial = rows.some(r => !r.stat.covered)
-    parts.push(`\n▶ 총 영향 건수(경계 확인분): ${total}건${partial ? " — 표본을 넘는 검색 결과가 있어 실제는 더 많을 수 있음" : ""} (판례 ${prec.verified} / 헌재 ${cons.verified} / 해석 ${interp.verified} / 행심 ${appeal.verified} / 조례 ${ordinance.verified})`)
-    parts.push(`인용 법령: ${citedLaws.length}개\n`)
+    // 조회 실패 축은 "표본 미달"과 다른 사실이라 따로 밝힌다. 합계가 그 축을 0으로 더한 부분값이 된다 (B#5)
+    const failedLabels = rows.filter(r => r.stat.failed).map(r => r.label.replace(/^\S+\s+/, ""))
+    const partial = rows.some(r => !r.stat.covered && !r.stat.failed)
+    const failedNote = failedLabels.length > 0
+      ? ` [부분 결과: ${failedLabels.join("·")} 조회 실패, 해당 축 건수 미확인]`
+      : ""
+    parts.push(`\n▶ 총 영향 건수(경계 확인분): ${total}건${partial ? " — 표본을 넘는 검색 결과가 있어 실제는 더 많을 수 있음" : ""}${failedNote} (판례 ${prec.verified} / 헌재 ${cons.verified} / 해석 ${interp.verified} / 행심 ${appeal.verified} / 조례 ${ordinance.verified})`)
+    if (failedLabels.length > 0) {
+      parts.push(`⚠️ 조회 실패 축은 0건이 아니라 미확인입니다. LLM은 "인용 없음"으로 단정하지 말고 search_decisions 등 개별 도구로 재조회하세요.`)
+    }
+    parts.push(articleFailed ? `인용 법령: 확인 불가 (대상 조문 조회 실패)\n` : `인용 법령: ${citedLaws.length}개\n`)
 
     // 6. mermaid 그래프
     if (input.includeMermaid) {
       const mermaid = buildMermaid(`${law.lawName} ${joDisplay}`, {
         precedents: prec.verified, interpretations: interp.verified, appeals: appeal.verified,
         constitutional: cons.verified, ordinances: ordinance.verified, citedLaws,
+        failed: articleFailed ? [...failedLabels, "대상 조문(정방향 인용)"] : failedLabels,
       })
       parts.push(`▶ Mermaid 그래프 (시각화)\n\`\`\`mermaid\n${mermaid}\n\`\`\`\n`)
     }

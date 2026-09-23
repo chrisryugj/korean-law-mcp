@@ -10,6 +10,8 @@ import type { LawApiClient } from "./api-client.js"
 import { lawCache } from "./cache.js"
 import { extractTag } from "./xml-parser.js"
 import { normalizeLawSearchText, resolveLawAlias } from "./search-normalizer.js"
+import { requestContext } from "./session-state.js"
+import { rethrowIfFatal } from "./fatal-errors.js"
 
 export interface LawInfo {
   lawName: string
@@ -59,7 +61,10 @@ export function resolvedLawMatches(requested: string, officialName: string): boo
 export const NON_LAW_NAME_RE = /\s*(과태료|절차|비용|처벌|기준|허가|신청|부과|근거|위반|방법|요건|조건|처분|수수료|신고|등록|면허|인가|승인|취소|정지|벌칙|벌금|과징금|이행강제금|시정명령|체계|구조|3단|판례|해석|개정|별표|시행령|시행규칙|서식|수입|수출|통관|반환|납부|감면|면제|제한|금지|의무|권리|자격|종류|기간|대상|범위|적용|감경|영향도|영향|분석|위임입법|위임|현황|미이행|미제정|시계열|타임라인|변화|처리|민원|매뉴얼|업무|담당|적합성|상위법|저촉|검증|파급|연쇄|불복|소송|쟁송|FTA|원산지|HS코드|품목분류|관세사)\s*/g
 
 export function stripNonLawKeywords(query: string): string {
-  return query.replace(NON_LAW_NAME_RE, " ").trim()
+  // 공백 연속을 먼저 하나로 뭉친다. NON_LAW_NAME_RE 양끝의 \s* 가 공백 연속에서 O(k²) 로
+  // 백트래킹해 2만 자 공백이면 impact_map·applicable_law 가 1.9초 멈췄다(2026-09-23 리뷰 C).
+  // 결과는 검색어로 쓰이고 공백 단위로 쪼개지므로 공백 개수 차이는 의미가 없다.
+  return query.replace(/\s+/g, " ").replace(NON_LAW_NAME_RE, " ").trim()
 }
 
 /** XML에서 법령 정보 파싱 */
@@ -100,6 +105,28 @@ export function scoreLawRelevance(lawName: string, query: string, queryWords: st
 }
 
 /**
+ * 요청 단위 진행 중 검색 공유 (2026-09-23 리뷰 B#3·A10).
+ *
+ * lawCache 는 검색이 끝난 뒤에야 채워지고 0건은 담지 않는다. 그래서 한 요청 안에서 동시에 도는
+ * 같은 검색(verify_citations 의 "민법 제750조, 민법 제751조 …")이 전부 캐시를 놓쳐 각자
+ * 업스트림을 쳤다: 같은 법령 인용 15건이면 동일 검색 15회로 요청 예산(48회)을 먼저 태웠다.
+ * 전역 in-flight 맵이 아니라 요청 컨텍스트(ALS 저장소)에 묶는다. 한 요청의 취소·예산 소진이
+ * 다른 요청(배치의 형제 항목 포함)의 대기를 깨뜨리면 안 되기 때문이다. 컨텍스트 밖(단독 호출)은 공유하지 않는다.
+ */
+const inflightByRequest = new WeakMap<object, Map<string, Promise<LawInfo[]>>>()
+
+function requestSearchMemo(): Map<string, Promise<LawInfo[]>> | undefined {
+  const store = requestContext.getStore()
+  if (!store) return undefined
+  let memo = inflightByRequest.get(store)
+  if (!memo) {
+    memo = new Map()
+    inflightByRequest.set(store, memo)
+  }
+  return memo
+}
+
+/**
  * 법령 검색 + 관련도 정렬 + 캐싱.
  * 1차: 원본 쿼리 → 2차: 부가키워드 제거 → 3차: 법령명 패턴 직접 추출
  * 이후 scoreLawRelevance로 정렬.
@@ -121,7 +148,32 @@ export async function findLaws(
   const cached = lawCache.get<LawInfo[]>(cacheKey)
   if (cached) return cached.slice(0, max)
 
-  const effectiveMax = Math.max(max, searchDisplay)  // 정렬 대상 전체 수집
+  // 업스트림 요청은 (query, display) 로 정해지고 max 는 정렬 뒤 자르기일 뿐이다. 그래서 공유 키에서
+  // max 를 뺀다: 같은 검색을 max 만 달리 부르는 호출(체인 기반 탐색 3 · 인용 검증 5)도 한 번으로 묶인다.
+  const memo = requestSearchMemo()
+  const memoKey = `${query}\u0000${searchDisplay}`
+  let pending = memo?.get(memoKey)
+  if (!pending) {
+    pending = searchAndRankLaws(apiClient, query, apiKey, searchDisplay)
+    memo?.set(memoKey, pending)
+  }
+  const final = (await pending).slice(0, max)
+  if (final.length > 0) {
+    lawCache.set(cacheKey, final, 60 * 60 * 1000)
+  }
+  return final
+}
+
+/** findLaws 의 업스트림 단계: 3단 검색 + 관련도 정렬. 자르기(max)와 캐시 쓰기는 호출부 몫이다. */
+async function searchAndRankLaws(
+  apiClient: LawApiClient,
+  query: string,
+  apiKey: string | undefined,
+  searchDisplay: number
+): Promise<LawInfo[]> {
+  // 정렬 대상 전체 수집. 업스트림은 display 행까지만 주므로 이 상한은 사실상 "응답 전부"다
+  // (종전 Math.max(max, searchDisplay) 와 같은 결과를 max 없이 낸다).
+  const effectiveMax = Math.max(searchDisplay, 100)
 
   // 인프라 에러(타임아웃·5xx·파싱 실패)는 "법령 없음"과 구분해야 한다.
   // 삼키면 법제처 장애 중 verify_citations가 실존 조문을 NOT_FOUND로 오판한다.
@@ -131,6 +183,8 @@ export async function findLaws(
       const xmlText = await apiClient.searchLaw(q, apiKey, searchDisplay)
       return parseLawXml(xmlText, effectiveMax)
     } catch (e) {
+      // 예산 소진·요청 취소는 다음 검색어 변형으로 넘어가 봐야 같은 결과다. 곧바로 올린다 (B#11)
+      rethrowIfFatal(e)
       if (e instanceof Error && /429|401|403|API 키/.test(e.message)) throw e
       lastInfraError = e
       return []
@@ -143,7 +197,8 @@ export async function findLaws(
   // 2차: 부가 키워드 제거
   if (results.length === 0) {
     const stripped = stripNonLawKeywords(query)
-    if (stripped && stripped !== query) {
+    // stripNonLawKeywords 가 공백을 뭉치므로 원문 그대로와 비교하면 공백만 다른 같은 검색을 한 번 더 친다
+    if (stripped && stripped !== query.replace(/\s+/g, " ").trim()) {
       results = await trySearch(stripped)
     }
   }
@@ -165,8 +220,7 @@ export async function findLaws(
 
   // 관련도 정렬
   if (results.length > 1) {
-    const queryWords = query.replace(NON_LAW_NAME_RE, " ")
-      .trim().split(/\s+/).filter(w => w.length > 0)
+    const queryWords = stripNonLawKeywords(query).split(/\s+/).filter(w => w.length > 0)
     results.sort((a, b) => {
       const scoreA = scoreLawRelevance(a.lawName, query, queryWords)
       const scoreB = scoreLawRelevance(b.lawName, query, queryWords)
@@ -174,13 +228,7 @@ export async function findLaws(
     })
   }
 
-  // max만큼만 반환
-  const final = results.slice(0, max)
-  if (final.length > 0) {
-    lawCache.set(cacheKey, final, 60 * 60 * 1000)
-  }
-
-  return final
+  return results
 }
 
 /**
