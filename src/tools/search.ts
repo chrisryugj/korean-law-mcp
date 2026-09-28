@@ -11,6 +11,7 @@ import { expandLawQuery } from "../lib/search-normalizer.js"
 import { formatHit, hasRelatedHit, parseLawsXml, sortCurrentFirst, splitExactPartial } from "./search-hits.js"
 import { buildUpcomingNotes, fetchUpcomingLaws, UPCOMING_CHECK_FAILED_NOTE } from "../lib/upcoming-laws.js"
 import { searchLawFallbacks } from "./search-fallbacks.js"
+import { findFormerName } from "../lib/law-lineage.js"
 
 export const SearchLawSchema = z.object({
   query: z.string().describe("검색할 법령명 (예: '관세법', 'fta특례법', '화관법')"),
@@ -134,7 +135,16 @@ export async function searchLaw(
       }
     }
     if (exact.length === 0 && laws.length > 0) {
-      resultText += `⚠️ 정확매칭 없음 — 법제처 API의 부분 LIKE 검색 특성상 위 결과는 법령명에 "${input.query}"가 포함된 모든 법령입니다. 의도한 법령이 없으면 정식 법령명으로 재검색하세요.\n`
+      // 옛 법령명으로 찾으면 현행 검색은 부분매칭만 준다. 연혁 검색에서 그 이름의 법령ID를 찾아 현행 명칭을 알린다.
+      // 법령명 꼴(…법·법률·령·규칙)일 때만 — "건축허가" 같은 키워드 검색마다 한 번 더 치지 않게
+      const former = /(법|법률|령|규칙|규정)$/.test(input.query.trim()) ? await findFormerName(apiClient, input.query, input.apiKey) : undefined
+      const renamedTo = former ? laws.find(l => l.lawId === former.lawId && l.statusCode !== "연혁") ?? laws.find(l => l.lawId === former.lawId) : undefined
+      if (former && renamedTo) {
+        resultText += `📛 「${former.matchedName}」은(는) 옛 법령명입니다 — 제명이 바뀌어 현행은 「${renamedTo.name}」(법령ID ${renamedTo.lawId}, MST ${renamedTo.mst})입니다. ` +
+          `옛 이름 시절 조문은 legal_analysis(mode="applicable_law", lawName, date), 별표는 get_annexes(date)로 봅니다.\n`
+      } else {
+        resultText += `⚠️ 정확매칭 없음 — 법제처 API의 부분 LIKE 검색 특성상 위 결과는 법령명에 "${input.query}"가 포함된 모든 법령입니다. 의도한 법령이 없으면 정식 법령명으로 재검색하세요.\n`
+      }
     }
 
     // 1시간 캐시. 시행예정 확인이 실패한 결과는 1분만 둔다: 1시간 두면 업스트림이 돌아와도

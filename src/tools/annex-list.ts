@@ -157,8 +157,13 @@ async function collectPages(
 
   const seen = new Set(list.map(identity))
   let stalled = false
-  for (let page = 2; page <= MAX_ANNEX_PAGES && list.length < wanted; page++) {
-    const next = parseAnnexEnvelope(await fetchPage(page))
+  // 총계를 알았으니 남은 페이지를 한꺼번에 받는다 (종전 순차: 관세법 2~3쪽이 action_basis 에서 가장 느린 갈래, 2026-09-28 성능 감사).
+  // 판정은 종전처럼 페이지 순서대로 한다 — 새 항목이 없는 페이지에서 멈추는 방어선은 그대로다.
+  const lastPage = Math.min(MAX_ANNEX_PAGES, Math.ceil(wanted / ANNEX_PAGE_SIZE))
+  const pages = await Promise.all(Array.from({ length: Math.max(0, lastPage - 1) }, (_, i) => fetchPage(i + 2)))
+  for (const raw of pages) {
+    if (list.length >= wanted) break
+    const next = parseAnnexEnvelope(raw)
     const fresh = next.list.filter(a => !seen.has(identity(a)))
     if (fresh.length === 0) { stalled = true; break }
     fresh.forEach(a => seen.add(identity(a)))

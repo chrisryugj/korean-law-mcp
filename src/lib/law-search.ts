@@ -144,7 +144,8 @@ export async function findLaws(
   max = 3,
   searchDisplay = 100
 ): Promise<LawInfo[]> {
-  const cacheKey = `law-search:${query}:${max}:${searchDisplay}`
+  // 캐시에는 정렬된 전체 목록을 두고 max 는 읽을 때 자른다 — max 만 다른 호출(체인 3 · 인용 검증 5 · 계보 100)이 서로 캐시를 놓쳤다
+  const cacheKey = `law-search:${query}:${searchDisplay}`
   const cached = lawCache.get<LawInfo[]>(cacheKey)
   if (cached) return cached.slice(0, max)
 
@@ -157,12 +158,18 @@ export async function findLaws(
     pending = searchAndRankLaws(apiClient, query, apiKey, searchDisplay)
     memo?.set(memoKey, pending)
   }
-  const final = (await pending).slice(0, max)
-  if (final.length > 0) {
-    lawCache.set(cacheKey, final, 60 * 60 * 1000)
+  const ranked = await pending
+  if (ranked.length > 0 && !degradedResults.has(ranked)) {
+    lawCache.set(cacheKey, ranked, 60 * 60 * 1000)
   }
-  return final
+  return ranked.slice(0, max)
 }
+
+/**
+ * 앞 단계가 장애로 빠진 채 뒤 폴백 단계로 얻은 결과 — 덜 맞는 법령일 수 있어 전역 캐시에 넣지 않는다.
+ * 넣으면 일시 장애 한 번이 한 시간 동안 모든 사용자의 검색을 열화시킨다("건축법 시행령" → 건축법, 2026-09-28 리뷰).
+ */
+const degradedResults = new WeakSet<LawInfo[]>()
 
 /** findLaws 의 업스트림 단계: 3단 검색 + 관련도 정렬. 자르기(max)와 캐시 쓰기는 호출부 몫이다. */
 async function searchAndRankLaws(
@@ -178,10 +185,28 @@ async function searchAndRankLaws(
   // 인프라 에러(타임아웃·5xx·파싱 실패)는 "법령 없음"과 구분해야 한다.
   // 삼키면 법제처 장애 중 verify_citations가 실존 조문을 NOT_FOUND로 오판한다.
   let lastInfraError: unknown
+  // 단계별 검색어(원문 → 부가어 제거 → 법령명 추출)도 요청 안에서 공유하고 결과를 캐시한다. 종전엔 바깥 검색어만 캐시돼
+  // "민법 제750조 … 민법 제751조"처럼 폴백 단계가 같은 검색어("민법")로 모이는 호출이 매번 업스트림을 쳤다(2026-09-28 성능 감사).
+  const memo = requestSearchMemo()
+  const searchOnce = (q: string): Promise<LawInfo[]> => {
+    const key = `law-search-raw:${q}:${searchDisplay}`
+    const hit = lawCache.get<LawInfo[]>(key)
+    if (hit) return Promise.resolve(hit)
+    const memoKey = `raw\u0000${q}\u0000${searchDisplay}`
+    let pending = memo?.get(memoKey)
+    if (!pending) {
+      pending = apiClient.searchLaw(q, apiKey, searchDisplay).then(xml => {
+        const rows = parseLawXml(xml, effectiveMax)
+        if (rows.length > 0) lawCache.set(key, rows, 60 * 60 * 1000)
+        return rows
+      })
+      memo?.set(memoKey, pending)
+    }
+    return pending
+  }
   const trySearch = async (q: string): Promise<LawInfo[]> => {
     try {
-      const xmlText = await apiClient.searchLaw(q, apiKey, searchDisplay)
-      return parseLawXml(xmlText, effectiveMax)
+      return await searchOnce(q)
     } catch (e) {
       // 예산 소진·요청 취소는 다음 검색어 변형으로 넘어가 봐야 같은 결과다. 곧바로 올린다 (B#11)
       rethrowIfFatal(e)
@@ -218,14 +243,21 @@ async function searchAndRankLaws(
       : lastInfraError
   }
 
-  // 관련도 정렬
+  if (lastInfraError !== undefined && results.length > 0) {
+    results = [...results]
+    degradedResults.add(results)
+  }
+
+  // 관련도 정렬 — 복사본을 정렬한다. results 는 단계 캐시(law-search-raw)에 든 배열 그 자체라, 제자리 정렬하면
+  // 같은 폴백 검색어로 모이는 다른 질의의 순서를 요청·사용자를 넘어 서로 흔든다(2026-09-28 리뷰 실측)
   if (results.length > 1) {
     const queryWords = stripNonLawKeywords(query).split(/\s+/).filter(w => w.length > 0)
-    results.sort((a, b) => {
+    results = [...results].sort((a, b) => {
       const scoreA = scoreLawRelevance(a.lawName, query, queryWords)
       const scoreB = scoreLawRelevance(b.lawName, query, queryWords)
       return scoreB - scoreA
     })
+    if (lastInfraError !== undefined) degradedResults.add(results)
   }
 
   return results
@@ -241,10 +273,13 @@ async function searchAndRankLaws(
 export function pickRepealed(rows: LawInfo[], query: string): LawInfo | undefined {
   const norm = (s: string) => s.replace(/\s+/g, "")
   const q = norm(query)
-  return rows
-    .filter((r) => r.status === "연혁"
-      && (norm(r.lawName) === q || norm(r.lawName).startsWith(q)))
-    .sort((a, b) => (b.effectiveDate || "").localeCompare(a.effectiveDate || ""))[0]
+  const latest = (list: LawInfo[]) => list.sort((a, b) => (b.effectiveDate || "").localeCompare(a.effectiveDate || ""))[0]
+  const history = rows.filter((r) => r.status === "연혁")
+  // 완전일치가 접두 일치보다 먼저다. 접두는 약칭용인데, 하위법령 꼬리("… 시행규칙")까지 받으면 법률 인용에
+  // 시행규칙을 집어 "폐지"로 답했다(2026-09-28 실측: 「소방시설 설치ㆍ유지 및 안전관리에 관한 법률」 → 그 시행규칙)
+  const exact = history.filter((r) => norm(r.lawName) === q)
+  if (exact.length > 0) return latest(exact)
+  return latest(history.filter((r) => norm(r.lawName).startsWith(q) && !/^(시행령|시행규칙)/.test(norm(r.lawName).slice(q.length))))
 }
 
 /**

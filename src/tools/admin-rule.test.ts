@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 import { searchAdminRule, getAdminRule, compareAdminRuleOldNew } from "./admin-rule.js"
 import { extractDetailIds } from "./search-detail-chain.js"
 import type { LawApiClient } from "../lib/api-client.js"
+import { INLINE_IMAGE_MARK } from "../lib/image-only-body.js"
 
 // 실측 응답 축약 (#72).
 // lawService.do?target=admrul&ID= 가 받는 값은 '행정규칙일련번호'(13자리)다.
@@ -109,7 +110,17 @@ describe("get_admin_rule — 이미지-only 별표 경고 (#159)", () => {
     // 첨부파일 링크는 API가 이미 주고 있었는데 "본문이 비어 있지 않다"는 이유로 묻혀 있었다
     expect(text).toContain("flSeq=144740485")
     // 경고가 본문보다 앞 — truncate에 잘려 사라지면 안 된다
-    expect(text.indexOf("텍스트 추출 불가")).toBeLessThan(text.indexOf("<img"))
+    // 본문의 이미지 태그는 v4.15.0 부터 표식으로 바뀐다
+    expect(text).not.toContain("<img")
+    expect(text.indexOf("텍스트 추출 불가")).toBeLessThan(text.indexOf(INLINE_IMAGE_MARK))
+  })
+
+  it("텍스트 본문 사이에 박힌 이미지 표는 표식과 원문 안내로 바꾼다 (화재안전기준 표시온도 표)", async () => {
+    const MIXED_XML = IMAGE_ONLY_XML.replace("<조문내용><![CDATA[", `<조문내용><![CDATA[제10조(헤드) ⑥ 폐쇄형스프링클러헤드는 그 설치장소의 평상시 최고 주위온도에 따라 다음 표에 따른 표시온도의 것으로 설치하여야 한다. 다만, 높이가 4m 이상인 공장 및 창고에 설치하는 스프링클러헤드는 표시온도 121℃ 이상의 것으로 할 수 있다.\n`)
+    const text = (await getAdminRule(detailStub(MIXED_XML), { id: "2100000011921" })).content[0].text
+    expect(text).not.toContain("<img")
+    expect(text).toContain(INLINE_IMAGE_MARK)
+    expect(text).toContain("admRulSeq=2100000011921")
   })
 
   it("정상 조문에는 경고를 붙이지 않는다", async () => {

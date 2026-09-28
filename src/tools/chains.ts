@@ -373,6 +373,9 @@ async function searchThenDetail(
   return { searchO, detailO }
 }
 
+/** 질의에 법령명 모양 어절("관세법"·"… 시행령")이 있는가 — 없으면 기반 탐색이 의미검색까지 가야 한다 */
+const LAW_NAME_TOKEN_RE = /[가-힣](?:법|법률|시행령|시행규칙|규칙|규정)(?=\s|$)/
+
 /**
  * 체인 데드라인 틀 (2026-09-23 리뷰 B#13).
  * 데드라인 체인마다 같은 try/finally 사본이 있었고, 그 안에 #150 규칙이 담겨 있다: 기반 탐색(프리픽스)부터
@@ -459,7 +462,11 @@ export async function chainLawSystem(
   // 출력 순서는 그대로다.
   const expiredHeader = [`═══ 법체계 확인: ${input.query} ═══`]
   return withChainDeadline(expiredHeader, async dl => {
-    const baseO = await raceDeadline(dl, resolveChainBaseLaw(apiClient, input.query, input.apiKey))
+    // 법령명 없는 질의("음식점 영업정지 근거")는 검색 2회를 헛친 뒤에야 의미검색에 닿았다(1.75초) — 그때만 미리 띄운다
+    const aiSignals = LAW_NAME_TOKEN_RE.test(input.query) ? undefined
+      : searchAiLawStructured(apiClient, { query: input.query, search: "0", display: 5, page: 1, apiKey: input.apiKey }).then(r => r.articleSignals)
+    void aiSignals?.catch(() => {})  // 1·2단계에서 끝나면 아무도 기다리지 않는다
+    const baseO = await raceDeadline(dl, resolveChainBaseLaw(apiClient, input.query, input.apiKey, 3, { aiSignals }))
     if (!baseO.ok) return expiredChainResult(expiredHeader)
     const laws = baseO.value.laws
     if (laws.length === 0) {
@@ -524,7 +531,11 @@ export async function chainActionBasis(
   // 19.5초를 실측했다(#150). 시계·만료·env 오류 형식화는 withChainDeadline 한 벌이 맡는다.
   const expiredHeader = [`═══ 처분 근거 확인: ${input.query} ═══`]
   return withChainDeadline(expiredHeader, async dl => {
-    const baseO = await raceDeadline(dl, resolveChainBaseLaw(apiClient, input.query, input.apiKey))
+    // 법령명 없는 질의("음식점 영업정지 근거")는 검색 2회를 헛친 뒤에야 의미검색에 닿았다(1.75초) — 그때만 미리 띄운다
+    const aiSignals = LAW_NAME_TOKEN_RE.test(input.query) ? undefined
+      : searchAiLawStructured(apiClient, { query: input.query, search: "0", display: 5, page: 1, apiKey: input.apiKey }).then(r => r.articleSignals)
+    void aiSignals?.catch(() => {})  // 1·2단계에서 끝나면 아무도 기다리지 않는다
+    const baseO = await raceDeadline(dl, resolveChainBaseLaw(apiClient, input.query, input.apiKey, 3, { aiSignals }))
     if (!baseO.ok) return expiredChainResult(expiredHeader)
     const laws = baseO.value.laws
     if (laws.length === 0) {
@@ -883,11 +894,16 @@ export async function chainFullResearch(
         return { laws: [], failure: errorCallResult(error, "search_law") }
       }
     }
-    const step1 = await raceDeadline(dl, Promise.all([
-      aiP,
-      findBaseLaws(),
-      callTool(searchInterpretations, apiClient, { query: input.query, display: 5, apiKey: input.apiKey }),
-    ]))
+    const interpP = callTool(searchInterpretations, apiClient, { query: input.query, display: 5, apiKey: input.apiKey })
+    // 판례(AI 신호만 필요)·해석례 상세(해석례 검색만 필요)는 기반 법령 탐색을 기다리지 않는다(종전 526ms 유휴)
+    const bundleP = aiP.then(ai => searchPrecedentsForChain(
+      apiClient,
+      { query: input.query, display: 5, apiKey: input.apiKey },
+      { aiLawArticles: ai.aiLawArticles, route: routeQuery(input.query), maxFallbackAttempts: PRECEDENT_FALLBACK_LIMIT },
+    ))
+    const interpDetailP = interpP.then(r => fetchSearchDetailChain(apiClient, "search_interpretations", r, { apiKey: input.apiKey }))
+    void Promise.all([bundleP, interpDetailP]).catch(() => {})  // 만료로 조기 반환하면 아무도 기다리지 않는다
+    const step1 = await raceDeadline(dl, Promise.all([aiP, findBaseLaws(), interpP]))
     if (!step1.ok) return expiredChainResult(parts)
     const [aiResult, base, interpResult] = step1.value
     const { reliableLaws: lawsResult, textLaw, lowConfidence } = selectLawTextSource(base.laws, input.query)
@@ -909,17 +925,8 @@ export async function chainFullResearch(
       raceDeadline(dl, textLaw
         ? callTool(getLawText, apiClient, { mst: textLaw.mst, apiKey: input.apiKey })
         : Promise.resolve(null)),
-      raceDeadline(dl, searchPrecedentsForChain(
-        apiClient,
-        { query: input.query, display: 5, apiKey: input.apiKey },
-        {
-          aiLawArticles: aiResult.aiLawArticles,
-          route: routeQuery(input.query),
-          maxFallbackAttempts: PRECEDENT_FALLBACK_LIMIT,
-        }
-      )),
-      raceDeadline(dl,
-        fetchSearchDetailChain(apiClient, "search_interpretations", interpResult, { apiKey: input.apiKey })),
+      raceDeadline(dl, bundleP),
+      raceDeadline(dl, interpDetailP),
       raceDeadline(dl, wantsAnnex
         ? callTool(getAnnexes, apiClient, { lawName: lawsResult[0].lawName, apiKey: input.apiKey })
         : Promise.resolve(null)),
@@ -1011,7 +1018,8 @@ export async function chainProcedureDetail(
         try {
           for (const candidate of ruleNameCandidates) {
             const rules = await findLaws(apiClient, candidate, input.apiKey, 1)
-            if (rules.length > 0) {
+            // 하위법령이 없으면 검색이 "시행규칙"을 떼고 모법을 준다 — 옆 갈래와 같은 별표를 두 번 받지 않게 이름이 같을 때만
+            if (rules.length > 0 && rules[0].lawName.replace(/\s/g, "") === candidate.replace(/\s/g, "")) {
               return await callTool(getAnnexes, apiClient, { lawName: rules[0].lawName, apiKey: input.apiKey })
             }
           }
@@ -1020,7 +1028,7 @@ export async function chainProcedureDetail(
           if (getRequestSignal()?.aborted) throw error
           return errorCallResult(error, "search_law")
         }
-        return { text: "", isError: true }
+        return { text: "", isError: false }  // 하위법령이 없을 뿐 실패가 아니다 — 섹션을 싣지 않는다
       })()),
       // Step 4: AI 검색으로 보완 (절차 상세)
       raceDeadline(dl, aiP),

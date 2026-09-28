@@ -70,7 +70,8 @@ describe("collectAnnexList 페이지네이션", () => {
     // 같은 페이지를 계속 돌려주면 새로 담기는 항목이 0건 → 즉시 멈춘다
     const { client, pages } = pagingStub(264, { ignorePage: true })
     const r = await collectAnnexList(client, { lawName: "X" })
-    expect(pages).toEqual([1, 2])
+    // 남은 페이지는 총계만큼 한꺼번에 받는다(v4.15.0) — 무시당해도 총계로 정한 상한(3쪽)에서 끝난다
+    expect(pages.sort()).toEqual([1, 2, 3])
     expect(r.list).toHaveLength(100)
     expect(r.truncated).toBe(true)
   })

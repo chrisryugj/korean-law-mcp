@@ -57,3 +57,16 @@ describe("pickRepealed — 폐지(연혁) 법령 최신본 선택", () => {
     expect(pickRepealed(rows, "전혀 다른 법률")).toBeUndefined()
   })
 })
+
+describe("pickRepealed — 완전일치 우선, 하위법령 꼬리 제외 (2026-09-28)", () => {
+  const rows: LawInfo[] = [
+    { lawName: "소방시설 설치ㆍ유지 및 안전관리에 관한 법률 시행규칙", lawId: "009730", mst: "3", lawType: "행정안전부령", status: "연혁", effectiveDate: "20150716" },
+    { lawName: "소방시설 설치ㆍ유지 및 안전관리에 관한 법률", lawId: "009503", mst: "1", lawType: "법률", status: "연혁", effectiveDate: "20150701" },
+  ]
+  it("더 최신인 시행규칙이 있어도 이름이 같은 법률을 고른다", () => {
+    expect(pickRepealed(rows, "소방시설 설치ㆍ유지 및 안전관리에 관한 법률")?.lawId).toBe("009503")
+  })
+  it("완전일치가 없을 때도 하위법령 꼬리는 접두 일치로 받지 않는다", () => {
+    expect(pickRepealed([rows[0]], "소방시설 설치ㆍ유지 및 안전관리에 관한 법률")).toBeUndefined()
+  })
+})

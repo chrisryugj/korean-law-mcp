@@ -24,7 +24,7 @@ export const LegalAnalysisSchema = z.object({
   caseNumber: z.string().optional()
     .describe("[cite_check 필수] 사건번호 (예: '2013다61381', 문장 포함 가능)"),
   lawName: z.string().optional()
-    .describe("[applicable_law·impact_map 필수] 법령명 (예: '민법', '도로교통법')"),
+    .describe("[applicable_law·impact_map 필수] 법령명 (예: '민법', '도로교통법'). applicable_law는 약칭·옛 법령명과 행정규칙명(고시 — 예: '스프링클러설비의 화재안전기준', 'NFTC 103')도 받는다"),
   jo: z.string().optional()
     .describe("[impact_map 필수, applicable_law 선택] 조문 번호 — 자연어 표기('제103조', '제10조의2')와 6자리 JO 코드('010300', '001002') 모두 수용"),
   date: z.string().optional()

@@ -8,7 +8,8 @@ import type { LawApiClient } from "../lib/api-client.js"
 import { truncateResponse, MAX_RESPONSE_SIZE, formatDateDot } from "../lib/schemas.js"
 import { formatToolError, noResultHint } from "../lib/errors.js"
 import { detectAbolishedAdminRule } from "../lib/abolished-laws.js"
-import { analyzeImageOnlyBody, buildImageOnlyWarning } from "../lib/image-only-body.js"
+import { fetchAdminRuleHistory, pickAdminRuleGroup } from "../lib/admin-rule-history.js"
+import { adminRuleSourceUrl, analyzeImageOnlyBody, buildImageOnlyWarning, markInlineImages } from "../lib/image-only-body.js"
 import {
   adminRuleXmlCache, adminRuleCacheKey, ADMIN_RULE_CACHE_TTL_MS,
   buildPartialBody, pickPartialMode, PARTIAL_HINT,
@@ -19,6 +20,7 @@ export const SearchAdminRuleSchema = z.object({
   query: z.string().describe("검색할 행정규칙명"),
   knd: z.string().optional().describe("행정규칙 종류 (1=훈령, 2=예규, 3=고시, 4=공고, 5=일반)"),
   display: z.number().optional().default(20).describe("최대 결과 개수"),
+  history: z.boolean().optional().describe("true면 발령 연혁표 — 행정규칙ID별로 옛 명칭 시절(예: 화재안전기준 NFSC → NFPC)까지 전 버전의 시행일·발령번호·일련번호. 기준일 시행 버전 판단은 legal_analysis(mode=\"applicable_law\", lawName, date)"),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달")
 })
 
@@ -29,9 +31,13 @@ export async function searchAdminRule(
   input: SearchAdminRuleInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
+    if (input.history) return await formatAdminRuleHistory(apiClient, input)
+
+    // display 를 업스트림에도 넘긴다. 종전엔 기본 20건만 받아 잘라 display 를 올려도 20건을 넘지 못했다.
     const xmlText = await apiClient.searchAdminRule({
       query: input.query,
       knd: input.knd,
+      display: input.display,
       apiKey: input.apiKey
     })
 
@@ -62,11 +68,12 @@ export async function searchAdminRule(
       const promDate = rule.getElementsByTagName("발령일자")[0]?.textContent || ""
       const ruleType = rule.getElementsByTagName("행정규칙종류")[0]?.textContent || ""
       const orgName = rule.getElementsByTagName("소관부처명")[0]?.textContent || ""
+      const efDate = rule.getElementsByTagName("시행일자")[0]?.textContent || ""
 
       resultText += `${i + 1}. ${ruleName}\n`
       resultText += `   - 행정규칙일련번호: ${ruleSeq} (get_admin_rule의 id)\n`
-      resultText += `   - 행정규칙ID: ${ruleId} (참고용 — 전문 조회 불가)\n`
-      resultText += `   - 공포일: ${promDate}\n`
+      resultText += `   - 행정규칙ID: ${ruleId} (개정·개명을 거쳐도 같은 계보 키 — 옛 버전 목록은 history:true)\n`
+      resultText += `   - 발령일: ${promDate}${efDate && efDate !== promDate ? ` / 시행일: ${efDate}` : ""}\n`
       resultText += `   - 구분: ${ruleType}\n`
       resultText += `   - 소관부처: ${orgName}\n\n`
     }
@@ -82,6 +89,30 @@ export async function searchAdminRule(
   } catch (error) {
     return formatToolError(error, "search_admin_rule")
   }
+}
+
+/** 발령 연혁표 — 검색어에 맞는 계보가 하나면 그것만, 아니면 걸린 계보 전부(상위 display 개) */
+async function formatAdminRuleHistory(
+  apiClient: LawApiClient,
+  input: SearchAdminRuleInput
+): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
+  const { groups, totalCount, truncated } = await fetchAdminRuleHistory(apiClient, input.query, input.apiKey)
+  if (groups.size === 0) return noResultHint(input.query || "", "행정규칙")
+  const picked = pickAdminRuleGroup(groups, input.query)
+  const lists = picked ? [picked] : [...groups.values()].slice(0, Math.max(1, Math.min(input.display, 20)))
+  let text = `행정규칙 발령 연혁: '${input.query}' (${picked ? "일치 계보 1개" : `계보 ${groups.size}개${groups.size > lists.length ? ` 중 ${lists.length}개` : ""}`}, 연혁 검색 ${totalCount}건)\n`
+  if (truncated) text += `⚠️ 검색 결과가 많아 일부만 받았습니다 — 정식 명칭으로 좁히면 전 버전을 봅니다.\n`
+  for (const list of lists) {
+    const current = list.find(v => v.isCurrent) ?? list[0]
+    text += `\n■ ${current.name} (행정규칙ID ${current.ruleId}, 버전 ${list.length}개)\n`
+    const names = [...new Set([...list].reverse().map(v => v.name))]
+    if (names.length > 1) text += `  명칭 변천: ${names.join(" → ")}\n`
+    for (const v of list) {
+      text += `  시행 ${formatDateDot(v.efYd || v.issuedYd)} | 발령 ${formatDateDot(v.issuedYd)} 제${v.issuedNo}호 ${v.rrCls} | ${v.serial}${v.isCurrent ? " [현행]" : ""}${v.name !== current.name ? ` | ${v.name}` : ""}\n`
+    }
+  }
+  text += `\n본문: get_admin_rule(id=일련번호, jo="제N조") · 기준일 시행 버전 판단: legal_analysis(mode="applicable_law", lawName, date)`
+  return { content: [{ type: "text", text: truncateResponse(text) }] }
 }
 
 // get_admin_rule 스키마
@@ -175,15 +206,21 @@ export async function getAdminRule(
       || doc.getElementsByTagName("소관부처명")[0]?.textContent || ""
     const ruleType = doc.getElementsByTagName("행정규칙종류")[0]?.textContent || ""
     const joForm = doc.getElementsByTagName("조문형식여부")[0]?.textContent?.trim() || ""
+    const efDate = doc.getElementsByTagName("시행일자")[0]?.textContent?.trim() || ""
+    const revision = doc.getElementsByTagName("제개정구분명")[0]?.textContent?.trim() || ""
+    const isCurrent = doc.getElementsByTagName("현행여부")[0]?.textContent?.trim() || ""
 
     if (ruleNameRaw && !fromCache) {
       adminRuleXmlCache.set(cacheKey, xmlText, ADMIN_RULE_CACHE_TTL_MS)
     }
 
     let resultText = `행정규칙명: ${ruleName}\n`
-    if (promDate) resultText += `공포일: ${formatDateDot(promDate)}${promNo ? ` (제${promNo}호)` : ""}\n`
+    if (promDate) resultText += `공포일: ${formatDateDot(promDate)}${promNo ? ` (제${promNo}호)` : ""}${revision ? ` ${revision}` : ""}\n`
+    if (efDate) resultText += `시행일: ${formatDateDot(efDate)}\n`
     if (ruleType) resultText += `종류: ${ruleType}\n`
     if (orgName) resultText += `소관부처: ${orgName}\n`
+    // 연혁 일련번호로 조회하면 옛 본문이 온다 — 표시가 없으면 현행으로 읽힌다
+    if (isCurrent === "N") resultText += `⚠️ 연혁본(현행 아님) — 현행 기준 답변에는 search_admin_rule로 현행 일련번호를 다시 확인할 것\n`
     resultText += `\n---\n\n`
 
     // 조문 추출 - <조문내용> 태그 사용
@@ -254,6 +291,8 @@ export async function getAdminRule(
     const imgInfo = analyzeImageOnlyBody(bodyText)
     if (imgInfo.imageOnly) {
       resultText += buildImageOnlyWarning(input.id, imgInfo, collectAttachments(doc)) + "\n"
+    } else if (imgInfo.imageCount > 0) {
+      resultText += `ℹ️ 본문에 이미지(표·그림) ${imgInfo.imageCount}개 — 텍스트가 없어 표식으로 남겼습니다. 그 안의 수치는 원문에서 확인: ${adminRuleSourceUrl(input.id)}\n\n`
     }
 
     // 조문 본문 (부칙·별표 제외 — 부분 조회의 파싱 대상).
@@ -261,7 +300,7 @@ export async function getAdminRule(
     const articleParts: string[] = []
     for (let i = 0; i < joContents.length; i++) {
       const joContent = joContents[i].textContent?.trim() || ""
-      if (joContent.length > 0) articleParts.push(joContent)
+      if (joContent.length > 0) articleParts.push(markInlineImages(joContent))
     }
     const articlesText = articleParts.join("\n\n")
 
@@ -290,7 +329,7 @@ export async function getAdminRule(
           extrasText += `[${title}]\n`
         }
         if (content.length > 0) {
-          extrasText += `${content}\n\n`
+          extrasText += `${markInlineImages(content)}\n\n`
         }
       }
     }

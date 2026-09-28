@@ -10,7 +10,8 @@
  *   3. 추가(+) / 삭제(-) / 변경(△) 조문 분류 출력
  */
 import type { ScenarioContext, ScenarioResult, ScenarioSection } from "./types.js"
-import { fetchHistoricalVersionsFull, type HistoricalVersion } from "../../lib/historical-utils.js"
+import type { HistoricalVersion } from "../../lib/historical-utils.js"
+import { fetchLawVersions, sameLawName, wholeRevisionsBetween } from "../../lib/law-lineage.js"
 import { hasLawNode } from "../../lib/api-client.js"
 import {
   changeExcerpt, diffArticles, displayJo, dot, excerptBudget, extractLawSnapshot,
@@ -92,7 +93,8 @@ export async function runTimeTravelScenario(ctx: ScenarioContext): Promise<Scena
   let totalCount = 0
   let fetchedPages = 0
   try {
-    const r = await fetchHistoricalVersionsFull(ctx.apiClient, lawName, ctx.apiKey)
+    // 법령ID 계보 — 두 시점 사이에 제명이 바뀌어도(소방시설법 2022.12.1.) 옛 이름 시절 버전을 잡는다
+    const r = await fetchLawVersions(ctx.apiClient, lawName, ctx.apiKey, ctx.law?.lawId)
     versions = r.versions
     totalCount = r.totalCount
     fetchedPages = r.fetchedPages
@@ -107,7 +109,7 @@ export async function runTimeTravelScenario(ctx: ScenarioContext): Promise<Scena
   if (versions.length === 0) {
     sections.push({
       title: "Time Travel — 시점 비교 (v4.0)",
-      content: `[NOT_FOUND] '${lawName}' 연혁을 찾을 수 없습니다. 법령명 띄어쓰기/오타를 확인하세요.\n참고: 법제처 응답 총 ${totalCount}건 (정확매칭 0건). 입력 법령명이 lsHistory의 '법령명한글'과 정확히 일치해야 합니다 (공백 제거 비교).`,
+      content: `[NOT_FOUND] '${lawName}' 연혁을 찾을 수 없습니다. 법령명 띄어쓰기/오타를 확인하세요.\n참고: 법제처 응답 총 ${totalCount}건 (정확매칭 0건). 법령ID 계보를 못 잡으면 입력 법령명이 연혁의 법령명과 정확히 일치해야 합니다 (공백 제거 비교).`,
     })
     return { sections, suggestedActions }
   }
@@ -199,6 +201,16 @@ export async function runTimeTravelScenario(ctx: ScenarioContext): Promise<Scena
     `요약: + ${added.length} 신설 | - ${removed.length} 삭제 | △ ${modified.length} 변경`
 
   let body = header
+
+  // 제명 변경·전부개정을 가로지르면 조번호 대조가 다른 조문끼리의 비교가 된다 — diff 앞에 밝힌다
+  if (oldVer.lawNm && newVer.lawNm && !sameLawName(oldVer.lawNm, newVer.lawNm)) {
+    body += `\n제명 변경: 「${oldVer.lawNm}」 → 「${newVer.lawNm}」 (같은 법령ID)`
+  }
+  const whole = wholeRevisionsBetween(versions, oldVer.efYd, newVer.efYd)
+  if (whole.length > 0) {
+    const w = whole[whole.length - 1]
+    body += `\n⚠️ 두 시점 사이 전부개정(시행 ${dot(w.efYd) || w.efYd}, 공포 제${w.ancNo}호) — 조문 체계가 바뀌어 아래 조번호 대조는 번호만 같은 다른 조문일 수 있습니다. 조문 제목으로 대응 관계를 확인하세요.`
+  }
 
   // 두 시점 사이에 낀 개정들 — 각 변경의 근거 공포를 특정할 수 있게 한다 (#96)
   const between = versions

@@ -6,7 +6,8 @@ import { readResponseText } from "./response-body.js"
 import { requestContext } from "./session-state.js"
 import { DEFAULT_EXECUTION_LIMITS, RequestExecutionBudget } from "./execution-limits.js"
 
-// 예산(기본 2 MiB)을 넘는 본문에서 도구 호출이 **에러 대신 300초 정지**했다(#115).
+// 예산(당시 기본 2 MiB)을 넘는 본문에서 도구 호출이 **에러 대신 300초 정지**했다(#115).
+// 기본값은 v4.15.0 에 8 MiB 로 올랐다 — 이 테스트는 기본값이 아니라 초과 시 동작을 보므로 2 MiB 를 명시한다.
 // 원인: `response.clone()`이 만든 tee의 한쪽 가지만 취소하면 그 취소 프라미스는
 // 나머지 가지가 취소될 때까지 settle되지 않는데, 정리 코드가 그걸 await했다.
 // 업스트림을 두드리지 않도록 전 케이스를 로컬 mock 서버로 돌린다.
@@ -40,8 +41,10 @@ beforeAll(async () => {
 
 afterAll(() => new Promise<void>((r) => server.close(() => r())))
 
+const LIMITS = { ...DEFAULT_EXECUTION_LIMITS, maxUpstreamBodyBytes: 2 * 1024 * 1024 }
+
 function withBudget<T>(work: () => Promise<T>): { run: Promise<T>; budget: RequestExecutionBudget } {
-  const budget = new RequestExecutionBudget(DEFAULT_EXECUTION_LIMITS)
+  const budget = new RequestExecutionBudget(LIMITS)
   return { budget, run: requestContext.run({ budget }, work) }
 }
 
@@ -51,7 +54,7 @@ describe("업스트림 본문 예산 — 초과는 정지가 아니라 에러다
   it("Content-Length가 한도를 넘으면 즉시 실측 크기·한도를 담은 에러로 끝난다", async () => {
     const { run } = withBudget(read(`${base}?k=over`))
     await expect(run).rejects.toThrow(
-      new RegExp(`${OVER.length}.*${DEFAULT_EXECUTION_LIMITS.maxUpstreamBodyBytes}`),
+      new RegExp(`${OVER.length}.*${LIMITS.maxUpstreamBodyBytes}`),
     )
   }, 6000)
 

@@ -13,6 +13,7 @@
  */
 
 import type { LawApiClient } from "./api-client.js"
+import { lawCache } from "./cache.js"
 
 export interface LawAnnexUnit {
   /** 별표번호(4) + 가지번호(2) — licbyl 별표번호와 같은 6자리 코드 */
@@ -99,18 +100,31 @@ export function findMissingUnits(
   return units.filter((u) => !known.has(`${u.code6}|${u.kind}`))
 }
 
-/** 현행 법령 본문에서 별표단위 목록 조회 */
+/**
+ * 별표단위 목록 캐시 — 별표 목록 하나 보려고 법령 전문 JSON(도로교통법 시행규칙 3.7 MB)을 호출마다 받았다
+ * (2026-09-28 성능 감사: 같은 법령 두 번째 호출도 5회·4.1 MB). 별표 블록만 따로 주는 API 는 없다(JO 지정 응답엔 별표가 없다).
+ * 키의 MST·시행일은 버전을 못박는다. 다만 법제처가 같은 버전의 별표 파일을 재업로드해 링크를 고치는 일이 있어(#77) 6시간만 둔다.
+ */
+const ANNEX_UNITS_TTL_MS = 6 * 60 * 60 * 1000
+
+/** 법령 본문에서 별표단위 목록 조회. efYd 를 주면 그 시행 슬라이스(eflaw)의 별표 — 분리시행이면 같은 MST 라도 별표가 다르다 */
 export async function fetchLawAnnexUnits(
   apiClient: LawApiClient,
   mst: string,
-  apiKey?: string
+  apiKey?: string,
+  efYd?: string,
 ): Promise<LawAnnexUnit[]> {
+  const cacheKey = `annexunits:${mst}:${efYd || "law"}`
+  const cached = lawCache.get<LawAnnexUnit[]>(cacheKey)
+  if (cached) return cached
   const text = await apiClient.fetchApi({
     endpoint: "lawService.do",
-    target: "law",
+    target: efYd ? "eflaw" : "law",
     type: "JSON",
-    extraParams: { MST: mst },
+    extraParams: efYd ? { MST: mst, efYd } : { MST: mst },
     apiKey,
   })
-  return parseLawAnnexUnits(text)
+  const units = parseLawAnnexUnits(text)
+  if (units.length > 0) lawCache.set(cacheKey, units, ANNEX_UNITS_TTL_MS)
+  return units
 }

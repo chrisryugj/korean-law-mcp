@@ -56,3 +56,12 @@ export function buildImageOnlyWarning(
   out += `⚠️ LLM은 이미지 안의 수치·대상 목록을 추측/생성하지 마세요.\n`
   return out
 }
+
+/**
+ * 본문 속 이미지 태그를 표식으로 바꾼다. 텍스트 본문 사이에 표(스프링클러헤드 표시온도 표 등)만 이미지로 박힌 경우,
+ * 날 태그(`<img id="19444790"></img>`)를 그대로 내보내면 표가 있다는 사실도, 그 안의 수치가 없다는 사실도 읽히지 않는다.
+ */
+export const INLINE_IMAGE_MARK = "[이미지(표·그림) — 텍스트 없음, 수치는 원문 확인·추측 금지]"
+export function markInlineImages(text: string): string {
+  return text.replace(IMG_TAG, INLINE_IMAGE_MARK)
+}

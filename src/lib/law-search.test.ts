@@ -114,3 +114,18 @@ describe("looseMatchLawName (lib 승격 후 동작 유지)", () => {
     expect(resolvedLawMatches("식품 등의 표시·광고에 관한 법률", "식품 등의 표시ㆍ광고에 관한 법률")).toBe(true)
   })
 })
+
+describe("findLaws — 단계 캐시 배열을 제자리 정렬하지 않는다 (2026-09-28 리뷰)", () => {
+  it("폐지 단계 검색어로 모인 결과를 정렬해도 캐시의 업스트림 순서는 그대로다", async () => {
+    lawCache.clear()
+    const rows = ["건축법 시행령", "건축법"]
+    const client = {
+      searchLaw: async (q: string) => q === "건축법"
+        ? `<LawSearch>${rows.map((n, i) => `<law id="${i}"><법령일련번호>${i}</법령일련번호><법령명한글><![CDATA[${n}]]></법령명한글><법령ID>${i}</법령ID></law>`).join("")}</LawSearch>`
+        : `<LawSearch></LawSearch>`,
+    } as unknown as LawApiClient
+    const ranked = await findLaws(client, "건축법 허가", undefined, 5)
+    expect(ranked[0].lawName).toBe("건축법")   // 관련도 정렬은 된다
+    expect(lawCache.get<Array<{ lawName: string }>>("law-search-raw:건축법:100")?.map(r => r.lawName)).toEqual(rows)
+  })
+})

@@ -95,13 +95,25 @@ export async function getArticleHistory(
     // buildJO("003800")은 3800조로 읽어 "380000"이 된다.
     const jo = input.jo && !/^\d{6}$/.test(input.jo) ? buildJO(input.jo) : input.jo
 
-    const xmlText = await apiClient.getArticleHistory({ ...input, ...dateDefaults, lawId, jo, apiKey: input.apiKey })
-
+    // 응답 행은 "법령 버전"이고, 조문이 실제로 바뀐 버전에만 <jo> 가 붙는다. 조문을 지정하면 총계가 곧 버전 수라
+    // 한 쪽(기본 20행)만 받으면 뒤쪽 버전의 변경이 통째로 빠졌다 — 소방시설법 시행령 제11조: "총 58건"에 2004 제정 1건만
+    // 보이고 2012·2015·2016·2022 변경이 2~3쪽에 묻혔다(2026-09-28). 조문 지정 시 100행 단위로 전 버전을 받는다.
+    const wholeJo = Boolean(jo) && (input.page ?? 1) === 1
+    const fetchPage = (page?: number) => apiClient.getArticleHistory({
+      ...input, ...dateDefaults, lawId, jo, apiKey: input.apiKey,
+      ...(wholeJo ? { display: 100, page } : {}),
+    })
     const parser = new DOMParser()
-    const doc = parser.parseFromString(xmlText, "text/xml")
-
-    const totalCnt = doc.getElementsByTagName("totalCnt")[0]?.textContent || "0"
-    const laws = doc.getElementsByTagName("law")
+    const first = parser.parseFromString(await fetchPage(), "text/xml")
+    const totalCnt = first.getElementsByTagName("totalCnt")[0]?.textContent || "0"
+    const pageCount = wholeJo ? Math.min(5, Math.ceil((parseInt(totalCnt, 10) || 0) / 100)) : 1
+    const docs = [first, ...(await Promise.all(
+      Array.from({ length: Math.max(0, pageCount - 1) }, (_, i) => fetchPage(i + 2)),
+    )).map(x => parser.parseFromString(x, "text/xml"))]
+    const laws = docs.flatMap(d => {
+      const nodes = d.getElementsByTagName("law")
+      return Array.from({ length: nodes.length }, (_, i) => nodes[i])
+    })
 
     if (laws.length === 0) {
       return {
@@ -113,8 +125,9 @@ export async function getArticleHistory(
       }
     }
 
-    let resultText = `조문 개정 이력 (총 ${totalCnt}건):\n\n`
+    let resultText = ""
     let itemNum = 0
+    const wholeRevisions: string[] = []
 
     for (let i = 0; i < laws.length; i++) {
       const law = laws[i]
@@ -147,8 +160,20 @@ export async function getArticleHistory(
         resultText += `   - 변경사유: ${changeReason}\n`
         resultText += `   - 공포일: ${promDate}, 조문개정일: ${joRegDt}\n`
         resultText += `   - 시행일: ${effDate}, 조문시행일: ${joEffDt}\n\n`
+        if (/전부개정|폐지제정/.test(changeType)) wholeRevisions.push(effDate)
       }
     }
+    // 머리말은 셈이 끝난 뒤에 — 총계는 조문 변경 수가 아니라 법령 버전 수다
+    const header = wholeJo
+      ? `조문 개정 이력: ${formatJoCode(jo || "")} — 법령 버전 ${totalCnt}개 중 이 조문이 바뀐 버전 ${itemNum}건\n`
+      : `조문 개정 이력 (법령 버전 총 ${totalCnt}건 중 이 쪽${laws.length}건):\n`
+    const capNote = wholeJo && (parseInt(totalCnt, 10) || 0) > pageCount * 100
+      ? `⚠️ 법령 버전이 많아 앞 ${pageCount * 100}개만 봤습니다 — 기간(fromRegDt·toRegDt)으로 나눠 조회하세요.\n`
+      : ""
+    const wholeNote = wholeJo && wholeRevisions.length > 0
+      ? `⚠️ 전부개정(시행 ${wholeRevisions.join(", ")})은 조문 체계를 새로 짠다 — 그 전후의 같은 조번호는 다른 조문일 수 있습니다.\n`
+      : ""
+    resultText = `${header}${capNote}${wholeNote}\n${resultText}`
 
     // 조문이 하나도 없는 경우 (법령정보만 있는 경우)
     if (itemNum === 0) {

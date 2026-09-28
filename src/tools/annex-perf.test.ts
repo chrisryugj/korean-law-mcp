@@ -6,8 +6,9 @@
  *     요청당 업스트림 1회와 본문 예산 3.8MB 를 그냥 버렸다.
  * C2: lawName 의 공백 덩어리가 별표 표기 파싱에서 제곱으로 백트래킹해 fetch 전에 멈췄다(10만 자 19.3초).
  */
-import { describe, expect, it, vi, afterEach } from "vitest"
+import { describe, expect, it, vi, afterEach, beforeEach } from "vitest"
 import { getAnnexes } from "./annex.js"
+import { lawCache } from "../lib/cache.js"
 import type { LawApiClient } from "../lib/api-client.js"
 
 const LIST_JSON = JSON.stringify({
@@ -58,6 +59,8 @@ function stubDownload(): string[] {
 
 describe("현행 본문을 한 요청에서 두 번 받지 않는다 (리뷰 C9)", () => {
   afterEach(() => vi.unstubAllGlobals())
+  // 별표단위 목록은 v4.15.0 부터 MST 별로 캐시된다 — 케이스끼리 캐시를 나누지 않게 비운다
+  beforeEach(() => lawCache.clear())
 
   it("query 로 1건이 좁혀져 본문 추출로 넘어가도 target=law 조회는 1회다", async () => {
     const urls = stubDownload()
@@ -90,4 +93,17 @@ describe("공백 덩어리 lawName 전체 경로 (리뷰 C2)", () => {
     expect(performance.now() - t0).toBeLessThan(500)
     expect(result.isError).toBe(true)
   })
+})
+
+describe("별표단위 목록은 요청을 넘어 MST 별로 캐시된다 (2026-09-28 성능 감사)", () => {
+  afterEach(() => vi.unstubAllGlobals())
+  beforeEach(() => lawCache.clear())
+
+  it("같은 법령 두 번째 호출은 법령 전문(target=law)을 다시 받지 않는다", async () => {
+    stubDownload()
+    const { client, lawCalls } = countingClient([async () => LAW_JSON])
+    await getAnnexes(client, { lawName: "도로교통법 시행규칙", query: "과태료" })
+    await getAnnexes(client, { lawName: "도로교통법 시행규칙", query: "과태료" })
+    expect(lawCalls()).toBe(1)
+  }, 30000)
 })

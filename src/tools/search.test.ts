@@ -82,3 +82,35 @@ describe("search_law display 하한 (#89)", () => {
     expect(seen[0]).toBe(100)
   })
 })
+
+// ── 옛 법령명 안내 (v4.15.0) ────────────────────────────
+describe("searchLaw — 옛 법령명으로 찾으면 현행 명칭을 알린다", () => {
+  const OLD = "화재예방, 소방시설 설치ㆍ유지 및 안전관리에 관한 법률"
+  const NEW = "소방시설 설치 및 관리에 관한 법률"
+  const row = (name: string, id: string, st: string) =>
+    `<law id="1"><법령명한글><![CDATA[${name}]]></법령명한글><법령ID>${id}</법령ID><법령일련번호>236977</법령일련번호>` +
+    `<공포일자>20211130</공포일자><시행일자>20241201</시행일자><현행연혁코드>${st}</현행연혁코드><법령구분명>법률</법령구분명></law>`
+  const client = (seen: string[]) => ({
+    searchLaw: async (q: string, _k?: string, _d?: number, target?: string, nw?: string) => {
+      seen.push(`${target ?? "law"}:${nw ?? ""}:${q}`)
+      if (target === "eflaw" && nw === "2") return `<LawSearch></LawSearch>`       // 시행예정 없음
+      if (target === "eflaw") return `<LawSearch>${row(OLD, "009503", "연혁")}</LawSearch>`
+      return `<LawSearch>${row(NEW, "009503", "현행")}</LawSearch>`
+    },
+    fetchApi: async () => `<LawSearch></LawSearch>`,
+  }) as unknown as LawApiClient
+
+  it("연혁 검색에서 같은 법령ID를 찾아 📛 안내를 붙인다", async () => {
+    const seen: string[] = []
+    const text = (await searchLaw(client(seen), { query: OLD, display: 50 })).content[0].text
+    expect(text).toContain(`「${OLD}」은(는) 옛 법령명입니다`)
+    expect(text).toContain(`현행은 「${NEW}」(법령ID 009503`)
+    expect(text).not.toContain("정확매칭 없음")
+  })
+
+  it("법령명 꼴이 아닌 키워드 검색은 연혁을 더 묻지 않는다", async () => {
+    const seen: string[] = []
+    await searchLaw(client(seen), { query: "소방시설 설치", display: 50 })
+    expect(seen.filter(s => s.startsWith("eflaw::"))).toEqual([])
+  })
+})

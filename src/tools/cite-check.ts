@@ -73,6 +73,16 @@ export async function citeCheck(
     }
     const caseNo = candidates[0]
 
+    // 후속 인용 역추적(본문검색)은 사건번호만 있으면 된다 — 대상 특정을 기다리지 않고 바로 출발시킨다
+    // (종전: nb 검색 → 상세와 함께 출발, 왕복 1회 직렬. 2026-09-28 성능 감사)
+    const citingP = apiClient.fetchApi({
+      endpoint: "lawSearch.do",
+      target: "prec",
+      extraParams: { search: "2", query: caseNo, display: "50" },
+      apiKey: input.apiKey,
+    })
+    citingP.catch(() => {})  // 대상이 없어 조기 반환하면 기다리지 않는다 — 미처리 거부로 새지 않게
+
     // 1단계: 대상 판례 특정 (nb= 정확 검색)
     const targetXml = await apiClient.fetchApi({
       endpoint: "lawSearch.do",
@@ -93,15 +103,10 @@ export async function citeCheck(
       ])
     }
 
-    // 2~3단계 병렬: 대상 상세(참조판례) + 후속 인용 역추적(본문검색)
+    // 2~3단계 병렬: 대상 상세(참조판례) + 후속 인용 역추적(위에서 출발)
     const [targetDetail, citingXml] = await Promise.all([
       fetchPrecedentDetail(apiClient, target.판례일련번호, input.apiKey),
-      apiClient.fetchApi({
-        endpoint: "lawSearch.do",
-        target: "prec",
-        extraParams: { search: "2", query: caseNo, display: "50" },
-        apiKey: input.apiKey,
-      }),
+      citingP,
     ])
 
     const citingParsed = parsePrecedentXML(citingXml)

@@ -13,10 +13,11 @@ describe("applicableLaw — 무관 법령 가드", () => {
   beforeEach(() => lawCache.clear())
 
   it("검색 1위가 요청 법령과 무관하면 진행하지 않고 NOT_FOUND 안내", async () => {
-    // 후속 단계(연혁 조회 등) 메서드를 일부러 넣지 않음 —
-    // 가드가 조기 반환하지 않으면 이 스텁에서 즉시 터진다
+    // 법령 연혁 조회 메서드(fetchApi)를 일부러 넣지 않음 — 가드가 조기 반환하지 않으면 이 스텁에서 즉시 터진다.
+    // 법령이 아니면 행정규칙 연혁을 찾아보므로(v4.15.0) 행정규칙 검색만 빈 결과로 둔다.
     const client = {
       searchLaw: async () => UNRELATED_XML,
+      searchAdminRule: async () => `<?xml version="1.0" encoding="UTF-8"?><AdmRulSearch><totalCnt>0</totalCnt></AdmRulSearch>`,
     } as unknown as LawApiClient
 
     const r = await applicableLaw(client, { lawName: "상법", date: "2023-05-10" })

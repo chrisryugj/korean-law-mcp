@@ -101,7 +101,7 @@ export const allTools: McpTool[] = [
   },
   {
     name: "get_law_text",
-    description: "[법령조회] 조문 전문 조회. mst/lawId 필수, jo로 특정 조문만 가능 — jo는 '제148조의2' 같은 자연어 조문 표기를 그대로 받는다(권장). 6자리 JO 코드를 직접 쓰려면 조번호 4자리 zero-pad + 의X 2자리: 제10조의2→001002, 제234조의2→023402(234002 아님).",
+    description: "[법령조회] 조문 전문 조회. mst/lawId 필수, jo로 특정 조문만 가능 — jo는 '제148조의2' 같은 자연어 조문 표기를 그대로 받는다(권장). 6자리 JO 코드를 직접 쓰려면 조번호 4자리 zero-pad + 의X 2자리: 제10조의2→001002, 제234조의2→023402(234002 아님). 과거 시점 본문은 efYd 에 그 날짜를 넣으면 그날 시행 중이던 버전으로 자동 보정한다(제명이 바뀌기 전 버전 포함). 적용 법령 판단·경과조치까지 필요하면 legal_analysis(mode=applicable_law).",
     schema: GetLawTextSchema,
     handler: getLawText
   },
@@ -133,13 +133,13 @@ export const allTools: McpTool[] = [
   // === 행정규칙 ===
   {
     name: "search_admin_rule",
-    description: "[행정규칙] 훈령/예규/고시/지침 검색. knd 파라미터로 종류 필터 가능(1=훈령, 2=예규, 3=고시). 현행 0건이면 연혁을 자동 추적해 폐지(폐지사유·후속 통합 규정)·제명변경을 안내.",
+    description: "[행정규칙] 훈령/예규/고시/지침 검색. knd 파라미터로 종류 필터 가능(1=훈령, 2=예규, 3=고시). 현행 0건이면 연혁을 자동 추적해 폐지(폐지사유·후속 통합 규정)·제명변경을 안내. history=true면 행정규칙ID별 발령 연혁표(옛 명칭 시절까지 — 화재안전기준 NFSC→NFPC 등).",
     schema: SearchAdminRuleSchema,
     handler: searchAdminRule
   },
   {
     name: "get_admin_rule",
-    description: "[행정규칙] 행정규칙 전문 조회. 전문이 긴 규칙(외국환거래규정 등)은 jo(조문 단위, 예: '제9-5조')·chapter(장)·keyword(본문 검색)·page(페이징) 파라미터로 부분 조회 — 파라미터 없이 호출하면 앞부분 5만 자에서 잘린다.",
+    description: "[행정규칙] 행정규칙 전문 조회. 전문이 긴 규칙(외국환거래규정 등)은 jo(조문 단위, 예: '제9-5조', 화재안전기술기준은 절 번호 '2.7.3')·chapter(장)·keyword(본문 검색)·page(페이징) 파라미터로 부분 조회 — 파라미터 없이 호출하면 앞부분 5만 자에서 잘린다. 연혁 일련번호를 넣으면 그 시절 본문(연혁본 표시).",
     schema: GetAdminRuleSchema,
     handler: getAdminRule
   },
@@ -219,7 +219,7 @@ export const allTools: McpTool[] = [
   // === 부가정보 ===
   {
     name: "get_annexes",
-    description: "[별표] 별표/서식 조회. lawName+'별표N'으로 내용 추출. 금액/기준은 별표에 있는 경우 많음.",
+    description: "[별표] 별표/서식 조회. lawName+'별표N'으로 내용 추출. 금액/기준은 별표에 있는 경우 많음. date(기준일)를 주면 그날 시행 중이던 버전의 별표 — 건축허가·착공·처분 시점의 설치기준·과태료표 등 과거 기준이 필요할 때(제명이 바뀐 법령도 옛 버전까지, 별표 번호가 시점마다 달라 query로 별표명을 주는 편이 안전).",
     schema: GetAnnexesSchema,
     handler: getAnnexes
   },
@@ -269,13 +269,13 @@ export const allTools: McpTool[] = [
   },
   {
     name: "get_historical_law",
-    description: "[이력] 특정 시점 연혁법령 조회.",
+    description: "[이력] 특정 시점 연혁법령 조회 — search_historical_law가 준 MST와 시행일(efYd)을 함께 넘긴다.",
     schema: getHistoricalLawSchema,
     handler: getHistoricalLaw
   },
   {
     name: "search_historical_law",
-    description: "[이력] 연혁법령 검색.",
+    description: "[이력] 연혁법령 검색 — 법령ID 계보로 제명이 바뀌기 전 버전까지 시행일별 전 목록(제명 변천 병기). 약칭·옛 법령명도 받는다.",
     schema: searchHistoricalLawSchema,
     handler: searchHistoricalLaw
   },
@@ -615,7 +615,7 @@ export const allTools: McpTool[] = [
   },
   {
     name: "legal_analysis",
-    description: "[정밀분석] 검증·분석 4종 통합. mode: verify_citations=텍스트 속 법령 조문·판례 인용('민법 제750조', '대법원 2013다61381' 등)이 실존하는지 법제처 DB 교차검증, LLM 환각 방지 — 판례는 실존불가/미확인 구분(text 필수) | cite_check=판례 생사 확인 — 사건번호로 후속 인용 역추적+변경·폐기 감지, 한국형 Citator(caseNumber 필수) | applicable_law=사건 시점에 시행되던 법령 버전+그 시점 조문+부칙 경과조치, 행위시법 판단(lawName+date 필수, jo 선택) | impact_map=한 조문을 인용한 판례·헌재·해석례·행심·조례 역방향 그래프+mermaid(lawName+jo 필수, jo는 '제103조'·'103조'·JO 6자리 코드 '010300' 모두 수용)",
+    description: "[정밀분석] 검증·분석 4종 통합. mode: verify_citations=텍스트 속 법령 조문·판례 인용('민법 제750조', '대법원 2013다61381' 등)이 실존하는지 법제처 DB 교차검증, LLM 환각 방지 — 판례는 실존불가/미확인 구분(text 필수) | cite_check=판례 생사 확인 — 사건번호로 후속 인용 역추적+변경·폐기 감지, 한국형 Citator(caseNumber 필수) | applicable_law=사건 시점에 시행되던 법령 버전+그 시점 조문+부칙 경과조치, 행위시법 판단(lawName+date 필수, jo 선택). 제명이 바뀐 법령은 옛 이름 시절 버전으로 특정. 법령이 아니면 행정규칙(고시·훈령 — 예: '스프링클러설비의 화재안전기준', 'NFTC 103')의 기준일 시행 버전 | impact_map=한 조문을 인용한 판례·헌재·해석례·행심·조례 역방향 그래프+mermaid(lawName+jo 필수, jo는 '제103조'·'103조'·JO 6자리 코드 '010300' 모두 수용)",
     schema: LegalAnalysisSchema,
     handler: legalAnalysis
   },

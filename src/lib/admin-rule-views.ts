@@ -51,10 +51,49 @@ function renderArticles(items: AdminRuleArticle[]): string {
   return items.map((a) => a.lines.join("\n")).join("\n\n")
 }
 
-function joView(parsed: ParsedAdminRule, jo: string, context: number): string {
+/**
+ * 조문(제N조) 체계가 없는 본문의 절 — 화재안전기술기준(NFTC)식 "2.7.3" 번호 줄에서 끊는다.
+ * 번호 줄이 하나도 없으면(항목식 훈령) 빈 줄 문단으로 끊는다. 종전엔 이런 본문에 jo·keyword 가
+ * "조문 체계가 없습니다 — keyword 를 쓰세요"를 돌려줘 keyword 요청에 keyword 를 쓰라는 막다른 안내가 됐다.
+ */
+export function splitSections(body: string): Array<{ num?: string, text: string }> {
+  const lines = body.split("\n")
+  const numbered = lines.some(l => /^\s*\d+\.\d+(?:\.\d+)*\s/.test(l))
+  if (!numbered) {
+    return body.split(/\n\s*\n/).map(t => ({ text: t.trim() })).filter(p => p.text)
+  }
+  const out: Array<{ num?: string, lines: string[] }> = []
+  for (const line of lines) {
+    const m = line.match(/^\s*(\d+(?:\.\d+)*)\.?\s/)
+    if (m || out.length === 0) out.push({ num: m?.[1], lines: [line] })
+    else out[out.length - 1].lines.push(line)
+  }
+  return out.map(s => ({ num: s.num, text: s.lines.join("\n").replace(/\n{3,}/g, "\n\n").trim() })).filter(s => s.text)
+}
+
+/** 절 번호 조회 — 그 절과 하위 절(2.7 → 2.7.1, 2.7.1.1 …)을 함께 */
+function sectionJoView(body: string, jo: string): string | undefined {
+  const want = jo.replace(/^제\s*/, "").replace(/\s*(조|절)$/, "").trim()
+  if (!/^\d+(?:\.\d+)+$/.test(want)) return undefined
+  const sections = splitSections(body).filter(s => s.num === want || s.num?.startsWith(`${want}.`))
+  if (sections.length === 0) return `[NOT_FOUND] '${want}' 절을 찾지 못했습니다. keyword 파라미터로 본문을 검색해 보세요.\n⚠️ LLM은 기준 내용을 추측/생성하지 마세요.`
+  return sections.map(s => s.text).join("\n\n")
+}
+
+function sectionKeywordView(body: string, kw: string, maxResults: number): string {
+  const hits = splitSections(body).filter(s => s.text.includes(kw))
+  if (hits.length === 0) return `[NOT_FOUND] 본문에 '${kw}'을(를) 포함한 절이 없습니다.\n⚠️ LLM은 기준 내용을 추측/생성하지 마세요.`
+  const cap = Math.max(1, Math.min(maxResults || 10, 30))
+  const labels = hits.map(s => s.num).filter(Boolean)
+  let text = `'${kw}' 포함 ${hits.length}곳${labels.length ? `: ${labels.join(", ")}` : ""}\n`
+  text += hits.length > cap ? `(아래 본문은 상위 ${cap}곳 — 절 번호는 jo:"2.7.3"처럼 조회)\n\n` : "\n"
+  return text + hits.slice(0, cap).map(s => s.text.length > 2500 ? `${s.text.slice(0, 2500)}\n   …` : s.text).join("\n\n---\n\n")
+}
+
+function joView(parsed: ParsedAdminRule, jo: string, context: number, body = ""): string {
   const hit = findArticle(parsed, jo)
   if (!hit) {
-    if (parsed.articles.length === 0) return NO_ARTICLE_MSG
+    if (parsed.articles.length === 0) return sectionJoView(body, jo) ?? NO_ARTICLE_MSG
     const range = `${parsed.articles[0].label.split(/[\s(（]/u)[0]} ~ ${parsed.articles[parsed.articles.length - 1].label.split(/[\s(（]/u)[0]}`
     return `[NOT_FOUND] '${jo}'에 해당하는 조문을 찾지 못했습니다. (수록 범위: ${range}, 총 ${parsed.articles.length}개조)\n` +
       "keyword 파라미터로 본문을 검색해 보세요.\n⚠️ LLM은 조문 내용을 추측/생성하지 마세요."
@@ -84,10 +123,10 @@ function chapterView(parsed: ParsedAdminRule, chapter: string): string {
   return text
 }
 
-function keywordView(parsed: ParsedAdminRule, keyword: string, maxResults: number): string {
-  if (parsed.articles.length === 0) return NO_ARTICLE_MSG
+function keywordView(parsed: ParsedAdminRule, keyword: string, maxResults: number, body = ""): string {
   const kw = keyword.trim()
   if (!kw) return "[NOT_FOUND] keyword 가 비어 있습니다 — 검색어를 지정하세요."
+  if (parsed.articles.length === 0) return sectionKeywordView(body, kw, maxResults)
   const hits = parsed.articles.filter((a) => a.lines.some((l) => l.includes(kw)))
   if (hits.length === 0) {
     return `[NOT_FOUND] 본문에 '${kw}'을(를) 포함한 조문이 없습니다. (총 ${parsed.articles.length}개조 검색)\n⚠️ LLM은 조문 내용을 추측/생성하지 마세요.`
@@ -137,11 +176,11 @@ export function buildPartialBody(body: string, fullText: string, params: Partial
   const parsed = parseAdminRuleArticles(body)
   switch (mode) {
     case "jo":
-      return { label: `조문 조회: ${params.jo}`, text: joView(parsed, params.jo!, params.context || 0), note }
+      return { label: `조문 조회: ${params.jo}`, text: joView(parsed, params.jo!, params.context || 0, body), note }
     case "chapter":
       return { label: `장 조회: ${params.chapter}`, text: chapterView(parsed, params.chapter!), note }
     case "keyword":
-      return { label: `본문 검색: ${params.keyword}`, text: keywordView(parsed, params.keyword!, params.max_results || 10), note }
+      return { label: `본문 검색: ${params.keyword}`, text: keywordView(parsed, params.keyword!, params.max_results || 10, body), note }
     case "page": {
       const r = paginateFullText(fullText, params.page || 1)
       const tail = r.page < r.totalPages ? `\n\n▶ 다음: page:${r.page + 1}` : ""

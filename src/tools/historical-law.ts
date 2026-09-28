@@ -3,7 +3,8 @@ import type { LawApiClient } from "../lib/api-client.js";
 import { truncateResponse, formatDateDot } from "../lib/schemas.js";
 import { formatToolError } from "../lib/errors.js";
 import { flattenContent, formatArticleUnit } from "../lib/article-parser.js";
-import { fetchHistoricalVersionsFull } from "../lib/historical-utils.js";
+import { normalizeDate } from "./applicable-law.js";
+import { fetchLawVersions, isRepealRow, nameTimeline, sameLawName, todayKst, versionInForce } from "../lib/law-lineage.js";
 
 /** JSON 필드 안전 문자열화 — 객체/배열이 와도 "[object Object]"를 만들지 않는다 */
 function safeText(v: unknown): string {
@@ -27,17 +28,14 @@ function joLabel(a: any): string {
 
 /**
  * 법령 연혁 조회 도구
- * - lsHistory API (HTML만 지원) 사용
- * - 행 파싱은 lib/historical-utils 단일 원본 (applicable_law·time_travel과 공용)
+ * - 법령ID 계보(eflaw LID) 우선: 제명이 바뀌기 전 버전까지 한 목록으로 (lib/law-lineage)
+ * - 계보를 못 잡으면 lsHistory 이름 일치로 폴백 (lib/historical-utils 단일 원본, applicable_law·time_travel과 공용)
  */
-
-/** lsHistory 한 페이지 원시 행 수 (applicable_law·time_travel이 쓰는 기본값과 같다) */
-const HISTORY_PAGE_SIZE = 500;
 
 // Search for law revision history
 export const searchHistoricalLawSchema = z.object({
-  lawName: z.string().describe("법령명 (예: '관세법', '민법', '형법')"),
-  display: z.number().min(1).max(100).default(50).describe("결과 개수 (기본값: 50)"),
+  lawName: z.string().describe("법령명 (예: '관세법', '소방시설법 시행령'). 약칭·옛 법령명도 받는다 — 제명이 바뀐 법령은 옛 이름 시절 연혁까지 한 목록으로 보여준다"),
+  display: z.number().min(1).max(500).default(100).describe("표시할 버전 수 (기본값: 100, 최신순)"),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달"),
 });
 
@@ -50,10 +48,9 @@ export async function searchHistoricalLaw(
   try {
     // 연혁 행 파싱을 historical-utils 단일 원본으로 돌린다. 로컬 사본은 무패딩 날짜("1961.12.8")를 못 읽어
     // 공포일이 비고, "폐지제정"을 "폐지"로 오표시했다 (2026-09-23 리뷰 B12, 실측 지방세법 제827호).
-    // 원본은 원시 총계까지 페이지를 이어 받으므로(500행 단위) 동명 법령의 전체 버전 수를 알 수 있다.
-    // display는 종전처럼 원시 행 수가 아니라 표시할 버전 수 상한으로 쓴다.
-    const { versions, totalCount, fetchedPages } = await fetchHistoricalVersionsFull(apiClient, args.lawName, args.apiKey, HISTORY_PAGE_SIZE);
-    const displayCap = args.display || 50;
+    // display는 원시 행 수가 아니라 표시할 버전 수 상한으로 쓴다.
+    const { versions, totalCount, fetchedPages, source, lawId } = await fetchLawVersions(apiClient, args.lawName, args.apiKey);
+    const displayCap = args.display || 100;
     const histories = versions.slice(0, displayCap);
 
     if (histories.length === 0) {
@@ -68,26 +65,44 @@ export async function searchHistoricalLaw(
       };
     }
 
-    // 전 페이지를 받았으면 전체 버전 수를 안다. 안전 상한(20페이지)에 걸려 못 받은 원시 행이 남은 경우만 미완으로 적는다.
-    const incomplete = totalCount > 0 && fetchedPages * HISTORY_PAGE_SIZE < totalCount;
+    // 안전 상한에 걸려 못 받은 행이 남은 경우만 미완으로 적는다 (계보는 100행, lsHistory는 500행 단위 페이지)
+    const pageSize = source === "lineage" ? 100 : 500;
+    const incomplete = totalCount > 0 && fetchedPages * pageSize < totalCount;
     let capNote = versions.length > displayCap ? `, 전체 ${versions.length}개 중 최근 ${displayCap}개 표시` : "";
     if (incomplete) capNote += `. 법제처 연혁 ${totalCount}행 중 일부만 수집해 이전 연혁이 더 있을 수 있음`;
-    let output = `${args.lawName} 연혁 (조회된 ${histories.length}개 버전${capNote}):\n\n`;
+    const today = todayKst();
+    // 폐지 행은 현행이 아니다 — 폐지된 법령이면 [현행] 표시가 없다
+    const current = versionInForce(versions, today);
+    const currentName = current?.lawNm || histories[0]?.lawNm || args.lawName;
+    const idNote = source === "lineage" && lawId ? `법령ID ${lawId}, ` : "";
+    let output = `${currentName} 연혁 (${idNote}조회된 ${histories.length}개 버전${capNote}):\n`;
 
+    // 제명 변천을 맨 위에 — 옛 이름 시절 버전이 같은 법령이라는 사실을 목록만 보고도 알게 한다
+    const timeline = nameTimeline(versions);
+    if (timeline.length > 1) {
+      output += `제명 변천: ${timeline.map(t => `${t.name}(${formatDateDot(t.from)}~)`).join(" → ")}\n`;
+    }
+    if (source === "name") {
+      output += `⚠️ 법령ID 계보를 확인하지 못해 법령명이 '${args.lawName}'과 같은 연혁만 모았습니다 — 제명이 바뀐 법령이면 옛 이름 시절 연혁이 빠졌을 수 있습니다.\n`;
+    }
+    output += `본문: get_historical_law(mst, efYd) — 아래 MST와 시행일을 함께 넘긴다 (같은 MST가 시행일별로 나뉜 분리시행이 있다)\n\n`;
+
+    let prevName = histories[0]?.lawNm || currentName;
     for (const h of histories) {
-      const efDate = formatDateDot(h.efYd);
-      const ancDate = formatDateDot(h.ancYd);
-      output += `시행: ${efDate}`;
+      if (h.lawNm && !sameLawName(h.lawNm, prevName)) {
+        output += `── 이하 법령명: ${h.lawNm} ──\n\n`;
+        prevName = h.lawNm;
+      }
+      const state = h === current ? " [현행]" : isRepealRow(h) ? " [폐지]" : h.efYd > today ? " [시행예정]" : "";
+      output += `시행: ${formatDateDot(h.efYd)}`;
       if (h.rrCls) output += ` | ${h.rrCls}`;
-      output += `\n`;
-      output += `   공포: ${ancDate}`;
+      output += `${state}\n`;
+      output += `   공포: ${formatDateDot(h.ancYd)}`;
       if (h.ancNo) output += ` (제${h.ancNo}호)`;
       output += `\n`;
       output += `   MST: ${h.mst}\n`;
       output += `\n`;
     }
-
-    // 후속 도구 안내 제거 (LLM이 이미 도구 목록을 알고 있음)
 
     return {
       content: [{
@@ -103,6 +118,7 @@ export async function searchHistoricalLaw(
 // Get historical law text at a specific version
 export const getHistoricalLawSchema = z.object({
   mst: z.string().describe("법령일련번호 (MST) - search_historical_law에서 획득"),
+  efYd: z.string().optional().describe("시행일자 (YYYYMMDD) - search_historical_law가 MST와 함께 준 시행일. 분리시행 공포본은 같은 MST라도 시행일마다 본문이 다르다"),
   jo: z.string().optional().describe("특정 조문 번호 (예: '제38조')"),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달"),
 });
@@ -114,11 +130,13 @@ export async function getHistoricalLaw(
   args: GetHistoricalLawInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
+    // target=law&MST 는 공포본 단위라 분리시행이면 마지막 시행 슬라이스를 준다. 시행일이 오면 eflaw 로 그 슬라이스를 집는다.
+    const efYd = args.efYd ? normalizeDate(args.efYd) || args.efYd : undefined
     const responseText = await apiClient.fetchApi({
       endpoint: "lawService.do",
-      target: "law",
+      target: efYd ? "eflaw" : "law",
       type: "JSON",
-      extraParams: { MST: args.mst },
+      extraParams: efYd ? { MST: args.mst, efYd } : { MST: args.mst },
       apiKey: args.apiKey,
     });
 

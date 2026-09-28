@@ -209,3 +209,26 @@ describe("verifyCitations — 판례 인용 검증 범위 (#93)", () => {
     expect(text).not.toContain("[HALLUCINATION_DETECTED]")
   })
 })
+
+describe("인용 법령명 추출·후보 (2026-09-28 성능 감사)", () => {
+  it("앞 인용의 꼬리를 법령명으로 삼키지 않는다 ('민법 제751조와 민법 제756조')", () => {
+    const cites = parseCitations("민법 제751조와 민법 제756조에 따라", 10)
+    expect(cites.map(c => c.lawName)).toEqual(["민법", "민법"])
+  })
+})
+
+describe("꼬리 후보 거르기가 실존 법령을 떨어뜨리지 않는다 (2026-09-28 리뷰)", () => {
+  it("'구 독립유공자예우에 관한 법률 제4조' → 조사로 끝나는 첫 어절 후보도 검색해 ✓", async () => {
+    const LAW = "독립유공자예우에 관한 법률"
+    const client = {
+      searchLaw: async (q: string) => q.replace(/\s/g, "") === LAW.replace(/\s/g, "")
+        ? `<LawSearch><law id="1"><법령일련번호>1</법령일련번호><법령명한글><![CDATA[${LAW}]]></법령명한글><법령ID>1</법령ID><법령구분명>법률</법령구분명></law></LawSearch>`
+        : `<LawSearch></LawSearch>`,
+      getLawText: async () => JSON.stringify({ 법령: { 조문: { 조문단위: [{ 조문여부: "조문", 조문번호: "4", 조문제목: "적용 대상자" }] } } }),
+      fetchApi: async () => `<LawSearch></LawSearch>`,
+    } as unknown as LawApiClient
+    const text = (await verifyCitations(client, { text: "구 독립유공자예우에 관한 법률 제4조", maxCitations: 5 })).content[0].text
+    expect(text).toContain(`✓ ${LAW} 제4조`)
+    expect(text).not.toContain("HALLUCINATION")
+  })
+})

@@ -9,6 +9,10 @@ import { lawCache } from "../lib/cache.js"
 import { formatArticleUnit } from "../lib/article-parser.js"
 import { getStrategyWarning } from "../lib/article-warnings.js"
 import { formatToolError } from "../lib/errors.js"
+import { rethrowIfFatal } from "../lib/fatal-errors.js"
+import { fetchLineageVersions, versionInForce } from "../lib/law-lineage.js"
+import { formatDateDot } from "../lib/schemas.js"
+import { normalizeDate } from "./applicable-law.js"
 
 import { MAX_RESPONSE_SIZE, truncateResponse } from "../lib/schemas.js"
 
@@ -24,11 +28,22 @@ export const GetLawTextSchema = z.object({
 
 export type GetLawTextInput = z.infer<typeof GetLawTextSchema>
 
+type LawTextResponse = { content: Array<{ type: string, text: string }>, isError?: boolean }
+
 export async function getLawText(
   apiClient: LawApiClient,
   input: GetLawTextInput
-): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
+): Promise<LawTextResponse> {
   try {
+    return await renderLawText(apiClient, input)
+  } catch (error) {
+    return formatToolError(error, "get_law_text")
+  }
+}
+
+/** 본문 조회·렌더. 오류를 던진다 — 기준일 보정의 재귀 호출이 예산 소진·취소를 "시행일 없음"으로 삼키지 않게 */
+async function renderLawText(apiClient: LawApiClient, input: GetLawTextInput): Promise<LawTextResponse> {
+  {
     // 조문 번호가 한글이면 JO 코드로 변환
     let joCode = input.jo
     if (joCode && /제\d+조/.test(joCode)) {
@@ -60,25 +75,45 @@ export async function getLawText(
       }
     }
 
-    const jsonText = await apiClient.getLawText({
-      mst: input.mst,
-      lawId: input.lawId,
-      jo: joCode,
-      efYd: input.efYd,
-      apiKey: input.apiKey
-    })
+    let jsonText: string
+    try {
+      jsonText = await apiClient.getLawText({
+        mst: input.mst,
+        lawId: input.lawId,
+        jo: joCode,
+        efYd: input.efYd,
+        efYdMayMiss: true,   // 사용자가 준 efYd 는 시행일이 아닐 수 있다 — 미스면 사다리 대신 확인 1회 뒤 아래 보정으로
+        apiKey: input.apiKey
+      })
+    } catch (error) {
+      // 없는 시행일에 조문(JO)까지 붙으면 빈 봉투가 아니라 HTML 미스로 온다 — 아래 빈 봉투와 같이 기준일 보정을 시도한다
+      if (!input.efYd) throw error
+      rethrowIfFatal(error)
+      const redirected = await retryAtVersionInForce(apiClient, input, joCode)
+      if (!redirected) throw error
+      lawCache.set(cacheKey, redirected, cacheTtl)
+      return { content: [{ type: "text", text: redirected }] }
+    }
 
     const json = JSON.parse(jsonText)
 
     // JSON 구조 파싱 (LexDiff 방식 적용)
     const lawData = json?.법령
     if (!lawData) {
+      // efYd 가 시행일이 아니면(흔히 "조회 기준일"로 오늘·사건일을 넣는다, #160) 그날 시행 중이던 버전으로 다시 조회한다
+      if (input.efYd) {
+        const redirected = await retryAtVersionInForce(apiClient, input, joCode)
+        if (redirected) {
+          lawCache.set(cacheKey, redirected, cacheTtl)
+          return { content: [{ type: "text", text: redirected }] }
+        }
+      }
       // efYd 가 붙어 있으면 그게 1순위 용의자다. 종전 메시지는 무조건 mst/lawId 를 탓해,
       // 식별자가 멀쩡한데도 "search_law 로 유효한 mst 를 확인하라"고 엉뚱한 곳을 가리켰다
       // (#160: search_law 가 준 mst/lawId 그대로인데 efYd 에 오늘 날짜를 넣어 NOT_FOUND).
-      const retryId = input.mst || input.lawId || ""
+      const retryArg = input.mst ? `mst="${input.mst}"` : `lawId="${input.lawId || ""}"`
       const hint = input.efYd
-        ? `⚠️ efYd=${input.efYd} 에 해당하는 시행일 버전이 없습니다. efYd 는 '조회 기준일'이 아니라 그 법령에 실재하는 시행일이어야 합니다 — 오늘 날짜를 넣으면 대개 실패합니다.\n→ 현행 본문: get_law_text(mst="${retryId}") 로 efYd 없이 재조회\n→ 시행예정본: search_law 가 안내한 efYd 를 그대로 사용\nmst/lawId 자체는 유효할 수 있습니다.`
+        ? `⚠️ efYd=${input.efYd} 에 해당하는 시행일 버전이 없습니다. efYd 는 '조회 기준일'이 아니라 그 법령에 실재하는 시행일이어야 합니다 — 오늘 날짜를 넣으면 대개 실패합니다.\n→ 현행 본문: get_law_text(${retryArg}) 로 efYd 없이 재조회\n→ 시행예정본: search_law 가 안내한 efYd 를 그대로 사용\nmst/lawId 자체는 유효할 수 있습니다.`
         : `⚠️ 법제처 API가 해당 mst/lawId에 대해 데이터를 반환하지 않았습니다. search_law로 유효한 mst를 먼저 확인하세요.`
       return {
         content: [{
@@ -298,7 +333,38 @@ export async function getLawText(
         text: resultText
       }]
     }
+  }
+}
+
+/**
+ * efYd 를 기준일로 보고 그날 시행 중이던 버전(MST+시행일)으로 다시 조회한다. 못 풀면 undefined(호출부가 NOT_FOUND).
+ * 과거본은 eflaw 에 MST+시행일로만 닿는다(lawId+efYd 는 빈 봉투, 2026-09-28 실측). 법령ID는 lawId 가 오면 그대로,
+ * mst 만 오면 target=law&MST&JO=000100(약 2KB)으로 얻어 계보를 받는다. 재귀 호출은 실재 시행일이라 다시 오지 않는다.
+ * 예산 소진·취소는 올린다(rethrowIfFatal) — 공개 도구(getLawText)를 거치면 그게 "시행일 없음"으로 바뀌었다.
+ */
+async function retryAtVersionInForce(apiClient: LawApiClient, input: GetLawTextInput, joCode?: string): Promise<string | undefined> {
+  const ymd = normalizeDate(input.efYd || "")
+  if (!ymd) return undefined
+  try {
+    let lawId = input.lawId
+    if (!lawId && input.mst) {
+      const head = JSON.parse(await apiClient.getLawText({ mst: input.mst, jo: "000100", apiKey: input.apiKey }))
+      lawId = head?.법령?.기본정보?.법령ID
+    }
+    if (!lawId) return undefined
+    const { versions } = await fetchLineageVersions(apiClient, String(lawId), input.apiKey)
+    const v = versionInForce(versions, ymd)
+    if (!v || (v.efYd === input.efYd && v.mst === input.mst)) return undefined
+    const r = await renderLawText(apiClient, { mst: v.mst, jo: joCode, efYd: v.efYd, apiKey: input.apiKey })
+    if (r.isError) return undefined
+    const where = `시행 ${formatDateDot(v.efYd)}, 공포 제${v.ancNo}호${v.rrCls ? ` ${v.rrCls}` : ""}, MST ${v.mst}${v.lawNm ? `, 당시 법령명 「${v.lawNm}」` : ""}`
+    // 시행일은 맞는데 lawId 라서 안 나온 경우(과거본은 MST+시행일로만 닿는다)와 시행일이 아닌 경우를 가른다
+    const note = v.efYd === ymd
+      ? `ℹ️ efYd=${input.efYd} 버전은 lawId 로는 조회되지 않아 MST 로 조회했습니다: ${where}\n`
+      : `ℹ️ efYd=${input.efYd}는 이 법령의 시행일이 아니어서, 그날(${formatDateDot(ymd)}) 시행 중이던 버전으로 조회했습니다: ${where}\n`
+    return note + r.content.map(c => c.text).join("\n")
   } catch (error) {
-    return formatToolError(error, "get_law_text")
+    rethrowIfFatal(error)
+    return undefined
   }
 }

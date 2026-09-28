@@ -23,8 +23,11 @@ export const DEFAULT_EXECUTION_LIMITS: ExecutionLimits = {
   // room for the documented chain workflows and bounded retry recovery while
   // stopping unbounded fan-out from one outer MCP request.
   maxUpstreamRequests: 48,
-  maxUpstreamBodyBytes: 2 * 1024 * 1024,
-  maxTotalUpstreamBodyBytes: 8 * 1024 * 1024,
+  // 법령 전문 JSON 은 2 MiB 를 흔히 넘는다(도로교통법 시행규칙 3.7 MB, 관세법 3단비교 1.98 MB).
+  // 넘으면 get_law_text 가 통째로 실패하고 get_annexes 는 낡을 수 있는 인덱스 링크로 떨어졌다.
+  // 통합 호스트는 런처가 8/24 MiB 로 올려 두어 npm 로컬 사용자만 실패했다 — 기본값을 그 값에 맞춘다(v4.15.0).
+  maxUpstreamBodyBytes: 8 * 1024 * 1024,
+  maxTotalUpstreamBodyBytes: 24 * 1024 * 1024,
   maxToolResponseChars: 50_000,
 }
 

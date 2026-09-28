@@ -166,6 +166,8 @@ export class LawApiClient {
     lawId?: string
     jo?: string
     efYd?: string
+    /** efYd 가 그 법령의 시행일이 아닐 수 있는 호출(사용자 입력). 미스를 확인 1회로 끊는다 */
+    efYdMayMiss?: boolean
     apiKey?: string
   }): Promise<string> {
     // MST 단독(efYd 없음)은 target=law 로 바로 간다. 법제처가 2026-08-27부터 eflaw 단건에
@@ -194,7 +196,11 @@ export class LawApiClient {
     if (params.efYd) apiParams.append("efYd", String(params.efYd))
 
     const url = `${LAW_API_BASE}/lawService.do?${apiParams.toString()}`
-    const response = await fetchWithRetry(url, lookupRetryFor(target))
+    // 시행일을 못박은 eflaw 조회가 그 시행일 버전이 없으면 법제처는 JO 동반 시 HTML 안내 페이지를 고정으로 준다
+    // (2026-09-28 실측: MST 287375 + efYd=오늘 + JO → 4회 3.1초). 사다리를 다 태워도 같은 답이라 확인 1회로 끊는다.
+    // 호출부가 그럴 수 있다고 밝힌 경우(사용자가 준 efYd)만이다 — 계보로 고른 실재 시행일 조회는 종전 사다리로 일시 장애를 버틴다.
+    const retry = target === "eflaw" && params.efYdMayMiss ? DRF_LOOKUP_RETRY : lookupRetryFor(target)
+    const response = await fetchWithRetry(url, retry)
     await this.throwIfError(response, "getLawText")
 
     const notFoundContext = params.jo
@@ -266,6 +272,9 @@ export class LawApiClient {
     knd?: string
     apiKey?: string
     nw?: string // 1=현행(기본), 2=연혁 — 폐지·개정 전 이력 포함
+    /** 업스트림 기본 20건. 상한 100 */
+    display?: number
+    page?: number
   }): Promise<string> {
     const apiParams = new URLSearchParams({
       OC: this.getApiKey(params.apiKey),
@@ -276,6 +285,8 @@ export class LawApiClient {
 
     if (params.knd) apiParams.append("knd", params.knd)
     if (params.nw) apiParams.append("nw", params.nw)
+    if (params.display) apiParams.append("display", String(Math.min(100, params.display)))
+    if (params.page && params.page > 1) apiParams.append("page", String(params.page))
 
     const url = `${LAW_API_BASE}/lawSearch.do?${apiParams.toString()}`
     const response = await fetchWithRetry(url, DRF_RETRY)
@@ -430,6 +441,8 @@ export class LawApiClient {
     toRegDt?: string
     org?: string
     page?: number
+    /** 업스트림 기본 20. 상한 100 */
+    display?: number
     apiKey?: string
   }): Promise<string> {
     const apiParams = new URLSearchParams({
@@ -445,6 +458,7 @@ export class LawApiClient {
     if (params.toRegDt) apiParams.append("toRegDt", String(params.toRegDt))
     if (params.org) apiParams.append("org", String(params.org))
     if (params.page) apiParams.append("page", params.page.toString())
+    if (params.display) apiParams.append("display", String(Math.min(100, params.display)))
 
     const url = `${LAW_API_BASE}/lawSearch.do?${apiParams.toString()}`
     const response = await fetchWithRetry(url, DRF_RETRY)

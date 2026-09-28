@@ -150,25 +150,22 @@ export async function fetchHistoricalVersionsFull(
 /** eflaw 검색의 시행 슬라이스 한 건 (HistoricalVersion과 동일 형상) */
 export type EffectiveSlice = HistoricalVersion
 
-const SLICE_LAW_RE = /<law[^>]*>([\s\S]*?)<\/law>/g
+/** 시행일 → 공포일 → 공포번호 내림차순 (같은 날 시행되는 복수 공포본은 나중 공포본이 앞) */
+export function compareVersionsDesc(a: HistoricalVersion, b: HistoricalVersion): number {
+  return parseInt(b.efYd || "0", 10) - parseInt(a.efYd || "0", 10) ||
+    parseInt(b.ancYd || "0", 10) - parseInt(a.ancYd || "0", 10) ||
+    parseInt(b.ancNo || "0", 10) - parseInt(a.ancNo || "0", 10)
+}
 
-/**
- * eflaw(시행일 기준) 검색 XML → 대상 법령의 시행 슬라이스 목록 (시행일·공포일·공포번호 내림차순).
- * lsHistory는 공포단위 1행이라 한 공포본의 조항별 분리시행(단계 시행일)이 보이지 않는다 —
- * 예: 소득세법 법률 제9897호는 시행일이 4개(2009.12.31./2010.1.1./2010.4.1./2010.7.1.)인데
- * lsHistory엔 2010.1.1. 한 행뿐. eflaw는 슬라이스마다 한 행씩 반환한다.
- */
-export function parseEffectiveSlices(xmlText: string, lawName: string): EffectiveSlice[] {
-  const normalizedTarget = lawName.replace(/\s/g, "")
-  const out: EffectiveSlice[] = []
-  let m
-  while ((m = SLICE_LAW_RE.exec(xmlText)) !== null) {
+/** eflaw 검색 XML 의 행 전부 (이름 필터 없음). lawId 는 법령ID — 계보 필터용 */
+export function parseEffectiveRows(xmlText: string): Array<EffectiveSlice & { lawId: string }> {
+  const out: Array<EffectiveSlice & { lawId: string }> = []
+  for (const m of xmlText.matchAll(/<law[^>]*>([\s\S]*?)<\/law>/g)) {
     const c = m[1]
     const lawNm = extractTag(c, "법령명한글")
-    if (!lawNm || lawNm.replace(/\s/g, "") !== normalizedTarget) continue
     const efYd = extractTag(c, "시행일자")
     const mst = extractTag(c, "법령일련번호")
-    if (!/^\d{8}$/.test(efYd) || !mst) continue
+    if (!lawNm || !/^\d{8}$/.test(efYd) || !mst) continue
     const ancNoRaw = extractTag(c, "공포번호")
     out.push({
       mst,
@@ -178,13 +175,24 @@ export function parseEffectiveSlices(xmlText: string, lawName: string): Effectiv
       ancYd: extractTag(c, "공포일자"),
       lawNm,
       rrCls: extractTag(c, "제개정구분명"),
+      lawId: extractTag(c, "법령ID"),
     })
   }
-  out.sort((a, b) =>
-    parseInt(b.efYd || "0", 10) - parseInt(a.efYd || "0", 10) ||
-    parseInt(b.ancYd || "0", 10) - parseInt(a.ancYd || "0", 10) ||
-    parseInt(b.ancNo || "0", 10) - parseInt(a.ancNo || "0", 10))
   return out
+}
+
+/**
+ * eflaw(시행일 기준) 검색 XML → 대상 법령의 시행 슬라이스 목록 (시행일·공포일·공포번호 내림차순).
+ * lsHistory는 공포단위 1행이라 한 공포본의 조항별 분리시행(단계 시행일)이 보이지 않는다 —
+ * 예: 소득세법 법률 제9897호는 시행일이 4개(2009.12.31./2010.1.1./2010.4.1./2010.7.1.)인데
+ * lsHistory엔 2010.1.1. 한 행뿐. eflaw는 슬라이스마다 한 행씩 반환한다.
+ */
+export function parseEffectiveSlices(xmlText: string, lawName: string): EffectiveSlice[] {
+  const normalizedTarget = lawName.replace(/\s/g, "")
+  return parseEffectiveRows(xmlText)
+    .filter(r => r.lawNm.replace(/\s/g, "") === normalizedTarget)
+    .map((r): EffectiveSlice => ({ mst: r.mst, efYd: r.efYd, ancNo: r.ancNo, ancYd: r.ancYd, lawNm: r.lawNm, rrCls: r.rrCls }))
+    .sort(compareVersionsDesc)
 }
 
 /**

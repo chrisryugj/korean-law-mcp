@@ -14,6 +14,7 @@ import { getRequestSignal } from "../lib/session-state.js"
 import { getLawSiteBaseUrl } from "../lib/law-url-config.js"
 import { fetchLawAnnexUnits, findMissingUnits, pickAnnexUnit, type LawAnnexUnit } from "../lib/annex-canonical.js"
 import { parseLawNameAndHint } from "../lib/annex-notation.js"
+import { getAnnexesAtDate } from "./annex-history.js"
 import { collectAnnexList, collectAdminAnnexList, ANNEX_PAGE_SIZE, MAX_ANNEX_PAGES, type AnnexTruncationReason } from "./annex-list.js"
 import {
   buildSelectorCandidates, extractBundledSection, extractParentLawName, extractSelectorNumbers,
@@ -31,6 +32,7 @@ export const GetAnnexesSchema = z.object({
   annexNo: z.string().optional().describe("별표 번호 (예: '4', '별표4', '제4호'). bylSeq 대체 입력"),
   query: z.string().optional().describe("별표명으로 좁히기 (예: '운전면허 취소·정지', '과태료'). 번호를 모를 때 사용. 1건으로 좁혀지면 그 별표 본문을 바로 추출"),
   jo: z.string().optional().describe("위임 조문 (예: '제38조', '38'). 조문 동반 질의('관세법 제38조 별표2')의 조문 맥락 — 별표명의 '(제38조 관련)' 표기와 대조해 좁히고, 응답에 위임 관계를 표기"),
+  date: z.string().optional().describe("기준일 (예: '2015-06-01'). 지정 시 그날 시행 중이던 법령 버전의 별표를 조회 — 건축허가·착공·처분·위반 시점 기준이 필요할 때. 제명이 바뀐 법령도 옛 버전까지 찾는다. 별표 번호는 시점마다 다를 수 있으니 query(별표명)로 좁히는 것이 안전. 미지정 시 현행"),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달")
 })
 
@@ -46,6 +48,9 @@ export async function getAnnexes(
     // query에 "별표28"처럼 번호가 실려오면 그것도 선택값으로 인정한다 (#94)
     const queryHint = input.query ? parseLawNameAndHint(input.query).annexNo : undefined
     const annexSelector = (input.bylSeq || input.annexNo || parsedLawInput.annexNo || queryHint || "").trim()
+
+    // 기준일 지정 → 그날 시행 버전의 별표 (법령ID 계보로 버전 특정)
+    if (input.date) return await getAnnexesAtDate(apiClient, input, normalizedLawName, annexSelector, extractAnnexContent)
 
     let annexList: AnnexItem[] = []
     let lawType: string = "law"
