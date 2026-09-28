@@ -31,6 +31,17 @@
 
 ---
 
+## v4.15.0: Point-in-time lookups that survive law renames
+
+Korean statutes are often renamed (the fire-safety act changed its title three times since 2004). History used to be matched by title, so every version before a rename vanished and `applicable_law` answered "not yet in force" for a 2015 date. Versions are now chained by the statute ID (`eflaw` search with `LID`), in effective-date slices. Still 10 tools; only optional parameters were added.
+
+- `applicable_law` resolves former titles (e.g. the 2015 fire-safety decree, 9 → **79** versions in the history list) and warns when a full revision renumbered the articles in between
+- `get_annexes` takes `date` and returns the annex of the version in force that day (e.g. installation criteria at building-permit time)
+- `applicable_law` also handles administrative rules (notices) such as the sprinkler fire-safety standard (NFSC 103 → NFPC 103, one lineage since 2004); NFTC-style section numbers (`jo: "2.7.3"`) work in `get_admin_rule`
+- `get_law_text` treats a non-effective `efYd` (today, an incident date) as a reference date instead of failing
+- `verify_citations` reports a renamed statute as renamed, not repealed; `get_article_history` no longer drops changes beyond the first page
+- Default upstream body limits raised to 8/24 MiB (matching the hosted server); repeat annex lookups 2.4s → 0.8s. See [CHANGELOG](CHANGELOG.md)
+
 ## v4.13.0 — Compliance-register monitoring: 98 calls down to 1-2
 
 Three field reports from running an ISO compliance register (108 laws across 8 domains) against this server:
@@ -438,7 +449,7 @@ v4.4.0 consolidated the advertised tools (52% context reduction). The former 8 `
 | **Analysis** (1) | `legal_analysis` | Verification & analysis — pick one of 4 `mode` values |
 | **Law** (3) | `search_law` | Search statutes → get lawId, MST |
 | | `get_law_text` | Full article text retrieval |
-| | `get_annexes` | Annex/form retrieval (fee tables, rate tables, forms) |
+| | `get_annexes` | Annex/form retrieval (fee tables, rate tables, forms; `date` for the version in force that day) |
 | **Ordinance** (1) | `ordinance_radar` | Ordinance revision radar — auto-diffs the parent statutes a local ordinance cites (v4.7.0) |
 | **Unified** (2) | `search_decisions` | **18 domain** unified search (precedents, constitutional court, tax tribunal, NTS, FTC, NLRC, customs, interpretations, admin appeals, PIPC, ACR, ACR special, appeal review, school rules, public corps, public institutions, treaties, English law) |
 | | `get_decision_text` | **18 domain** full text retrieval |

@@ -9,7 +9,7 @@
 >   - `.github/workflows/publish.yml`(GitHub Release → OIDC trusted publishing + provenance)은 **npm 쪽 trusted publisher 등록이 아직 안 됐다**. 그래서 게시는 위 로컬 `npm publish` 가 정규 경로이고, Release 는 그 뒤에 만든다 — 워크플로는 같은 버전이 이미 레지스트리에 있으면 게시를 건너뛰고 검증(typecheck·test·build·verify:package·audit)만 릴리스 시점에 재확인한다.
 > - **🚫 이 레포에서 `fly deploy` 직접 실행 절대 금지** — 통합 이미지를 law 단독 이미지로 덮어써 stats·patent·archhub·school까지 전부 죽는다. 자세한 배경: [docs/FLY-COST.md](docs/FLY-COST.md)
 
-Korean Law MCP Server v4.14.2 - 법제처 42개 API → 10개 통합 도구 (내부 99개) + 9개 시나리오 + 자연어 CLI + HTTP stateless + 판례 토큰 74% 감축 + **legal_research (체인 8종 통합, task 파라미터)** + **legal_analysis (인용검증·판례생사·행위시법·영향그래프 통합, mode 파라미터)** + **time_travel (시점 diff)** + **action_plan (이럴 땐 이렇게, 5단계 안내)** + **시행예정 감지 (search_law가 제명변경·미시행 개정 자동 병기)** + **ordinance_radar (조례 정비 레이더 — 근거 상위법 개정 자동 대조, v4.7.0)** + **인용 검증 표기 내성 (낫표·가운뎃점·`같은 법` 조응, v4.9.0)** + **폐지 감지 (검색 0건 시 폐지 법령·행정규칙 연혁 추적 — 폐지사유·후속 통합 규정 자동 안내, v4.10.0)** + **search_law_bulk (등록부 대량 조회 + MST diff 감시, v4.13.0)** + **행정규칙 부분 조회 (get_admin_rule 의 jo·chapter·keyword·page — 통짜 전문을 조문 단위로, v4.14.0)**
+Korean Law MCP Server v4.15.0 - 법제처 42개 API → 10개 통합 도구 (내부 99개) + 9개 시나리오 + 자연어 CLI + HTTP stateless + 판례 토큰 74% 감축 + **legal_research (체인 8종 통합, task 파라미터)** + **legal_analysis (인용검증·판례생사·행위시법·영향그래프 통합, mode 파라미터)** + **time_travel (시점 diff)** + **action_plan (이럴 땐 이렇게, 5단계 안내)** + **시행예정 감지 (search_law가 제명변경·미시행 개정 자동 병기)** + **ordinance_radar (조례 정비 레이더 — 근거 상위법 개정 자동 대조, v4.7.0)** + **인용 검증 표기 내성 (낫표·가운뎃점·`같은 법` 조응, v4.9.0)** + **폐지 감지 (검색 0건 시 폐지 법령·행정규칙 연혁 추적 — 폐지사유·후속 통합 규정 자동 안내, v4.10.0)** + **search_law_bulk (등록부 대량 조회 + MST diff 감시, v4.13.0)** + **행정규칙 부분 조회 (get_admin_rule 의 jo·chapter·keyword·page — 통짜 전문을 조문 단위로, v4.14.0)** + **법령ID 계보 연혁 (제명이 바뀌기 전 버전까지 — search_historical_law·applicable_law·time_travel, get_annexes date 시점 별표, get_law_text efYd 기준일 보정, 행정규칙 기준일 판단, v4.15.0)**
 
 ## Structure
 
@@ -34,6 +34,8 @@ src/
 │   ├── search-normalizer.ts  # 검색어 정규화 (LexDiff, 약칭 표제 60건 — LAW_ALIAS_ENTRIES 항목 수 기준)
 │   ├── upcoming-laws.ts  # 시행예정 법령 감지 (eflaw 보조검색 — 제명변경·미시행 개정 병기)
 │   ├── abolished-laws.ts # 폐지 감지 (법령=eflaw·행정규칙=nw=2 연혁 — 폐지사유·후속 통합 규정 안내)
+│   ├── law-lineage.ts    # 법령ID 계보 (eflaw LID — 제명변경을 가로지르는 전 시행 버전, 옛 법령명→법령ID, 기준일 버전)
+│   ├── admin-rule-history.ts # 행정규칙 발령 연혁 (nw=2 검색 → 행정규칙ID로 묶기, 기준일 버전, 화재안전기준 코드)
 │   ├── admin-rule-articles.ts # 행정규칙 통짜 전문 → 조문 배열 파서 (^앵커 + 조문번호 단조증가)
 │   ├── admin-rule-views.ts   # 행정규칙 부분 조회 뷰 (jo·chapter·keyword·page) + 전문 XML 캐시
 │   ├── law-parser.ts     # JO 코드 변환 (LexDiff)
@@ -171,7 +173,9 @@ get_law_text(mst, jo="006300") → 제63조(휴직) 조회
 | `tools/verify-citations.ts` | LLM 환각 방지 인용 검증 (v3.5 killer feature) |
 | `tools/impact-map.ts` | 조문 영향 그래프 + mermaid 시각화 (v4.0 killer feature) |
 | `tools/cite-check.ts` | 판례 생사 확인 — 후속 인용 역추적 + 별칭 추적 변경·폐기 감지 (v4.3 killer feature) |
-| `tools/applicable-law.ts` | 행위시법 판단 — 시점 적용 버전 특정 + 부칙 경과규정 발췌 (v4.3 killer feature) |
+| `tools/applicable-law.ts` | 행위시법 판단 — 시점 적용 버전 특정 + 부칙 경과규정 발췌 (v4.3 killer feature). 버전은 `lib/law-lineage` 계보로 특정 (v4.15.0) |
+| `tools/applicable-admin-rule.ts` | applicable_law 의 행정규칙 갈래 — 법령이 아닌 이름을 발령 연혁으로 판단 (v4.15.0) |
+| `tools/annex-history.ts` | get_annexes 의 `date` 갈래 — 기준일 시행 버전(eflaw MST+efYd)의 별표 (v4.15.0) |
 | `tools/ordinance-radar.ts` | 조례 정비 레이더 — 제1조(목적) 근거법 추출 + 상위법 개정 대조 자동 플래그 (v4.7.0 killer feature) |
 | `tools/unified-decisions.ts` | 17개 도메인 통합 + compactLongSections 후처리 축약 |
 | `lib/decision-compact.ts` | 판례 토큰 최적화 (compactBody/densify/stripRepeatedSummary/compactLongSections) |

@@ -142,8 +142,8 @@
 | 한도 | 기본 | env |
 |---|---|---|
 | 업스트림 시도 횟수 | 48 | `MCP_MAX_UPSTREAM_REQUESTS` |
-| 응답 1건 본문 | 2 MiB | `MCP_MAX_UPSTREAM_BODY_BYTES` |
-| 요청 전체 본문 합 | 8 MiB | `MCP_MAX_TOTAL_UPSTREAM_BODY_BYTES` |
+| 응답 1건 본문 | 8 MiB | `MCP_MAX_UPSTREAM_BODY_BYTES` |
+| 요청 전체 본문 합 | 24 MiB | `MCP_MAX_TOTAL_UPSTREAM_BODY_BYTES` |
 | 도구 응답 문자 | 50,000자 | `MCP_MAX_TOOL_RESPONSE_CHARS` |
 
 `parseIntegerLimit`이 경계값을 통째로 정수 검사한다 — `parseInt("12x") → 12` 관용을 받지 않는다. 체인 데드라인도 같은 검증을 쓴다.
