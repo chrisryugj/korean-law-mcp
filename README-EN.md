@@ -31,6 +31,17 @@
 
 ---
 
+## v4.15.1: Annexes as they look in the original
+
+The annex parser (kordoc 4.17.0) now reads annexes the way they look in the original HWP. 103 of 272 annexes lay out the whole page with
+invisible-border frame tables, which used to come out as one giant table. Borderless frames are now plain text, only ruled parts stay tables,
+and fractions built from two cells and a rule become `$\frac{…}{…}$`.
+
+- Exact-match tables against what the original shows (346 tables): HWP 66 → **346**, law.go.kr PDF 56 → **335**
+- The `get_law_text` `efYd` description now says a reference date (building permit, incident date) resolves to the version in force that day
+
+---
+
 ## v4.15.0: Point-in-time lookups that survive law renames
 
 Korean statutes are often renamed (the fire-safety act changed its title three times since 2004). History used to be matched by title, so every version before a rename vanished and `applicable_law` answered "not yet in force" for a 2015 date. Versions are now chained by the statute ID (`eflaw` search with `LID`), in effective-date slices. Still 10 tools; only optional parameters were added.
