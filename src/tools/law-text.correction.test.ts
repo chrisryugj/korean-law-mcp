@@ -125,6 +125,14 @@ describe("보정 결과를 정직하게", () => {
     expect(t).toContain("현행")
   })
 
+  it("같은 버전을 먼저 직접 조회해 캐시돼 있어도, 보정 조회의 현행 표기는 그대로다", async () => {
+    const { api } = stub()
+    await getLawText(api, { mst: "300", efYd: "20250101", jo: "제1조" })   // 일반 표기("현행 아닐 수 있음")로 캐시
+    const t = text(await getLawText(api, { lawId: "001638", efYd: "20260101", jo: "제1조" }))
+    expect(t).toContain("현행 버전")
+    expect(t).not.toContain("현행 법령이 아닐 수 있음")
+  })
+
   it("보정한 버전이 아직 시행 전이면 시행예정본이라고 밝힌다", async () => {
     const rows: Row[] = [{ mst: "400", efYd: "20990601" }, ...BASE]
     const { api } = stub(rows)
@@ -158,8 +166,9 @@ describe("기준일이 계보 시작(재제정) 전이면 동명 구법 버전�
       `<tr><td class="ce">1</td><td><a href="/DRF/lawService.do?OC=x&amp;target=lsHistory&amp;MST=${mst}&amp;type=HTML&amp;mobileYn=&amp;efYd=${efYd}" >테스트법</a></td>` +
       `<td class="ce">부처</td><td class="ce">${rr}</td><td class="ce">법률</td><td class="ce">제 1호</td><td class="ce">${efYd.slice(0, 4)}.1.1</td><td class="ce">${efYd}</td><td class="ce">연혁</td></tr>`
     const history = `<html><strong>2</strong> 건<table>${tr("50", "20000101", "일부개정")}${tr("40", "19900101", "제정")}</table></html>`
-    const { api } = stub(BASE, undefined, history)
+    const { api, calls } = stub(BASE, undefined, history)
     const r = await getLawText(api, { lawId: "001638", efYd: "20050101", jo: "제1조" })
+    expect(lineageCalls(calls)).toBe(1)   // 받아 둔 계보에 구법만 덧붙인다 — 계보를 다시 받지 않는다
     const t = text(r)
     expect(r.isError).toBeFalsy()
     expect(t).toContain("시행 2000.01.01")

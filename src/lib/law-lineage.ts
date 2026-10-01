@@ -148,7 +148,7 @@ export interface LawVersionsResult extends HistoricalFetchResult {
  * 한 번 더 받는다 — 계보 안의 기준일은 호출 수가 그대로다. 계보 시작일 이하이면서 계보에 없는 MST 를 구법으로 본다.
  * 같은 날의 구법 폐지 행은 신법 제정 행 뒤에 놓여, 재제정일 당일이 "폐지"로 읽히지 않는다.
  */
-async function withPriorSameNameLaw(
+export async function withPriorSameNameLaw(
   apiClient: LawApiClient,
   versions: HistoricalVersion[],
   asOf: string,
