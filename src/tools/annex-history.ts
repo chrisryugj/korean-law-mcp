@@ -38,7 +38,8 @@ export async function getAnnexesAtDate(
   if (!ymd) {
     return notFoundResponse(`기준일 '${input.date}'을(를) 해석하지 못했습니다.`, ["지원 형식: 2015-06-01 / 2015.6.1 / 20150601 / 2015년 6월 1일"])
   }
-  const { versions } = await fetchLawVersions(apiClient, lawName, input.apiKey)
+  // 기준일이 계보 시작 전이면 폐지 후 재제정되기 전의 동명 구법(법령ID가 다르다)까지 받는다
+  const { versions } = await fetchLawVersions(apiClient, lawName, input.apiKey, undefined, ymd)
   if (versions.length === 0) {
     return notFoundResponse(`'${lawName}'의 연혁을 찾지 못했습니다. 기준일(date) 별표 조회는 법령(법률·대통령령·부령)만 지원합니다.`, [
       "search_law로 정식 법령명을 확인하세요.",
@@ -62,6 +63,7 @@ export async function getAnnexesAtDate(
   const thenName = v.lawNm || lawName
   let header = `📅 기준일 ${formatDateDot(ymd)} 당시 시행 버전의 별표입니다.\n`
   header += `  「${thenName}」 [시행 ${formatDateDot(v.efYd)}] [제${v.ancNo}호, ${formatDateDot(v.ancYd)} ${v.rrCls}] (MST ${v.mst})\n`
+  if (v.priorLaw) header += "  ↳ 법령ID가 다른 동명 구법(폐지 후 같은 이름으로 재제정되기 전)의 버전입니다.\n"
   if (current && current.mst === v.mst && current.efYd === v.efYd) {
     header += "  ↳ 이 버전이 현행입니다.\n"
   } else if (current) {

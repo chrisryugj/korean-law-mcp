@@ -12,6 +12,8 @@ export interface HistoricalVersion {
   ancYd: string
   lawNm: string
   rrCls: string
+  /** 법령ID가 다른 동명 구법의 행 — 폐지 후 같은 이름으로 재제정되기 전 (lib/law-lineage) */
+  priorLaw?: boolean
 }
 
 export interface HistoricalFetchResult {

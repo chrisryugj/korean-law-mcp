@@ -21,7 +21,7 @@ import { truncateResponse, formatDateDot } from "../lib/schemas.js"
 import { formatToolError, notFoundResponse } from "../lib/errors.js"
 import { findLaws } from "../lib/law-search.js"
 import { fetchEffectiveSlices, type HistoricalVersion } from "../lib/historical-utils.js"
-import { fetchLawVersions, lawStateAt, resolveLawId, sameLawName, todayKst, wholeRevisionsBetween } from "../lib/law-lineage.js"
+import { fetchLawVersions, lawStateAt, resolveLawId, sameLawName, todayKst, wholeRevisionLabel, wholeRevisionsBetween } from "../lib/law-lineage.js"
 import { applicableAdminRule } from "./applicable-admin-rule.js"
 import { buildJO } from "../lib/law-parser.js"
 import { cleanHtml } from "../lib/article-parser.js"
@@ -186,7 +186,8 @@ export async function applicableLaw(
     }
 
     // 2. 연혁 → 기준일 시행 버전 특정 (versions는 시행일 내림차순). 법령ID 계보라 제명이 바뀌기 전 버전도 잡힌다.
-    const { versions, source } = await fetchLawVersions(apiClient, resolved.matchedName, input.apiKey, resolved.lawId)
+    // 기준일을 넘겨 계보 시작 전이면 폐지 후 재제정되기 전의 동명 구법(법령ID가 다르다)까지 받는다.
+    const { versions, source } = await fetchLawVersions(apiClient, resolved.matchedName, input.apiKey, resolved.lawId, date)
     const today = todayKst()
     // 폐지 행은 "시행 중 버전"이 아니다 — 폐지된 법령이면 현행이 없다(repealedNow)
     const { version: current, repeal: repealedNow } = lawStateAt(versions, today)
@@ -222,9 +223,10 @@ export async function applicableLaw(
     // 분리시행: 한 공포본의 조항별 시행일(단계 시행). 계보(eflaw)는 슬라이스마다 한 행이라 이미 반영돼 있다.
     // 이름 기반 폴백(lsHistory)은 공포단위 1행이라 안 보인다 — 예: 소득세법 법률 제9897호는 시행일 4개인데
     // lsHistory엔 2010.1.1. 한 행뿐. 그때만 eflaw 슬라이스 검색으로 (적용버전 시행일, 기준일] 구간을 보정한다.
+    // 동명 구법 행(priorLaw)도 lsHistory 에서 온 공포 단위 행이라 같이 보정한다.
     let effective: HistoricalVersion = applicable
     let staggered = source === "lineage" && versions.some(v => v.mst === applicable.mst && v.efYd !== applicable.efYd && v.efYd < applicable.efYd)
-    if (source === "name") {
+    if (source === "name" || applicable.priorLaw) {
       try {
         const slices = await fetchEffectiveSlices(apiClient, lawName, applicable.efYd, date, input.apiKey)
         const later = slices.find(s => s.efYd > applicable.efYd && s.efYd <= date)
@@ -251,7 +253,10 @@ export async function applicableLaw(
       .filter(Boolean).join(", ")
     const thenName = effective.lawNm || lawName
     lines.push(`  ${thenName} [시행 ${fmtYmd(effective.efYd)}] [${promulgation}] (MST ${effective.mst})`)
-    if (!sameLawName(thenName, lawName)) {
+    if (applicable.priorLaw) {
+      const reEnacted = versions.filter(v => !v.priorLaw).pop()   // 계보 첫 행 = 신법 제정
+      lines.push(`  ↳ 법령ID가 다른 동명 구법입니다 — 현행 「${lawName}」(법령ID ${resolved.lawId})은 ${fmtYmd(reEnacted?.efYd || "")} 같은 이름으로 새로 제정된 별개 법령이라, 구법 연혁은 법령명 일치 연혁에서 찾았습니다.`)
+    } else if (!sameLawName(thenName, lawName)) {
       lines.push(`  ↳ 당시 법령명은 「${thenName}」 — 현행 「${lawName}」과 같은 법령(법령ID ${resolved.lawId})입니다. 기준일 사건의 근거로 인용할 때는 당시 법령명을 씁니다.`)
     }
     if (staggered) {
@@ -266,7 +271,7 @@ export async function applicableLaw(
       lines.push(`  ↳ 기준일 이후 현재까지 ${laterVersions.length}차례 개정·시행됨 (현행: 시행 ${fmtYmd(current?.efYd || "")})`)
       if (wholeSince.length > 0) {
         const w = wholeSince[wholeSince.length - 1]
-        lines.push(`  ⚠️ 그 사이 전부개정(시행 ${fmtYmd(w.efYd)}, 제${w.ancNo}호)으로 조문 체계가 바뀌었습니다 — 같은 조번호라도 현행에선 다른 조문일 수 있습니다. 현행 대응 조문은 조문 제목으로 찾으세요.`)
+        lines.push(`  ⚠️ 그 사이 ${wholeRevisionLabel(w)}(시행 ${fmtYmd(w.efYd)}, 제${w.ancNo}호)으로 조문 체계가 바뀌었습니다 — 같은 조번호라도 현행에선 다른 조문일 수 있습니다. 현행 대응 조문은 조문 제목으로 찾으세요.`)
       }
     } else if (partialHistory) {
       lines.push(`  ↳ 이름이 같은 연혁상 마지막 버전입니다 (현행 여부 미확인)`)
@@ -322,7 +327,7 @@ export async function applicableLaw(
         lines.push("")
         const norm = (s: string) => s.replace(/\s+/g, "")
         if (wholeSince.length > 0) {
-          lines.push(`▶ 현행 같은 조번호(${joDisplay})와 비교 생략 — 전부개정으로 조문 체계가 바뀌어 번호만 같은 다른 조문일 수 있습니다. 현행 대응 조문은 제목으로 찾아 get_law_text로 확인하세요.`)
+          lines.push(`▶ 현행 같은 조번호(${joDisplay})와 비교 생략 — ${wholeRevisionLabel(wholeSince[wholeSince.length - 1])}으로 조문 체계가 바뀌어 번호만 같은 다른 조문일 수 있습니다. 현행 대응 조문은 제목으로 찾아 get_law_text로 확인하세요.`)
         } else if (thenText && nowText) {
           if (norm(thenText) === norm(nowText)) {
             lines.push(`▶ 현행과 비교: ✅ 동일 (기준일 이후 이 조문은 개정되지 않음)`)

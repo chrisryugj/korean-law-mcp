@@ -53,6 +53,52 @@ describe("폐지 행은 시행 중 버전이 아니다 (종전: 소방법 타법
   })
 })
 
+describe("폐지 후 동명 재제정 법령의 구법 시절 기준일 (종전 v4.15.0: '시행 전입니다. 최초 시행일 1997.03.13')", () => {
+  // 근로기준법: 1997.3.13. 구법(법률 제5305호로 폐지) → 같은 날 같은 이름 신법 제정(법령ID 001872). 감사 실측 축약
+  const LSA = "근로기준법"
+  const lineage = xml([lawRow("283457", "20260820", LSA, "001872", "타법개정", "현행"), lawRow("53681", "19970313", LSA, "001872", "제정")])
+  const tr = (mst: string, efYd: string, rr: string, no: string) =>
+    `<tr><td><a href="/DRF/lawService.do?target=lsHistory&amp;MST=${mst}&amp;efYd=${efYd}" >${LSA}</a></td><td>${rr}</td><td>제 ${no}호</td><td>${efYd.slice(0, 4)}.1.1</td></tr>`
+  const history = `<html><strong>4</strong> 건<table>${tr("53681", "19970313", "제정", "05309")}${tr("4974", "19970313", "폐지", "05305")}` +
+    `${tr("4972", "19900714", "타법개정", "04220")}${tr("4963", "19530809", "제정", "00286")}</table></html>`
+  const article = (body: string) => JSON.stringify({ 법령: { 조문: { 조문단위: [{ 조문여부: "조문", 조문번호: "1", 조문내용: body }] } } })
+  const calls: string[] = []
+  const client = {
+    searchLaw: async (_q: string, _k?: string, _d?: number, target?: string) =>
+      target === "eflaw" ? xml([]) : xml([lawRow("283457", "20260820", LSA, "001872", "타법개정", "현행")]),
+    fetchApi: async (p: { target: string, extraParams?: Record<string, string> }) => {
+      calls.push(p.extraParams?.LID ? "lineage" : p.target)
+      if (p.extraParams?.LID) return lineage
+      if (p.target === "lsHistory") return history
+      if (p.target === "eflaw") return xml([])   // 분리시행 보정 검색 (구법은 공포 단위 행이라 v4.14.2 처럼 보정한다)
+      return `{"법령":{"부칙":{"부칙단위":[]}}}`
+    },
+    getLawText: async (p: { mst: string }) => {
+      calls.push(`text:${p.mst}`)
+      return article(p.mst === "4972" ? "제1조(목적) 구법 목적" : "제1조(목적) 신법 목적")
+    },
+  } as unknown as LawApiClient
+
+  it("applicable_law: 계보 시작 전 기준일은 동명 구법 버전, 현행 같은 조번호 비교는 생략", async () => {
+    calls.length = 0
+    const text = (await applicableLaw(client, { lawName: LSA, date: "1995-05-01", jo: "제1조" })).content[0].text
+    expect(text).toContain("근로기준법 [시행 1990.07.14]")
+    expect(text).toContain("(MST 4972)")
+    expect(text).toContain("법령ID가 다른 동명 구법")
+    expect(text).toContain("구법 목적")
+    expect(text).toContain("폐지 후 재제정")
+    expect(text).not.toContain("시행 전입니다")
+    expect(calls).not.toContain("text:283457")   // 다른 법령의 같은 조번호를 받아 "변경됨"으로 비교하지 않는다
+  })
+
+  it("applicable_law: 계보 안의 기준일은 lsHistory 를 부르지 않는다", async () => {
+    calls.length = 0
+    const text = (await applicableLaw(client, { lawName: LSA, date: "2000-01-01" })).content[0].text
+    expect(text).toContain("(MST 53681)")
+    expect(calls).not.toContain("lsHistory")
+  })
+})
+
 describe("계보 조회 실패 + 옛 이름 입력은 '현행'을 단정하지 않는다", () => {
   it("이름 기반 폴백이면 경고하고 마지막 버전을 현행이라 하지 않는다", async () => {
     const OLD = "화재예방, 소방시설 설치ㆍ유지 및 안전관리에 관한 법률"

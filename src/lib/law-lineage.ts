@@ -142,14 +142,44 @@ export interface LawVersionsResult extends HistoricalFetchResult {
 }
 
 /**
+ * 폐지 후 같은 이름으로 재제정돼 법령ID가 바뀐 법령의 구법 행을 계보 뒤에 붙인다. 계보(LID)는 신법만 준다: 근로기준법은
+ * 1997.3.13. 구법 폐지와 같은 날 신법(법령ID 001872)이 제정돼, 1995년 기준일을 "시행 전"으로 답했다(감사 실측 —
+ * 이름 일치 lsHistory 를 쓰던 v4.14.2 는 1953년 제정본부터 줬다). 기준일이 계보 시작(제정 행)보다 앞일 때만 lsHistory 를
+ * 한 번 더 받는다 — 계보 안의 기준일은 호출 수가 그대로다. 계보 시작일 이하이면서 계보에 없는 MST 를 구법으로 본다.
+ * 같은 날의 구법 폐지 행은 신법 제정 행 뒤에 놓여, 재제정일 당일이 "폐지"로 읽히지 않는다.
+ */
+async function withPriorSameNameLaw(
+  apiClient: LawApiClient,
+  versions: HistoricalVersion[],
+  asOf: string,
+  apiKey?: string,
+): Promise<HistoricalVersion[]> {
+  const first = versions[versions.length - 1]
+  if (!first || !/제정$/.test(first.rrCls) || asOf >= first.efYd) return versions
+  try {
+    const { versions: named } = await fetchHistoricalVersionsFull(apiClient, first.lawNm, apiKey)
+    const known = new Set(versions.map(v => v.mst))
+    const prior = named
+      .filter(v => v.efYd && v.efYd <= first.efYd && !known.has(v.mst))
+      .map(v => ({ ...v, priorLaw: true }))
+    return prior.length > 0 ? [...versions, ...prior] : versions
+  } catch (error) {
+    rethrowIfFatal(error)
+    return versions
+  }
+}
+
+/**
  * 법령 전 버전. 법령ID 계보를 먼저 쓰고, 법령ID를 못 찾거나 계보가 비면 종전 lsHistory 이름 일치로 물러선다.
  * lawId 를 이미 아는 호출부(applicable_law·체인)는 넘겨서 검색 왕복을 아낀다.
+ * asOf(YYYYMMDD 기준일)를 주면 그날이 계보 시작 전일 때 동명 구법 행까지 싣는다(withPriorSameNameLaw).
  */
 export async function fetchLawVersions(
   apiClient: LawApiClient,
   lawName: string,
   apiKey?: string,
   lawId?: string,
+  asOf?: string,
 ): Promise<LawVersionsResult> {
   let id = lawId
   if (!id) {
@@ -162,7 +192,10 @@ export async function fetchLawVersions(
   if (id) {
     try {
       const r = await fetchLineageVersions(apiClient, id, apiKey)
-      if (r.versions.length > 0) return { ...r, source: "lineage", lawId: id }
+      if (r.versions.length > 0) {
+        const versions = asOf ? await withPriorSameNameLaw(apiClient, r.versions, asOf, apiKey) : r.versions
+        return { ...r, versions, source: "lineage", lawId: id }
+      }
     } catch (error) {
       // 예산 소진·취소는 올리고, 그 밖의 계보 조회 장애는 이름 기반 연혁으로 물러선다
       rethrowIfFatal(error)
@@ -219,7 +252,17 @@ export function sameLawName(a: string, b: string): boolean {
   return nameKey(a) === nameKey(b)
 }
 
-/** (fromYmd, toYmd] 구간의 전부개정 — 조문 번호 체계가 바뀌어 같은 조번호가 다른 조문일 수 있다 */
+/**
+ * (fromYmd, toYmd] 구간의 전부개정 — 조문 번호 체계가 바뀌어 같은 조번호가 다른 조문일 수 있다.
+ * 제정 행은 그보다 앞에 다른 MST 행(동명 구법, withPriorSameNameLaw)이 있을 때만 재제정으로 넣는다 — 분리시행된 제정
+ * 공포본의 뒤 시행분(개인정보 보호법 MST 111327: 2011.9.30.·2012.3.30.)은 같은 법령의 단계 시행일 뿐이다(검증 실측).
+ */
 export function wholeRevisionsBetween(versions: HistoricalVersion[], fromYmd: string, toYmd: string): HistoricalVersion[] {
-  return versions.filter(v => /전부개정|폐지제정/.test(v.rrCls) && v.efYd > fromYmd && v.efYd <= toYmd)
+  const reEnacted = (v: HistoricalVersion) => v.rrCls === "제정" && versions.some(o => o.mst !== v.mst && o.efYd < v.efYd)
+  return versions.filter(v => (/전부개정|폐지제정/.test(v.rrCls) || reEnacted(v)) && v.efYd > fromYmd && v.efYd <= toYmd)
+}
+
+/** wholeRevisionsBetween 행을 부르는 말 — 제정 행은 폐지 후 재제정이다 */
+export function wholeRevisionLabel(v: HistoricalVersion): string {
+  return v.rrCls === "제정" ? "폐지 후 재제정" : "전부개정"
 }

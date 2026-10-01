@@ -73,4 +73,28 @@ describe("get_annexes date — 기준일 시행 버전의 별표", () => {
     expect(r.isError).toBe(true)
     expect(r.content[0].text).toContain("시행 전")
   })
+
+  it("폐지 후 동명 재제정 법령은 계보 시작 전 기준일에 구법 버전의 별표 (종전: '시행 전')", async () => {
+    // 근로기준법 신법(법령ID 001872)은 1997.3.13. 제정부터 — 구법은 이름 일치 lsHistory 에만 있다 (감사 실측 축약)
+    const lsaRow = (mst: string, efYd: string, rr: string) =>
+      `<law id="x"><법령일련번호>${mst}</법령일련번호><법령명한글><![CDATA[근로기준법]]></법령명한글><법령ID>001872</법령ID>` +
+      `<공포일자>${efYd}</공포일자><공포번호>1</공포번호><제개정구분명>${rr}</제개정구분명><시행일자>${efYd}</시행일자></law>`
+    const seen: string[] = []
+    const c = {
+      searchLaw: async () => `<LawSearch><totalCnt>1</totalCnt>${lsaRow("283457", "20260820", "타법개정")}</LawSearch>`,
+      fetchApi: async (p: { target: string, extraParams?: Record<string, string> }) => {
+        const ep = p.extraParams || {}
+        seen.push(`${p.target}:${ep.MST || ep.LID || ""}:${ep.efYd || ""}`)
+        if (ep.LID) return `<LawSearch><totalCnt>2</totalCnt>${lsaRow("283457", "20260820", "타법개정")}${lsaRow("53681", "19970313", "제정")}</LawSearch>`
+        if (p.target === "lsHistory") {
+          return `<html><strong>1</strong> 건<table><tr><td><a href="/x?MST=4972&amp;efYd=19900714" >근로기준법</a></td><td>타법개정</td><td>제 04220호</td><td>1990.1.13</td></tr></table></html>`
+        }
+        return annexJson("1")
+      },
+    } as unknown as LawApiClient
+    const text = (await getAnnexes(c, { lawName: "근로기준법", date: "1995-05-01" })).content[0].text
+    expect(text).toContain("(MST 4972)")
+    expect(text).toContain("법령ID가 다른 동명 구법")
+    expect(seen).toContain("eflaw:4972:19900714")
+  })
 })

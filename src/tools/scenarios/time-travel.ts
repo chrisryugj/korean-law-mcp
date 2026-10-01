@@ -11,7 +11,7 @@
  */
 import type { ScenarioContext, ScenarioResult, ScenarioSection } from "./types.js"
 import type { HistoricalVersion } from "../../lib/historical-utils.js"
-import { fetchLawVersions, sameLawName, wholeRevisionsBetween } from "../../lib/law-lineage.js"
+import { fetchLawVersions, sameLawName, wholeRevisionLabel, wholeRevisionsBetween } from "../../lib/law-lineage.js"
 import { hasLawNode } from "../../lib/api-client.js"
 import {
   changeExcerpt, diffArticles, displayJo, dot, excerptBudget, extractLawSnapshot,
@@ -93,8 +93,9 @@ export async function runTimeTravelScenario(ctx: ScenarioContext): Promise<Scena
   let totalCount = 0
   let fetchedPages = 0
   try {
-    // 법령ID 계보 — 두 시점 사이에 제명이 바뀌어도(소방시설법 2022.12.1.) 옛 이름 시절 버전을 잡는다
-    const r = await fetchLawVersions(ctx.apiClient, lawName, ctx.apiKey, ctx.law?.lawId)
+    // 법령ID 계보 — 두 시점 사이에 제명이 바뀌어도(소방시설법 2022.12.1.) 옛 이름 시절 버전을 잡는다.
+    // 이른 시점이 계보 시작 전이면 폐지 후 재제정되기 전의 동명 구법(법령ID가 다르다)까지 받는다
+    const r = await fetchLawVersions(ctx.apiClient, lawName, ctx.apiKey, ctx.law?.lawId, fromDate < toDate ? fromDate : toDate)
     versions = r.versions
     totalCount = r.totalCount
     fetchedPages = r.fetchedPages
@@ -209,7 +210,7 @@ export async function runTimeTravelScenario(ctx: ScenarioContext): Promise<Scena
   const whole = wholeRevisionsBetween(versions, oldVer.efYd, newVer.efYd)
   if (whole.length > 0) {
     const w = whole[whole.length - 1]
-    body += `\n⚠️ 두 시점 사이 전부개정(시행 ${dot(w.efYd) || w.efYd}, 공포 제${w.ancNo}호) — 조문 체계가 바뀌어 아래 조번호 대조는 번호만 같은 다른 조문일 수 있습니다. 조문 제목으로 대응 관계를 확인하세요.`
+    body += `\n⚠️ 두 시점 사이 ${wholeRevisionLabel(w)}(시행 ${dot(w.efYd) || w.efYd}, 공포 제${w.ancNo}호) — 조문 체계가 바뀌어 아래 조번호 대조는 번호만 같은 다른 조문일 수 있습니다. 조문 제목으로 대응 관계를 확인하세요.`
   }
 
   // 두 시점 사이에 낀 개정들 — 각 변경의 근거 공포를 특정할 수 있게 한다 (#96)

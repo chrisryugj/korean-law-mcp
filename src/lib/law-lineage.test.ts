@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest"
 import { fetchLawVersions, fetchLineageVersions, nameTimeline, resolveLawId, versionInForce, wholeRevisionsBetween } from "./law-lineage.js"
 import { lawCache } from "./cache.js"
+import { ExecutionLimitError } from "./execution-limits.js"
 import type { LawApiClient } from "./api-client.js"
 
 // lawSearch.do?target=eflaw&LID=009694&nw=1,2,3 실응답 형식 축약 (2026-09-28).
@@ -96,6 +97,20 @@ describe("계보 해석 도우미", () => {
     expect(wholeRevisionsBetween(versions, "20150407", "20260701").map(v => v.mst)).toEqual(["245535"])
     expect(wholeRevisionsBetween(versions, "20221201", "20260701")).toEqual([])
   })
+
+  it("wholeRevisionsBetween: 제정은 앞에 다른 법령 행이 있을 때(동명 재제정)만 — 분리시행 제정본의 뒤 시행분은 아니다", () => {
+    // 개인정보 보호법 계보 실측: 제정 MST 111327 이 2011.9.30.·2012.3.30. 두 시행분 (검증 실측 — 종전 정규식이 2012.3.30. 행을 재제정으로 셌다)
+    const staggered = [
+      { mst: "111327", efYd: "20120330", ancNo: "10465", ancYd: "20110329", lawNm: "개인정보 보호법", rrCls: "제정" },
+      { mst: "111327", efYd: "20110930", ancNo: "10465", ancYd: "20110329", lawNm: "개인정보 보호법", rrCls: "제정" },
+    ]
+    expect(wholeRevisionsBetween(staggered, "20110930", "20120330")).toEqual([])
+    const reEnacted = [
+      { mst: "53681", efYd: "19970313", ancNo: "5309", ancYd: "19970313", lawNm: "근로기준법", rrCls: "제정" },
+      { mst: "4972", efYd: "19900714", ancNo: "04220", ancYd: "19900113", lawNm: "근로기준법", rrCls: "타법개정", priorLaw: true },
+    ]
+    expect(wholeRevisionsBetween(reEnacted, "19900714", "19970313").map(v => v.mst)).toEqual(["53681"])
+  })
 })
 
 const searchXml = (rows: Array<[string, string, string?]>) =>
@@ -149,5 +164,80 @@ describe("fetchLawVersions — 계보 실패 시 이름 기반 폴백", () => {
     const r = await fetchLawVersions(client, "민법", undefined, "001706")
     expect(r.source).toBe("name")
     expect(r.versions[0].mst).toBe("10")
+  })
+})
+
+// 폐지 후 같은 이름으로 재제정돼 법령ID가 바뀐 법령 — 근로기준법(1997.3.13. 구법 폐지·신법 제정, 신법 법령ID 001872).
+// eflaw LID 계보는 신법(1997~)뿐이라, 기준일이 그 전이면 "시행 전"으로 답했다(감사 실측: 1995.5.1. → 종전 v4.14.2 는 MST 4972).
+const LSA = "근로기준법"
+const LSA_LINEAGE = lineageXml(2, [
+  row("283457", "20260820", LSA, "21373", "20260219", "타법개정", "001872"),
+  row("53681", "19970313", LSA, "05309", "19970313", "제정", "001872"),
+])
+// lsHistory 실응답 행 형식 (2026-10-01 「근로기준법」): 법령명 링크 · 소관부처 · 제개정구분 · 종류 · 공포번호 · 공포일 · 시행일
+const histTr = (mst: string, efYd: string, name: string, rr: string, ancNo: string, ancYd: string) =>
+  `<tr><td class="ce">1</td><td><a href="/DRF/lawService.do?OC=x&amp;target=lsHistory&amp;MST=${mst}&amp;type=HTML&amp;mobileYn=&amp;efYd=${efYd}" >${name}</a></td>` +
+  `<td class="ce">고용노동부</td><td class="ce">${rr}</td><td class="ce">법률</td><td class="ce">제 ${ancNo}호</td><td class="ce">${ancYd}</td><td class="ce">${efYd}</td><td class="ce">연혁</td></tr>`
+const LSA_HISTORY =`<html><strong>7</strong> 건<table>` + [
+  histTr("283457", "20260820", LSA, "타법개정", "21373", "2026.2.19"),
+  histTr("55265", "19971224", LSA, "일부개정", "05473", "1997.12.24"),   // 계보 시작 뒤 — 받지 않는다
+  histTr("53681", "19970313", LSA, "제정", "05309", "1997.3.13"),        // 계보에 있는 MST — 받지 않는다
+  histTr("4974", "19970313", LSA, "폐지", "05305", "1997.3.13"),
+  histTr("4972", "19900714", LSA, "타법개정", "04220", "1990.1.13"),
+  histTr("14383", "19540407", "근로기준법시행령", "제정", "00889", "1954.4.7"),
+  histTr("4963", "19530809", LSA, "제정", "00286", "1953.5.10"),
+].join("") + `</table></html>`
+
+function lsaClient(targets: string[], lineage = LSA_LINEAGE): LawApiClient {
+  return {
+    fetchApi: async (p: { target: string }) => {
+      targets.push(p.target)
+      return p.target === "lsHistory" ? LSA_HISTORY : lineage
+    },
+  } as unknown as LawApiClient
+}
+
+describe("fetchLawVersions — 폐지 후 동명 재제정 (법령ID가 다른 구법)", () => {
+  beforeEach(() => lawCache.clear())
+
+  it("기준일이 계보 시작(제정)보다 앞이면 동명 구법 연혁을 이어 붙인다", async () => {
+    const targets: string[] = []
+    const r = await fetchLawVersions(lsaClient(targets), LSA, undefined, "001872", "19950501")
+    expect(r.versions.map(v => `${v.mst}:${v.efYd}`)).toEqual([
+      "283457:20260820", "53681:19970313", "4974:19970313", "4972:19900714", "4963:19530809",
+    ])
+    expect(r.versions.map(v => Boolean(v.priorLaw))).toEqual([false, false, true, true, true])
+    expect(r.source).toBe("lineage")
+    expect(versionInForce(r.versions, "19950501")?.mst).toBe("4972")
+    // 재제정일 당일은 신법 제정 행이 구법 폐지 행보다 앞 — 폐지로 읽지 않는다
+    expect(versionInForce(r.versions, "19970313")?.mst).toBe("53681")
+    expect(targets.filter(t => t === "lsHistory")).toHaveLength(1)
+  })
+
+  it("기준일이 계보 안이거나 기준일이 없으면 lsHistory 를 부르지 않는다 (일반 법령 호출 수 그대로)", async () => {
+    for (const asOf of ["19970313", "20000101", undefined]) {
+      const targets: string[] = []
+      const r = await fetchLawVersions(lsaClient(targets), LSA, undefined, "001872", asOf)
+      expect(r.versions, String(asOf)).toHaveLength(2)
+      expect(targets, String(asOf)).toEqual(["eflaw"])
+    }
+  })
+
+  it("계보 첫 행이 제정이 아니면(계보가 덜 온 경우 등) 이름으로 덧붙이지 않는다", async () => {
+    const targets: string[] = []
+    const partial = lineageXml(1, [row("283457", "20260820", LSA, "21373", "20260219", "타법개정", "001872")])
+    const r = await fetchLawVersions(lsaClient(targets, partial), LSA, undefined, "001872", "19950501")
+    expect(r.versions).toHaveLength(1)
+    expect(targets).toEqual(["eflaw"])
+  })
+
+  it("구법 조회 장애는 계보만으로 답한다 (예산 소진·취소는 올린다)", async () => {
+    const failing = (error: Error) => ({
+      fetchApi: async (p: { target: string }) => { if (p.target === "lsHistory") throw error; return LSA_LINEAGE },
+    }) as unknown as LawApiClient
+    const r = await fetchLawVersions(failing(new Error("일시 장애")), LSA, undefined, "001872", "19950501")
+    expect(r.versions).toHaveLength(2)
+    await expect(fetchLawVersions(failing(new ExecutionLimitError("budget")), LSA, undefined, "001872", "19950501"))
+      .rejects.toThrow(ExecutionLimitError)
   })
 })
