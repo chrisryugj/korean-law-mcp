@@ -258,19 +258,25 @@ function selectLawTextSource(laws: LawInfo[], query: string): { reliableLaws: La
   return { reliableLaws, textLaw: laws[0], lowConfidence: laws.length > 0 }
 }
 
+/** 판례 갈래의 검색 단계 결과. 근거(상세) 단계가 같은 detailMemo 를 이어 쓴다 */
+interface PrecedentChainSearch {
+  structuredResult: StructuredPrecedentSearchResult
+  searchResult: CallResult
+  detailMemo: PrecedentDetailMemo
+}
+
 async function searchPrecedentsForChain(
   apiClient: LawApiClient,
   input: { query: string; display: number; apiKey?: string },
-  context: PrecedentSearchContext = {},
-  detailLimit = 2
-): Promise<{ structuredResult: StructuredPrecedentSearchResult; searchResult: CallResult; detailResult: CallResult | null }> {
+  context: PrecedentSearchContext = {}
+): Promise<PrecedentChainSearch> {
   const args: SearchPrecedentsInput = {
     query: input.query,
     display: input.display,
     page: 1,
     apiKey: input.apiKey,
   }
-  // 검증이 받은 상위 판례 상세를 아래 근거 조회가 다시 받지 않게 한 호출 안에서 공유한다 (B#10)
+  // 검증이 받은 상위 판례 상세를 근거 조회가 다시 받지 않게 한 호출 안에서 공유한다 (B#10)
   const detailMemo: PrecedentDetailMemo = new Map()
   const { result: search, error } = await safeSearchPrecedentsStructured(apiClient, args, {
     ...context,
@@ -278,30 +284,33 @@ async function searchPrecedentsForChain(
     validateResult: validation => validatePrecedentSearchResult(apiClient, validation, { apiKey: input.apiKey, detailMemo }),
   })
 
-  if (error) {
-    return {
-      structuredResult: search,
-      searchResult: error,
-      detailResult: null,
-    }
-  }
-
-  const searchResult: CallResult = {
-    text: renderPrecedentSearchResult(search),
-    isError: search.hits.length === 0,
-  }
-  const evidence = await fetchPrecedentEvidence(apiClient, search, {
-    apiKey: input.apiKey,
-    detailLimit,
-    full: false,
-    detailMemo,
-  })
+  if (error) return { structuredResult: search, searchResult: error, detailMemo }
 
   return {
     structuredResult: search,
-    searchResult,
-    detailResult: evidence ? { text: evidence.text, isError: evidence.isError } : null,
+    searchResult: {
+      text: renderPrecedentSearchResult(search),
+      isError: search.hits.length === 0,
+    },
+    detailMemo,
   }
+}
+
+/** 판례 갈래의 근거(상세) 단계. 검색이 실패했거나 0건이면 받을 상세가 없다 */
+async function fetchPrecedentDetailForChain(
+  apiClient: LawApiClient,
+  search: PrecedentChainSearch,
+  apiKey?: string,
+  detailLimit = 2
+): Promise<CallResult | null> {
+  if (search.searchResult.isError) return null
+  const evidence = await fetchPrecedentEvidence(apiClient, search.structuredResult, {
+    apiKey,
+    detailLimit,
+    full: false,
+    detailMemo: search.detailMemo,
+  })
+  return evidence ? { text: evidence.text, isError: evidence.isError } : null
 }
 
 function combineStructuredPrecedentResults(
@@ -371,6 +380,25 @@ async function searchThenDetail(
     fetchSearchDetailChain(apiClient, searchTool, searchO.value, { apiKey })
   )
   return { searchO, detailO }
+}
+
+type StagedOutcomes = { searchO: LegOutcome<CallResult>; detailO: LegOutcome<CallResult | null> }
+
+/**
+ * 판례 갈래(구조화 검색 → 근거 상세)를 단계별로 데드라인과 경주시킨다. 규칙은 searchThenDetail 과 같다.
+ * 갈래를 통짜로 race 하면 상세 한 건만 늦어도 시간 안에 받은 검색 목록까지 "관련 판례 ⏱"로 바뀐다
+ * (실측: 상세 1건 8초 지연, 검색은 79ms 에 200).
+ */
+async function precedentSearchThenDetail(
+  deadline: ChainDeadline,
+  apiClient: LawApiClient,
+  input: { query: string; display: number; apiKey?: string },
+  context: PrecedentSearchContext = {}
+): Promise<StagedOutcomes> {
+  const searchO = await raceDeadline(deadline, searchPrecedentsForChain(apiClient, input, context))
+  if (!searchO.ok) return { searchO, detailO: { ok: true, value: null } }
+  const detailO = await raceDeadline(deadline, fetchPrecedentDetailForChain(apiClient, searchO.value, input.apiKey))
+  return { searchO: { ok: true, value: searchO.value.searchResult }, detailO }
 }
 
 /** 질의에 법령명 모양 어절("관세법"·"… 시행령")이 있는가 — 없으면 기반 탐색이 의미검색까지 가야 한다 */
@@ -629,14 +657,12 @@ export async function chainDisputePrep(
     const domainSearch = DISPUTE_DOMAIN_SEARCH[domain]
     const exp = detectExpansions(input.query)
 
-    // 판례는 구조화 hit 기반 상세조회까지 한 경로(searchPrecedentsForChain)라 통짜로,
-    // 나머지 검색→상세 갈래는 단계별로 race 한다. 출력 순서는 조립에서 지킨다.
-    const [precedentO, appeal, domainR, interp] = await Promise.all([
-      raceDeadline(dl, searchPrecedentsForChain(
-        apiClient,
+    // 검색→상세 갈래는 판례까지 모두 단계별로 race 한다. 판례를 통짜로 race 하면 상세가 늦을 때
+    // 받은 검색 목록까지 마커로 바뀐다. 출력 순서는 조립에서 지킨다.
+    const [prec, appeal, domainR, interp] = await Promise.all([
+      precedentSearchThenDetail(dl, apiClient,
         { query: input.query, display: 8, apiKey: input.apiKey },
-        { route: routeQuery(input.query) }
-      )),
+        { route: routeQuery(input.query) }),
       searchThenDetail(dl, apiClient, "search_admin_appeals",
         () => callTool(searchAdminAppeals, apiClient, { query: input.query, display: 8, apiKey: input.apiKey }),
         input.apiKey),
@@ -652,13 +678,10 @@ export async function chainDisputePrep(
         : Promise.resolve(null),
     ])
 
-    if (precedentO.ok) parts.push(secOrSkip("대법원 판례", precedentO.value.searchResult))
-    else parts.push(timedOutSection("대법원 판례", "search_decisions"))
+    pushLeg(parts, prec.searchO, "대법원 판례", "search_decisions")
     pushLeg(parts, appeal.searchO, "행정심판례", "search_decisions")
 
-    if (precedentO.ok && precedentO.value.detailResult) {
-      parts.push(secOrSkip("대법원 판례 상세", precedentO.value.detailResult))
-    }
+    pushLeg(parts, prec.detailO, "대법원 판례 상세", "get_decision_text")
     pushLeg(parts, appeal.detailO, "행정심판례 상세", "get_decision_text")
 
     if (domainR && domainSearch) {
@@ -894,19 +917,26 @@ export async function chainFullResearch(
         return { laws: [], failure: errorCallResult(error, "search_law") }
       }
     }
-    const interpP = callTool(searchInterpretations, apiClient, { query: input.query, display: 5, apiKey: input.apiKey })
-    // 판례(AI 신호만 필요)·해석례 상세(해석례 검색만 필요)는 기반 법령 탐색을 기다리지 않는다(종전 526ms 유휴)
-    const bundleP = aiP.then(ai => searchPrecedentsForChain(
-      apiClient,
-      { query: input.query, display: 5, apiKey: input.apiKey },
-      { aiLawArticles: ai.aiLawArticles, route: routeQuery(input.query), maxFallbackAttempts: PRECEDENT_FALLBACK_LIMIT },
-    ))
-    const interpDetailP = interpP.then(r => fetchSearchDetailChain(apiClient, "search_interpretations", r, { apiKey: input.apiKey }))
-    void Promise.all([bundleP, interpDetailP]).catch(() => {})  // 만료로 조기 반환하면 아무도 기다리지 않는다
-    const step1 = await raceDeadline(dl, Promise.all([aiP, findBaseLaws(), interpP]))
-    if (!step1.ok) return expiredChainResult(parts)
-    const [aiResult, base, interpResult] = step1.value
-    const { reliableLaws: lawsResult, textLaw, lowConfidence } = selectLawTextSource(base.laws, input.query)
+    // Step 1 갈래는 각각 따로, 띄우는 시점에 race 를 건다. 그래야 시간 안에 끝난 갈래의 결과가 남는다:
+    // 만료 뒤에 새로 건 race 는 이미 끝난 작업에도 {ok:false} 다. 종전엔 AI·기반 탐색·해석례를 한 덩어리로
+    // race 해서, 최대 3단계 직렬인 기반 탐색 하나가 만료되면 시간 안에 받은 AI·해석례·판례(검색·상세)까지
+    // 버리고 머리글과 "받은 전부" 고지만 냈다(실측: 법령 검색만 8초 지연, 나머지 80ms 안 수신 → 111자).
+    const aiO = raceDeadline(dl, aiP)
+    const interp = searchThenDetail(dl, apiClient, "search_interpretations",
+      () => callTool(searchInterpretations, apiClient, { query: input.query, display: 5, apiKey: input.apiKey }),
+      input.apiKey)
+    // 판례(AI 신호만 필요)·해석례 상세(해석례 검색만 필요)는 기반 법령 탐색을 기다리지 않는다(종전 526ms 유휴).
+    // 판례도 검색과 근거(상세)를 단계별로 race 한다: 상세가 늦어도 받은 검색 목록은 싣는다
+    const prec = aiO.then((ai): Promise<StagedOutcomes> | StagedOutcomes => ai.ok
+      ? precedentSearchThenDetail(dl, apiClient,
+          { query: input.query, display: 5, apiKey: input.apiKey },
+          { aiLawArticles: ai.value.aiLawArticles, route: routeQuery(input.query), maxFallbackAttempts: PRECEDENT_FALLBACK_LIMIT })
+      : { searchO: { ok: false }, detailO: { ok: true, value: null } })
+    void Promise.all([aiO, interp, prec]).catch(() => {})  // 기반 탐색이 던져 일찍 끝나면 아무도 기다리지 않는다
+    const baseO = await raceDeadline(dl, findBaseLaws())
+    // 기반 탐색이 만료되면 법령에 딸린 갈래(본문·별표·시나리오)는 띄우지 못한다. 그 자리만 마커로 남긴다
+    const { reliableLaws: lawsResult, textLaw, lowConfidence } =
+      selectLawTextSource(baseO.ok ? baseO.value.laws : [], input.query)
 
     // Scenario 확장
     const scenario = (input.scenario || detectScenario(input.query, "chain_full_research")) as ScenarioType | null
@@ -915,22 +945,23 @@ export async function chainFullResearch(
     // 이 체인은 서식(annex_form)도 같은 조회로 받으므로 함께 가린다
     const exp = detectExpansions(input.query)
     const providesAnnex = scenarioProvides(scenario).includes("annex")
-    const wantsAnnex = lawsResult.length > 0 &&
-      (shouldFetchAnnexSeparately(exp, scenario) || (exp.includes("annex_form") && !providesAnnex))
+    const annexAsked = shouldFetchAnnexSeparately(exp, scenario) || (exp.includes("annex_form") && !providesAnnex)
+    const wantsAnnex = lawsResult.length > 0 && annexAsked
 
-    // Step 1 이후 갈래(본문·판례·해석례 상세·별표·시나리오)는 서로 독립이다. 종전엔 본문 → 판례 → 나머지
-    // 순차였고, 본문·판례 단계에서 만료되면 Step 1 에 이미 받은 해석례까지 버린 채 "위까지가 시간 안에
+    // 기반 법령 뒤의 갈래(본문·별표·시나리오)와 이미 띄운 판례·해석례는 서로 독립이다. 종전엔 본문 → 판례 →
+    // 나머지 순차였고, 본문·판례 단계에서 만료되면 Step 1 에 이미 받은 해석례까지 버린 채 "위까지가 시간 안에
     // 받은 전부"라고 밝혔다 (2026-09-23 리뷰 B#4·B#8). 함께 띄우고, 싣는 순서는 종전 그대로 지킨다.
-    const [lawTextO, bundleO, interpDetailO, annexO, srO] = await Promise.all([
+    const [aiR, precR, interpR, lawTextO, annexO, srO] = await Promise.all([
+      aiO,
+      prec,
+      interp,
       raceDeadline(dl, textLaw
         ? callTool(getLawText, apiClient, { mst: textLaw.mst, apiKey: input.apiKey })
         : Promise.resolve(null)),
-      raceDeadline(dl, bundleP),
-      raceDeadline(dl, interpDetailP),
       raceDeadline(dl, wantsAnnex
         ? callTool(getAnnexes, apiClient, { lawName: lawsResult[0].lawName, apiKey: input.apiKey })
         : Promise.resolve(null)),
-      raceDeadline(dl, scenario
+      raceDeadline(dl, baseO.ok && scenario
         ? runScenario(scenario, {
             apiClient,
             query: input.query,
@@ -940,23 +971,24 @@ export async function chainFullResearch(
         : Promise.resolve(null)),
     ])
 
-    parts.push(secOrSkip("AI 법령검색 결과", aiResult))
+    pushLeg(parts, aiR, "AI 법령검색 결과", "search_ai_law")
 
     // 법령 본문 (첫 번째 결과)
-    if (base.failure) parts.push(secOrSkip("법령 본문 (기반 법령 검색)", base.failure))
+    if (!baseO.ok) parts.push(timedOutSection("법령 본문 (기반 법령 검색)", "search_law"))
+    else if (baseO.value.failure) parts.push(secOrSkip("법령 본문 (기반 법령 검색)", baseO.value.failure))
     if (textLaw) {
       const confidenceSuffix = lowConfidence ? " (관련도 낮음)" : ""
       pushLeg(parts, lawTextO, `${textLaw.lawName} 본문${confidenceSuffix}`, "get_law_text")
     }
 
-    if (bundleO.ok) parts.push(secOrSkip("관련 판례", bundleO.value.searchResult))
-    else parts.push(timedOutSection("관련 판례", "search_decisions"))
-    parts.push(secOrSkip("법령 해석례", interpResult))
+    pushLeg(parts, precR.searchO, "관련 판례", "search_decisions")
+    pushLeg(parts, interpR.searchO, "법령 해석례", "search_interpretations")
 
-    // 판례 상세는 판례 검색과 한 경로다. 검색이 만료됐으면 검색 마커가 사유를 이미 말한다
-    if (bundleO.ok && bundleO.value.detailResult) parts.push(secOrSkip("관련 판례 상세", bundleO.value.detailResult))
-    pushLeg(parts, interpDetailO, "법령 해석례 상세", "search_interpretations")
-    pushLeg(parts, annexO, "별표/서식", "get_annexes", wantsAnnex)
+    // 상세는 검색과 단계별이다. 검색이 만료됐으면 검색 마커가 사유를 이미 말하므로 상세 마커는 없다
+    pushLeg(parts, precR.detailO, "관련 판례 상세", "get_decision_text")
+    pushLeg(parts, interpR.detailO, "법령 해석례 상세", "search_interpretations")
+    // 기반 탐색이 만료됐으면 별표는 법령을 몰라 못 띄웠다. 질의가 원했다면 그 자리도 마커로 밝힌다
+    pushLeg(parts, annexO, "별표/서식", "get_annexes", wantsAnnex || (!baseO.ok && annexAsked))
     pushScenarioLeg(parts, srO, scenario)
 
     return wrapResult(parts.join("\n"))
@@ -985,24 +1017,36 @@ export async function chainProcedureDetail(
     // AI 검색은 한 번만 친다. 보완 정보 섹션(Step 4)과 기반 법령 탐색 3단계(의미검색)가 같은 요청
     // (display 5)을 두 번 보냈다 (2026-09-23 리뷰 B#10). 미리 띄워 두고 두 곳이 나눠 쓴다.
     const aiP = callAiLaw(apiClient, { query: input.query, search: "0", display: 5, page: 1, apiKey: input.apiKey })
-    // 기반 법령을 못 찾아 일찍 돌아가면 aiP 를 아무도 기다리지 않는다. 거부가 미처리로 남지 않게 붙여 둔다
-    void aiP.catch(() => {})
+    // AI 갈래의 race 는 띄우는 시점에 건다. 그래야 기반 탐색이 만료돼도 시간 안에 온 AI 결과가 남는다:
+    // 만료 뒤에 새로 건 race 는 이미 끝난 작업에도 {ok:false} 다
+    const aiO = raceDeadline(dl, aiP)
+    // 기반 법령을 못 찾아 일찍 돌아가면 aiO 를 아무도 기다리지 않는다. 거부가 미처리로 남지 않게 붙여 둔다
+    void aiO.catch(() => {})
     const aiSignals = aiP.then(r => r.aiLawArticles || [], () => [])
+
+    // Scenario 확장
+    const scenario = (input.scenario || detectScenario(input.query, "chain_procedure_detail")) as ScenarioType | null
+
+    // 기반 법령 탐색(최대 3단계 직렬)이 만료되면 법령에 딸린 갈래(3단비교·별표·시나리오)는 띄우지 못한다.
+    // 그 자리만 마커로 두고 받은 AI 검색은 싣는다. 종전엔 AI 가 89ms 에 와도 머리글과 "받은 전부" 고지만 냈다
+    const expiredAtBase = async (): Promise<ToolResponse> => {
+      parts.push(timedOutSection("법령 체계·별표/서식 (기반 법령 검색)", "search_law"))
+      pushLeg(parts, await aiO, "AI 검색 보완 정보", "search_ai_law")
+      pushScenarioLeg(parts, { ok: false }, scenario)
+      return wrapResult(parts.join("\n"))
+    }
 
     // Step 1: 법령 검색
     const baseO = await raceDeadline(dl, resolveChainBaseLaw(apiClient, input.query, input.apiKey, 3, { aiSignals }))
-    if (!baseO.ok) return expiredChainResult(parts)
+    if (!baseO.ok) return expiredAtBase()
     const laws = baseO.value.laws
     if (laws.length === 0) {
-      if (dl.expired()) return expiredChainResult(parts)
+      if (dl.expired()) return expiredAtBase()
       return noResult(input.query, baseO.value.attempts)
     }
 
     const p = laws[0]
     parts.push(`법령: ${p.lawName} (${p.lawType}) | MST: ${p.mst}`)
-
-    // Scenario 확장
-    const scenario = (input.scenario || detectScenario(input.query, "chain_procedure_detail")) as ScenarioType | null
 
     const [threeTier, annexFee, annexForm, aiResult, sr] = await Promise.all([
       // Step 2: 3단 비교 (절차 체계 파악)
@@ -1031,7 +1075,7 @@ export async function chainProcedureDetail(
         return { text: "", isError: false }  // 하위법령이 없을 뿐 실패가 아니다 — 섹션을 싣지 않는다
       })()),
       // Step 4: AI 검색으로 보완 (절차 상세)
-      raceDeadline(dl, aiP),
+      aiO,
       raceDeadline(dl, scenario
         ? runScenario(scenario, { apiClient, query: input.query, law: p, apiKey: input.apiKey } as ScenarioContext)
         : Promise.resolve(null)),

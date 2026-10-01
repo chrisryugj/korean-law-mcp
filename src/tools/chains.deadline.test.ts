@@ -40,6 +40,27 @@ const precXml =
   `<사건번호>2023두302036</사건번호><법원명>대법원</법원명><선고일자>20240208</선고일자><판결유형>판결</판결유형></prec>` +
   `</PrecSearch>`
 
+/** 판례 2건 — 상세는 상위 2건을 받으므로 한 건만 늦춰 "상세 일부 지연"을 만든다 */
+const prec2Xml =
+  `<?xml version="1.0" encoding="UTF-8"?><PrecSearch><totalCnt>2</totalCnt><page>1</page>` +
+  `<prec><판례일련번호>245007</판례일련번호><사건명><![CDATA[음주운전 면허취소 처분 취소]]></사건명>` +
+  `<사건번호>2023두302036</사건번호><법원명>대법원</법원명><선고일자>20240208</선고일자><판결유형>판결</판결유형></prec>` +
+  `<prec><판례일련번호>245008</판례일련번호><사건명><![CDATA[음주운전 면허정지 처분 취소]]></사건명>` +
+  `<사건번호>2023두302037</사건번호><법원명>대법원</법원명><선고일자>20240209</선고일자><판결유형>판결</판결유형></prec>` +
+  `</PrecSearch>`
+
+const precDetailJson = (id: string) => JSON.stringify({ PrecService: {
+  사건명: "음주운전 면허취소 처분 취소", 사건번호: `사건-${id}`, 법원명: "대법원", 선고일자: "20240208",
+  판시사항: `판시사항 본문 ${id}`,
+} })
+
+const aiXml = (lawName: string) =>
+  `<?xml version="1.0" encoding="UTF-8"?><aiSearch><검색결과개수>1</검색결과개수><법령조문>` +
+  `<법령ID>1000</법령ID><법령명>${lawName}</법령명><법령종류명>법률</법령종류명>` +
+  `<조문번호>0044</조문번호><조문제목>술에 취한 상태에서의 운전 금지</조문제목>` +
+  `<조문내용><![CDATA[누구든지 술에 취한 상태에서…]]></조문내용><시행일자>20230101</시행일자>` +
+  `</법령조문></aiSearch>`
+
 const after = <T,>(ms: number, value: T): Promise<T> =>
   new Promise(resolve => setTimeout(() => resolve(value), ms))
 
@@ -341,6 +362,111 @@ describe("2026-09-23 리뷰 B#7 law_system·procedure_detail·ordinance_compare�
     expect(text).toContain("개정 추적: 관세법")
     expect(text).toMatch(/▶ 신구대조표 \(최근 개정\)\n⏱/)
     expect(text).toContain("[조문별 개정 이력 생략]")
+    expect(res.isError).toBeFalsy()
+  })
+})
+
+describe("기반 법령 탐색만 만료돼도 시간 안에 받은 갈래는 싣는다", () => {
+  it("full_research: 기반 법령 검색이 매달려도 AI·해석례·판례 검색·상세는 싣고 본문 자리만 마커", async () => {
+    process.env.MCP_CHAIN_DEADLINE_MS = "5000"
+    const client = {
+      async searchLaw() { return hang<string>() },                       // 기반 법령 탐색만 매달림
+      async fetchApi({ endpoint, target, extraParams }: { endpoint?: string; target?: string; extraParams?: Record<string, string> }) {
+        if (target === "law") return hang<string>()
+        if (target === "aiSearch") return aiXml("도로교통법")
+        if (target === "expc" && endpoint === "lawSearch.do") return interpXml
+        if (target === "prec" && endpoint === "lawSearch.do") return precXml
+        if (target === "prec") return precDetailJson(extraParams?.ID ?? "")
+        return emptyAny
+      },
+    } as unknown as LawApiClient
+
+    const res = await runPastDeadline(chainFullResearch(client, { query: "도로교통법 음주운전" }))
+    const text = res.content[0]?.text ?? ""
+
+    expect(text).toMatch(/▶ AI 법령검색 결과\n[^⏱]/)                     // 종전: 머리글과 고지만 남았다
+    expect(text).toMatch(/▶ 법령 본문 \(기반 법령 검색\)\n⏱/)            // 못 받은 자리만 마커
+    expect(text).toMatch(/▶ 관련 판례\n[^⏱]/)
+    expect(text).toContain("[245007]")
+    expect(text).toContain("[8001]")
+    expect(text).toMatch(/▶ 관련 판례 상세\n[^⏱]/)
+    expect(text).toContain("판시사항 본문 245007")
+    expect(text).not.toContain("위까지가 시간 안에 받은 전부입니다")
+    expect(res.isError).toBeFalsy()
+  })
+
+  it("full_research: 질의가 별표를 원했는데 기반 법령 검색이 만료되면 별표 자리도 마커로 밝힌다", async () => {
+    process.env.MCP_CHAIN_DEADLINE_MS = "5000"
+    const client = {
+      async searchLaw() { return hang<string>() },
+      async fetchApi({ target }: { target?: string }) {
+        if (target === "law") return hang<string>()
+        if (target === "aiSearch") return aiXml("도로교통법")
+        return emptyAny
+      },
+    } as unknown as LawApiClient
+
+    const res = await runPastDeadline(chainFullResearch(client, { query: "도로교통법 음주운전 과태료" }))
+    const text = res.content[0]?.text ?? ""
+
+    expect(text).toMatch(/▶ 법령 본문 \(기반 법령 검색\)\n⏱/)
+    expect(text).toMatch(/▶ 별표\/서식\n⏱/)                            // 침묵 탈락 금지
+    expect(res.isError).toBeFalsy()
+  })
+
+  it("procedure_detail: 기반 법령 검색이 매달려도 받은 AI 검색은 싣는다", async () => {
+    process.env.MCP_CHAIN_DEADLINE_MS = "5000"
+    const client = {
+      async searchLaw() { return hang<string>() },
+      async fetchApi({ target }: { target?: string }) {
+        if (target === "aiSearch") return aiXml("여권법")
+        return hang<string>()
+      },
+    } as unknown as LawApiClient
+
+    const res = await runPastDeadline(chainProcedureDetail(client, { query: "여권법 발급 절차" }))
+    const text = res.content[0]?.text ?? ""
+
+    expect(text).toContain("절차/비용 안내: 여권법 발급 절차")
+    expect(text).toMatch(/▶ 법령 체계·별표\/서식 \(기반 법령 검색\)\n⏱/)
+    expect(text).toMatch(/▶ AI 검색 보완 정보\n[^⏱]/)                    // 종전: 시간 안에 왔는데 버려졌다
+    expect(text).not.toContain("위까지가 시간 안에 받은 전부입니다")
+    expect(res.isError).toBeFalsy()
+  })
+})
+
+describe("판례 갈래는 검색과 근거(상세)를 단계별로 race 한다", () => {
+  /** 판례 검색은 즉시, 상세는 245008 한 건만 매달리는 업스트림 */
+  const slowDetailClient = () => ({
+    async searchLaw() { return lawXml("도로교통법") },
+    async getLawText() { throw new Error("본문 조회 생략(mock)") },
+    async fetchApi({ endpoint, target, extraParams }: { endpoint?: string; target?: string; extraParams?: Record<string, string> }) {
+      if (target === "prec" && endpoint === "lawSearch.do") return prec2Xml
+      if (target === "prec" && extraParams?.ID === "245008") return hang<string>()
+      if (target === "prec") return precDetailJson(extraParams?.ID ?? "")
+      return emptyAny
+    },
+  }) as unknown as LawApiClient
+
+  it("full_research: 판례 상세가 늦어도 받은 판례 검색 목록은 싣고 상세 자리만 마커", async () => {
+    process.env.MCP_CHAIN_DEADLINE_MS = "5000"
+    const res = await runPastDeadline(chainFullResearch(slowDetailClient(), { query: "도로교통법 음주운전" }))
+    const text = res.content[0]?.text ?? ""
+
+    expect(text).toMatch(/▶ 관련 판례\n[^⏱]/)        // 종전: 검색 목록까지 "관련 판례 ⏱"
+    expect(text).toContain("[245008]")
+    expect(text).toMatch(/▶ 관련 판례 상세\n⏱/)
+    expect(res.isError).toBeFalsy()
+  })
+
+  it("dispute_prep: 판례 상세가 늦어도 받은 판례 검색 목록은 싣고 상세 자리만 마커", async () => {
+    process.env.MCP_CHAIN_DEADLINE_MS = "5000"
+    const res = await runPastDeadline(chainDisputePrep(slowDetailClient(), { query: "음주운전 면허 처분 취소" }))
+    const text = res.content[0]?.text ?? ""
+
+    expect(text).toMatch(/▶ 대법원 판례\n[^⏱]/)
+    expect(text).toContain("[245008]")
+    expect(text).toMatch(/▶ 대법원 판례 상세\n⏱/)
     expect(res.isError).toBeFalsy()
   })
 })
