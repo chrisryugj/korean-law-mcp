@@ -4,7 +4,7 @@
 
 import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
-import { buildJO } from "../lib/law-parser.js"
+import { lawJoCode } from "../lib/law-jo.js"
 import { lawCache } from "../lib/cache.js"
 import { formatArticleUnit } from "../lib/article-parser.js"
 import { getStrategyWarning } from "../lib/article-warnings.js"
@@ -53,7 +53,7 @@ async function renderLawText(apiClient: LawApiClient, input: GetLawTextInput, re
     let joCode = input.jo
     if (joCode && !/^\d{6}$/.test(joCode)) {
       try {
-        joCode = buildJO(joCode)
+        joCode = lawJoCode(joCode)
       } catch (e) {
         return {
           content: [{

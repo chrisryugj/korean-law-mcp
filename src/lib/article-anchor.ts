@@ -55,14 +55,15 @@ export const LAW_NAME_SUFFIX_PATTERN = "(?:법률|법|시행령|시행규칙|규
 
 // 접두는 선택 — '형법'(1자+법)도, '시행령'(접두 없음)도 한 덩어리로 잡아야 한다.
 const ARTICLE_REF_RE = new RegExp(
-  `((?:[가-힣]{1,28})?${LAW_NAME_SUFFIX_PATTERN})?\\s*[」』】〕]?\\s*제\\s*(\\d+)\\s*조(?:\\s*(?:의|-)\\s*(\\d+))?`,
+  `((?:[가-힣]{1,28})?${LAW_NAME_SUFFIX_PATTERN})?\\s*[」』】〕]?\\s*제\\s*(\\d+)\\s*조(?:\\s*(?:의|-)\\s*(\\d+))?` +
+  `(?:\\s*(?:부터|~|∼|-)\\s*제\\s*(\\d+)\\s*조(?:\\s*(?:의|-)\\s*(\\d+))?(?:\\s*까지)?)?`,
   "g"
 )
 // "제103조부터 제105조까지" 같은 범위 표기. 범위 안의 조문은 인용된 것이 맞으므로
 // 양 끝만 보고 불일치로 버리면 정당한 자료가 죽는다.
 // 뒤따르는 "까지"는 선택 — "제103조~제105조"처럼 생략된 표기가 흔하다. 시작 쪽 `제`를
 // 요구하므로 가지번호 하이픈("제10조-2")을 범위로 오인하지 않는다.
-const ARTICLE_RANGE_RE = /제\s*(\d+)\s*조(?:\s*(?:의|-)\s*\d+)?\s*(?:부터|~|∼|-)\s*제\s*(\d+)\s*조(?:\s*(?:의|-)\s*\d+)?(?:\s*까지)?/g
+// 범위는 위 참조 패턴의 일부로 읽어 양 끝이 같은 법령에 속하고 가지번호도 비교하게 한다.
 
 /**
  * jo 입력을 앵커로 정규화. 자연어 표기와 6자리 JO 코드를 모두 받는다
@@ -154,15 +155,6 @@ export function classifyArticleRefs(text: string, anchor: ArticleAnchor): Anchor
   // `\s*` 판정은 길이와 무관해 결과가 같고(퍼즈 40만 건 차이 0), m.index 도 접힌 문자열 기준으로 일관된다.
   const folded = foldNotation(text || "").replace(/\s+/g, " ")
 
-  // 범위 표기를 먼저 본다 — 범위 안에 들면 양 끝 조번호가 달라도 인용된 것이 맞다.
-  let r: RegExpExecArray | null
-  ARTICLE_RANGE_RE.lastIndex = 0
-  while ((r = ARTICLE_RANGE_RE.exec(folded)) !== null) {
-    const from = Number.parseInt(r[1], 10)
-    const to = Number.parseInt(r[2], 10)
-    if (from <= anchor.articleNo && anchor.articleNo <= to) return "match"
-  }
-
   let sawRef = false
   let held = false
   let lawMismatch = false
@@ -172,7 +164,10 @@ export function classifyArticleRefs(text: string, anchor: ArticleAnchor): Anchor
     sawRef = true
     const articleNo = Number.parseInt(m[2], 10)
     const branchNo = m[3] ? Number.parseInt(m[3], 10) : 0
-    if (articleNo !== anchor.articleNo || branchNo !== anchor.branchNo) continue
+    const from = articleNo * 100 + branchNo
+    const to = m[4] ? Number.parseInt(m[4], 10) * 100 + Number.parseInt(m[5] || "0", 10) : from
+    const wanted = anchor.articleNo * 100 + anchor.branchNo
+    if (wanted < from || wanted > to) continue
     if (!anchor.lawName) return "match"           // 법령 축 미적용 — 종전 동작
 
     // 조번호는 맞다. 이 참조가 어느 법령의 것인지 본다.

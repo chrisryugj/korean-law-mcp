@@ -37,7 +37,7 @@ describe("판례 상세 JSON 필드", () => {
       await expect(runWithRequestContext({ signal }, () => getPrecedentText(
         { fetchApi } as unknown as LawApiClient, { id: "1" }
       ))).rejects.toBe(error)
-      expect(fetchApi).toHaveBeenCalledTimes(1)
+      expect(fetchApi).toHaveBeenCalledTimes(signal ? 0 : 1)
     }
   )
 })

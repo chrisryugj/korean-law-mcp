@@ -12,7 +12,6 @@
 import type { ScenarioContext, ScenarioResult, ScenarioSection } from "./types.js"
 import type { HistoricalVersion } from "../../lib/historical-utils.js"
 import { fetchLawVersions, sameLawName, wholeRevisionLabel, wholeRevisionsBetween } from "../../lib/law-lineage.js"
-import { hasLawNode } from "../../lib/api-client.js"
 import { dateSchema } from "../../lib/schemas.js"
 import {
   changeExcerpt, diffArticles, displayJo, dot, excerptBudget, extractLawSnapshot,
@@ -41,15 +40,14 @@ export function pickVersion(versions: HistoricalVersion[], targetDate: string): 
  * 공포본이면 시점과 무관하게 마지막 시행 슬라이스를 돌려준다 (실측: 형사소송법
  * MST 281865 → 시행 20271231 본문. 2026.7.1.에 시행 중인 슬라이스가 아니다).
  * 그대로 두면 "시점 A: 2026.7.1. 시행" 머리말에 2027.12.31.판 본문이 붙어
- * diff가 통째로 어긋난다. efYd가 없거나 eflaw가 빈 봉투면 기존 경로로 물러선다.
+ * diff가 통째로 어긋난다. 시행일이 없을 때만 MST 조회로 물러선다.
  */
 async function fetchVersionRaw(ctx: ScenarioContext, ver: HistoricalVersion): Promise<string> {
   if (ver.efYd) {
-    const raw = await ctx.apiClient.fetchApi({
+    return ctx.apiClient.fetchApi({
       endpoint: "lawService.do", target: "eflaw", type: "JSON",
       extraParams: { MST: ver.mst, efYd: ver.efYd }, apiKey: ctx.apiKey,
     })
-    if (hasLawNode(raw)) return raw
   }
   return ctx.apiClient.fetchApi({
     endpoint: "lawService.do", target: "law", type: "JSON",

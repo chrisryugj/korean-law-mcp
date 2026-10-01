@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { LawApiClient } from "../lib/api-client.js";
 import { truncateResponse, formatDateDot } from "../lib/schemas.js";
 import { formatToolError } from "../lib/errors.js";
+import { collectLawHierarchy, renderLawHierarchy } from "../lib/law-system-hierarchy.js";
 
 // Law system tree tool - Get hierarchical structure of laws
 export const getLawSystemTreeSchema = z.object({
@@ -89,37 +90,19 @@ export async function getLawSystemTree(
 
     const hierarchy = tree.상하위법 || {};
 
-    // 법률 section
-    if (hierarchy.법률) {
-      const lawSection = hierarchy.법률;
-
-      // 시행령
-      if (lawSection.시행령) {
-        const decrees = Array.isArray(lawSection.시행령) ? lawSection.시행령 : [lawSection.시행령];
-        output += `시행령 (${decrees.length}건):\n`;
-        for (const decree of decrees.slice(0, 10)) {
-          const info = decree.기본정보 || decree;
-          output += `  ├─ ${info.법령명} (${info.법종구분?.content || ""})\n`;
-        }
-        if (decrees.length > 10) {
-          output += `  └─ ... 외 ${decrees.length - 10}건\n`;
-        }
-        output += `\n`;
+    // 하위 규칙은 법률 직속과 시행령 하위 양쪽에 있다. 기준 법령이 하위법이어도 부모 법률을 유지한다.
+    const sections = collectLawHierarchy(hierarchy);
+    for (const kind of ["법률", "시행령", "시행규칙"] as const) {
+      const entries = sections[kind];
+      if (!entries.length) continue;
+      output += `${kind} (${entries.length}건):\n`;
+      for (const entry of entries.slice(0, 10)) {
+        const info = entry.기본정보;
+        const type = typeof info?.법종구분 === "string" ? info.법종구분 : info?.법종구분?.content;
+        output += `  ├─ ${info?.법령명 || kind} (${type || ""})\n`;
       }
-
-      // 시행규칙
-      if (lawSection.시행규칙) {
-        const rules = Array.isArray(lawSection.시행규칙) ? lawSection.시행규칙 : [lawSection.시행규칙];
-        output += `시행규칙 (${rules.length}건):\n`;
-        for (const rule of rules.slice(0, 10)) {
-          const info = rule.기본정보 || rule;
-          output += `  ├─ ${info.법령명} (${info.법종구분?.content || ""})\n`;
-        }
-        if (rules.length > 10) {
-          output += `  └─ ... 외 ${rules.length - 10}건\n`;
-        }
-        output += `\n`;
-      }
+      if (entries.length > 10) output += `  └─ ... 외 ${entries.length - 10}건\n`;
+      output += `\n`;
     }
 
     // Related laws (관련법령)
@@ -154,7 +137,7 @@ export async function getLawSystemTree(
 
     // Tree visualization
     output += `체계도 시각화:\n\n`;
-    output += buildTreeVisualization(tree, lawName, lawType);
+    output += renderLawHierarchy(hierarchy, lawName, lawType);
 
     return {
       content: [{
@@ -168,39 +151,6 @@ export async function getLawSystemTree(
 }
 
 // formatDate → schemas.ts의 formatDateDot 사용
-
-// Helper function to build tree visualization
-function buildTreeVisualization(tree: any, lawName: string, lawType: string): string {
-  const hierarchy = tree.상하위법 || {};
-  let viz = "";
-
-  // Current law (법률)
-  viz += "  ┌─────────────────────┐\n";
-  viz += `  │ ${truncate(lawName, 18)} │ (${lawType})\n`;
-  viz += "  └──────────┬──────────┘\n";
-
-  // 시행령
-  if (hierarchy.법률?.시행령) {
-    const decrees = Array.isArray(hierarchy.법률.시행령) ? hierarchy.법률.시행령 : [hierarchy.법률.시행령];
-    viz += "             │\n";
-    viz += "  ┌──────────┴──────────┐\n";
-    const firstDecree = decrees[0]?.기본정보 || decrees[0];
-    viz += `  │ ${truncate(firstDecree?.법령명 || "시행령", 18)} │ (시행령)\n`;
-    viz += "  └──────────┬──────────┘\n";
-
-    // 시행규칙
-    if (hierarchy.법률?.시행규칙) {
-      viz += "             │\n";
-      viz += "  ┌──────────┴──────────┐\n";
-      const rules = Array.isArray(hierarchy.법률.시행규칙) ? hierarchy.법률.시행규칙 : [hierarchy.법률.시행규칙];
-      const firstRule = rules[0]?.기본정보 || rules[0];
-      viz += `  │ ${truncate(firstRule?.법령명 || "시행규칙", 18)} │ (시행규칙)\n`;
-      viz += "  └─────────────────────┘\n";
-    }
-  }
-
-  return viz;
-}
 
 interface AdminRuleInfo {
   name: string
@@ -238,10 +188,4 @@ function parseAdminRulesFromXml(xml: string): AdminRuleInfo[] {
   }
 
   return rules
-}
-
-function truncate(str: string, maxLen: number): string {
-  if (!str) return "".padEnd(maxLen);
-  if (str.length <= maxLen) return str.padEnd(maxLen);
-  return str.substring(0, maxLen - 2) + "..";
 }

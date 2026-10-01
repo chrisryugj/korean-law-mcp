@@ -31,6 +31,16 @@
 
 ---
 
+## v4.15.5: Retrieval and verification boundaries
+
+- Fixed missing precedent bodies, cancelled cache reads, and statute/branch boundaries in article ranges
+- Included spaced case numbers in citation verification and corrected article-code handoffs and keyword extraction
+- Fixed decision compaction/legal grounds, law hierarchy/sample labels, and daily-law/term rendering
+- Prevented historical-slice substitution and strengthened MCP/CLI key masking and CLI argument limits
+- Reviewed all features again. No new features or dependency changes. [Changelog](CHANGELOG.md), [review evidence](docs/PRODUCTION-REVIEW-3-2026-10-02.md)
+
+---
+
 ## v4.15.4: Full feature review and fixes
 
 - Corrected case-number matching, summary boundaries, article/annex selection, and citation-mode three-tier responses

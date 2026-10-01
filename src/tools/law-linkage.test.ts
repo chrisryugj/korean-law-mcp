@@ -24,7 +24,7 @@ describe("law-linkage — 루트 태그 실형상 파싱 부활", () => {
     expect(t).not.toContain("119구조")             // 무관 행 제외
     expect(t).toContain("매칭 1건")
     expect(t).toContain("검색 필터를 지원하지 않아")  // 전수 아님 명시
-    expect(t).toContain("get_linked_ordinances")     // 대안 유도
+    expect(t).toContain("get_linked_ordinance_articles")     // 대안 유도
   })
 
   it("lnkDep: 페이지 내 매칭 0건이어도 부재 단정 대신 범위 한계 안내", async () => {

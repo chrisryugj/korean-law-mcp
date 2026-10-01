@@ -3,13 +3,14 @@ import type { LawApiClient } from "../lib/api-client.js"
 import { cleanHtml } from "../lib/article-parser.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { SimpleCache } from "../lib/cache.js"
-import { formatToolError, notFoundResponse } from "../lib/errors.js"
+import { ErrorCodes, LawApiError, formatToolError, notFoundResponse } from "../lib/errors.js"
 import { fetchWithRetry } from "../lib/fetch-with-retry.js"
 import { readResponseText } from "../lib/response-body.js"
 import { UpstreamRecordMissingError } from "../lib/upstream-miss.js"
 import { containsHtmlMarkup } from "../lib/body-shape.js"
 import { fieldText } from "../lib/precedent-body.js"
 import { rethrowIfFatal } from "../lib/fatal-errors.js"
+import { throwIfRequestCancelled } from "../lib/session-state.js"
 import {
   type ExternalHttpsProxyConfig,
   getExternalHttpsProxyConfig,
@@ -159,6 +160,7 @@ export async function getPrecedentRecord(
   apiClient: LawApiClient,
   args: GetPrecedentTextInput,
 ): Promise<Record<string, unknown> | null> {
+  throwIfRequestCancelled()
   const cacheKey = `${args.id}:${args.caseName ?? ""}`
   const cached = precedentCache.get<Record<string, unknown>>(cacheKey)
   if (cached) return cached
@@ -167,10 +169,14 @@ export async function getPrecedentRecord(
   const text = await apiClient.fetchApi({
     endpoint: "lawService.do", target: "prec", type: "JSON", extraParams, apiKey: args.apiKey,
   })
+  throwIfRequestCancelled()
   const data: unknown = JSON.parse(text)
   if (isMissingPrecedentJson(data)) return null
   const record = (data as { PrecService: Record<string, unknown> }).PrecService
   if (typeof record !== "object" || Array.isArray(record)) return null
+  if (![record.판시사항, record.판결요지, record.판례내용].some(value => normalizeHtmlText(fieldText(value)))) {
+    throw new LawApiError(`판례 ID ${args.id}: 메타데이터·참조만 반환되어 판결 본문을 확인하지 못했습니다. 자료의 부존재로 단정하지 마세요.`, ErrorCodes.UPSTREAM_NO_DATA)
+  }
   precedentCache.set(cacheKey, record, 24 * 60 * 60 * 1000)
   return record
 }
@@ -494,6 +500,7 @@ export async function getPrecedentText(
       // 88바이트 `{"Law": "일치하는 판례가 없습니다…"}` 봉투로 와서, 아래
       // isMissingPrecedentJson 분기가 폴백을 태운다.
       if (err instanceof UpstreamRecordMissingError) throw err
+      if (err instanceof LawApiError && err.code === ErrorCodes.UPSTREAM_NO_DATA) throw err
       const fallback = await fetchHtmlFallbackPrecedent(apiClient, args, extraParams)
       const output = formatPrecedentText(fallback.basic, fallback.content, args.full)
       return {

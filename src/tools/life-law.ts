@@ -4,6 +4,7 @@ import { truncateResponse, formatDateDot } from "../lib/schemas.js";
 import { parseSearchXML, extractTag as sharedExtractTag } from "../lib/xml-parser.js";
 import { formatToolError, noResultHint } from "../lib/errors.js";
 import type { ToolResponse } from "../lib/types.js";
+import { cleanHtml } from "../lib/article-parser.js";
 
 // AI-powered intelligent law search tool
 export const searchAiLawSchema = z.object({
@@ -170,7 +171,7 @@ function renderAiLawSearchResult(
     if (searchType === "0" || searchType === "2") {
       output += `${item.법령명 || item.행정규칙명}\n`;
       if (item.조문번호) {
-        output += `   제${item.조문번호}조`;
+        output += `   제${item.조문번호.replace(/^0+(?=\d)/, "")}조`;
         if (item.조문가지번호 && item.조문가지번호 !== "00") {
           output += `의${parseInt(item.조문가지번호)}`;
         }
@@ -180,8 +181,8 @@ function renderAiLawSearchResult(
         output += `\n`;
       }
       if (item.조문내용) {
-        const content = item.조문내용.replace(/<[^>]*>/g, "").substring(0, 200);
-        output += `   ${content}${item.조문내용.length > 200 ? "..." : ""}\n`;
+        const content = cleanHtml(item.조문내용);
+        output += `   ${content.substring(0, 200)}${content.length > 200 ? "..." : ""}\n`;
       }
       output += `   시행: ${formatDateDot(item.시행일자)} | ${item.소관부처명 || item.발령기관명 || ""}\n`;
     } else {
