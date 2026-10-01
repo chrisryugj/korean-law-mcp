@@ -6,7 +6,7 @@ import { allTools, registerTools } from "./tool-registry.js"
 import { executeTool } from "./lib/cli-executor.js"
 import type { LawApiClient } from "./lib/api-client.js"
 
-const key = "argument-secret-12345"
+const key = "test".repeat(8)
 const api = {} as LawApiClient
 const law = allTools.find(t => t.name === "get_law_text")!
 afterEach(() => vi.restoreAllMocks())
