@@ -124,7 +124,7 @@ async function handleLinkage(apiClient: LawApiClient, input: LinkageInput, cfg: 
         : result.items
 
       const scopeNote = `⚠️ 법제처가 이 목록(서버 전체 ${result.totalCnt}건)의 검색 필터를 지원하지 않아, 조회한 ${result.page}페이지(${fetched}건) 안에서만 '${input.query}'를 필터했습니다 — 전수 결과가 아닙니다.\n` +
-        `💡 법령 기준 자치법규 연계는 서버 필터가 지원되는 get_linked_ordinances(query="법령명")를 사용하세요.`
+        `💡 법령 기준 자치법규 연계는 서버 필터가 지원되는 execute_tool(tool_name="get_linked_ordinances", params={query:"법령명"})를 사용하세요.`
 
       if (matched.length === 0) {
         return {

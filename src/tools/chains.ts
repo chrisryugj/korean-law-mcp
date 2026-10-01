@@ -754,7 +754,7 @@ export async function chainAmendmentTrack(
         pushLeg(parts, history, "조문별 개정 이력", "get_article_history")
       } else {
         parts.push(`\n[조문별 개정 이력 생략] 제정 시점부터의 조문×개정 전건이라 응답 상한을 소진합니다. ` +
-          `필요하면 includeHistory=true 또는 get_article_history(lawId="${lawId}").`)
+          `필요하면 includeHistory=true 또는 execute_tool(tool_name="get_article_history", params={lawId:"${lawId}", jo:"제N조"}).`)
       }
     }
 

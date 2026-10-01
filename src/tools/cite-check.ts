@@ -213,7 +213,7 @@ export async function citeCheck(
       lines.push("")
       lines.push(`▶ 이 판례가 인용한 판례 (참조판례 ${refCases.length}건)`)
       lines.push(`  ${refCases.join(", ")}`)
-      lines.push(`  ↳ 각 판례의 생사 확인: cite_check(caseNumber="...")`)
+      lines.push(`  ↳ 각 판례의 생사 확인: legal_analysis(mode="cite_check", caseNumber="...")`)
     }
 
     lines.push("")

@@ -104,7 +104,7 @@ export async function getOrdinance(
         }
         resultText += `목차 (총 ${articles.length}개 조문)\n\n`
         resultText += tocItems.join("\n")
-        resultText += `\n\n특정 조문 조회: get_ordinance(ordinSeq="${ordinSeq}", jo="제XX조")`
+        resultText += `\n\n특정 조문 조회: execute_tool(tool_name="get_ordinance", params={ordinSeq:"${ordinSeq}", jo:"제XX조"})`
       } else {
         for (const article of articles) {
           if (article.조제목) {

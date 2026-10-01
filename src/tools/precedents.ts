@@ -56,7 +56,7 @@ function renderNoPrecedentResult(result: StructuredPrecedentSearchResult): strin
   }
   lines.push("")
   lines.push("대안:")
-  lines.push(`  1. 해석례 검색: search_interpretations(query="${kw}")`)
+  lines.push(`  1. 해석례 검색: search_decisions(domain="interpretation", query="${kw}")`)
   lines.push(`  2. 법령 검색: search_law(query="${kw}")`)
   return lines.join("\n")
 }
@@ -91,8 +91,10 @@ export function renderPrecedentSearchResult(result: StructuredPrecedentSearchRes
     output += `검색 보정: ${attempt.reason}="${label}" (${scope}${dateNote})\n\n`
   }
 
+  // 안내는 직접 노출 도구(V3_EXPOSED)로 적는다. get_precedent_text·find_similar_precedents 는
+  // 목록에 없어서 이름 그대로 부르면 클라이언트가 막는다.
   if (result.hits[0]?.id) {
-    output += `💡 다음: get_precedent_text(id="${result.hits[0].id}") 로 판결문 전문. full=true 로 축약 해제. 유사판례 원하면 find_similar_precedents 사용.\n`
+    output += `💡 다음: get_decision_text(domain="precedent", id="${result.hits[0].id}") 로 판결문 전문. full=true 로 축약 해제. 유사판례 원하면 execute_tool(tool_name="find_similar_precedents", params={query:"…"}) 사용.\n`
   }
 
   return output
@@ -440,7 +442,7 @@ async function fetchHtmlFallbackPrecedent(
       판결유형: dcm.ntstDcmClNm,
     },
     content: {
-      판결요지: dcm.ntstDcmGistCntn,
+      판결요지: dcm.ntstDcmGistCntn && normalizeHtmlText(String(dcm.ntstDcmGistCntn)),
       전문: body,
     },
   }
@@ -518,12 +520,15 @@ export async function getPrecedentText(
     사건종류명: prec.사건종류명,
     판결유형: prec.판결유형
   };
+  // 법제처 JSON 필드는 줄바꿈을 <br/> 로 싣는다. 전문 축약의 문장 경계("다.\n")도 이걸 펴야 잡힌다.
+  // 폴백 본문은 이미 정규화돼 오므로 여기(JSON 경로)서만 편다 — 두 번 돌리면 풀린 &lt; 뒤 글자가 태그로 지워진다
+  const clean = (v?: string) => v && normalizeHtmlText(String(v))
   const content = {
-    판시사항: prec.판시사항,
-    판결요지: prec.판결요지,
-    참조조문: prec.참조조문,
-    참조판례: prec.참조판례,
-    전문: prec.판례내용
+    판시사항: clean(prec.판시사항),
+    판결요지: clean(prec.판결요지),
+    참조조문: clean(prec.참조조문),
+    참조판례: clean(prec.참조판례),
+    전문: clean(prec.판례내용)
   };
 
   const output = formatPrecedentText(basic, content, args.full)

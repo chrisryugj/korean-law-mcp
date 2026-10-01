@@ -127,7 +127,7 @@ export async function runPenaltyScenario(ctx: ScenarioContext): Promise<Scenario
     sections.push({
       title: "벌칙 조항 개정이력",
       content: `[생략] 법령 전체 조문의 제정 이후 이력이라 응답 상한을 소진합니다. 조문별로 조회하세요: ` +
-        `get_article_history(lawId="${lawId}", jo="${penaltyLabels[0] || "제N조"}")` +
+        `execute_tool(tool_name="get_article_history", params={lawId:"${lawId}", jo:"${penaltyLabels[0] || "제N조"}"})` +
         (listed ? `\n대상 조문: ${listed}${more}` : ""),
     })
   }

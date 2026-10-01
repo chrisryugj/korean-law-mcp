@@ -111,7 +111,7 @@ async function formatAdminRuleHistory(
       text += `  시행 ${formatDateDot(v.efYd || v.issuedYd)} | 발령 ${formatDateDot(v.issuedYd)} 제${v.issuedNo}호 ${v.rrCls} | ${v.serial}${v.isCurrent ? " [현행]" : ""}${v.name !== current.name ? ` | ${v.name}` : ""}\n`
     }
   }
-  text += `\n본문: get_admin_rule(id=일련번호, jo="제N조") · 기준일 시행 버전 판단: legal_analysis(mode="applicable_law", lawName, date)`
+  text += `\n본문: execute_tool(tool_name="get_admin_rule", params={id:"일련번호", jo:"제N조"}) · 기준일 시행 버전 판단: legal_analysis(mode="applicable_law", lawName, date)`
   return { content: [{ type: "text", text: truncateResponse(text) }] }
 }
 

@@ -328,7 +328,7 @@ export async function applicableLaw(
             lines.push(`▶ 현행과 비교: ✅ 동일 (기준일 이후 이 조문은 개정되지 않음)`)
           } else {
             lines.push(`▶ 현행과 비교: △ 변경됨 — 현행 본문과 다릅니다. 인용 시 반드시 기준일 버전을 사용하세요.`)
-            lines.push(`  상세 diff: chain_amendment_track(query="${lawName}", scenario="time_travel", fromDate="${date}", toDate="${today}")`)
+            lines.push(`  상세 diff: legal_research(task="amendment_track", query="${lawName}", scenario="time_travel", fromDate="${date}", toDate="${today}")`)
           }
         } else {
           lines.push(`▶ 현행과 비교: 비교 불가 (한쪽 본문 조회 실패)`)

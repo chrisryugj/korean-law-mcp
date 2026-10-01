@@ -169,7 +169,7 @@ async function getRecentChanges(
     notes.push(`⚠️ ${failedDays.length}일 조회 실패(${failedDays.map(formatYmd).join(", ")}): 그날 반영분은 집계에서 빠졌습니다.`)
   }
   if (cappedDays.length > 0) {
-    notes.push(`⚠️ 하루 조회 상한(${DAY_PAGE_SIZE}건)에 걸린 날: ${cappedDays.join(", ")}. 나머지는 get_law_history(regDt, page)로 조회하세요.`)
+    notes.push(`⚠️ 하루 조회 상한(${DAY_PAGE_SIZE}건)에 걸린 날: ${cappedDays.join(", ")}. 나머지는 execute_tool(tool_name="get_law_history", params={regDt, page})로 조회하세요.`)
   }
   if (notes.length > 0) resultText += `\n\n${notes.join("\n")}`
 

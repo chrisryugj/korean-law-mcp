@@ -161,7 +161,7 @@ export async function searchOrdinance(
 
     // 다음 단계 힌트 — 자치법규 ID로 본문 조회 유도
     if (ordinances.length > 0 && ordinances[0].자치법규일련번호) {
-      output += `💡 다음: get_ordinance(id="${ordinances[0].자치법규일련번호}") 로 본문 조회. 원하는 규정 없으면 상위 법령 검색도 고려 (예: 휴직·복무·징계 → 지방공무원법).\n`
+      output += `💡 다음: execute_tool(tool_name="get_ordinance", params={id:"${ordinances[0].자치법규일련번호}"}) 로 본문 조회. 원하는 규정 없으면 상위 법령 검색도 고려 (예: 휴직·복무·징계 → 지방공무원법).\n`
     }
 
     return {

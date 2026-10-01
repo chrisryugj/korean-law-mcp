@@ -61,7 +61,8 @@ async function renderLawText(apiClient: LawApiClient, input: GetLawTextInput): P
     }
 
     // Check cache first (efYd 정규화: 미지정 → 'current'로 통일)
-    const cacheKey = `lawtext:${input.mst || input.lawId}:${joCode || 'full'}:${input.efYd || 'current'}`
+    // mst·lawId 는 번호 체계가 달라 같은 값이 다른 법령이다(001706: mst=사방사업법, lawId=민법) — 접두로 가른다
+    const cacheKey = `lawtext:${input.mst ? `m${input.mst}` : `i${input.lawId}`}:${joCode || 'full'}:${input.efYd || 'current'}`
     // MST·efYd 는 버전을 못박으므로 하루를 둔다. lawId 만 준 "현행" 조회는 개정 시행일을 넘기면
     // 다른 본문이 현행이 되므로 1시간만 둔다(24시간이면 시행일 당일 옛 본문이 나갔다, 리뷰 A8).
     const cacheTtl = input.mst || input.efYd ? 24 * 60 * 60 * 1000 : 60 * 60 * 1000
@@ -208,7 +209,7 @@ async function renderLawText(apiClient: LawApiClient, input: GetLawTextInput): P
             errorMsg += `\n      get_law_text(lawId="${input.lawId}", jo="제${suggestJo}조")`
           }
           errorMsg += `\n\n   3. 키워드 검색:`
-          errorMsg += `\n      search_all(query="${lawName.replace(/\s+(시행령|시행규칙)/, '')}")`
+          errorMsg += `\n      execute_tool(tool_name="search_all", params={query:"${lawName.replace(/\s+(시행령|시행규칙)/, '')}"})`
         } else {
           errorMsg += `\n\n[NOT_FOUND] 조문을 찾을 수 없습니다. 다음을 시도해보세요:`
           errorMsg += `\n   - 전체 법령 조회 (jo 파라미터 생략)`

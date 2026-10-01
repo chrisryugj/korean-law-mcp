@@ -102,7 +102,7 @@ describe("폐지 행정규칙 감지 (nw=2)", () => {
     const note = await detectAbolishedAdminRule(histStub(ADMRUL_HIST_XML, ABOLITION_BODY_XML), "월별납부제도 운영에 관한 고시")
     expect(note).not.toBeNull()
     expect(note).toContain("2024-12-11 폐지")
-    expect(note).toContain('get_admin_rule(id="2100000238672")') // 폐지 직전 버전
+    expect(note).toContain('execute_tool(tool_name="get_admin_rule", params={id:"2100000238672"})') // 폐지 직전 버전
     expect(note).toContain("징수업무 처리에 관한 고시")
     expect(note).toContain("폐지된 행정규칙을 현행 기준으로 인용하지 마세요")
   })
@@ -117,7 +117,7 @@ describe("폐지 행정규칙 감지 (nw=2)", () => {
     const note = await detectAbolishedAdminRule(histStub(RENAME_HIST_XML), "수입물품 검사에 관한 고시")
     expect(note).toContain("[제명변경]")
     expect(note).toContain("수입물품 안전관리에 관한 고시")
-    expect(note).toContain('get_admin_rule(id="2100000100002")')
+    expect(note).toContain('execute_tool(tool_name="get_admin_rule", params={id:"2100000100002"})')
   })
 
   it("연혁도 0건이면 null — 상위의 noResultHint로 폴백한다", async () => {

@@ -197,7 +197,7 @@ export async function detectAbolishedAdminRule(
         result =
           `[제명변경] '${query}' — 현행 행정규칙 0건. 같은 규칙이 명칭 변경되어 현행입니다:\n\n` +
           `「${g.find((h) => isRelated(h.name, query))?.name || query}」 → 「${latest.name}」 (${latest.ruleType}, ${latest.orgName}, 발령 ${fmtDate(latest.promDate)})\n\n` +
-          `💡 get_admin_rule(id="${latest.seq}") 또는 search_admin_rule("${latest.name}")로 현행본을 조회하세요.\n`
+          `💡 execute_tool(tool_name="get_admin_rule", params={id:"${latest.seq}"}) 또는 execute_tool(tool_name="search_admin_rule", params={query:"${latest.name}"})로 현행본을 조회하세요.\n`
         break
       }
     }
@@ -223,7 +223,7 @@ async function buildAbolishedAdminRuleNote(
     `「${latest.name}」 (${latest.ruleType}, ${latest.orgName}) — ${fmtDate(latest.promDate)} 폐지`,
   ]
   if (prev) {
-    lines.push(`   - 폐지 직전 버전: 행정규칙일련번호 ${prev.seq} (발령 ${fmtDate(prev.promDate)}) — 폐지 전 본문이 필요하면 get_admin_rule(id="${prev.seq}")`)
+    lines.push(`   - 폐지 직전 버전: 행정규칙일련번호 ${prev.seq} (발령 ${fmtDate(prev.promDate)}) — 폐지 전 본문이 필요하면 execute_tool(tool_name="get_admin_rule", params={id:"${prev.seq}"})`)
   }
 
   // 폐지 레코드 본문에서 폐지사유·후속 규정 추출 (실패해도 폐지 안내 자체는 유지)
@@ -239,7 +239,7 @@ async function buildAbolishedAdminRuleNote(
 
   lines.push("")
   if (successors.length > 0) {
-    lines.push(`💡 후속(통합) 규정: ${successors.map((s) => `「${s}」`).join(", ")} — search_admin_rule("${successors[0]}")로 현행 규정을 조회해 그 기준으로 답변하세요.`)
+    lines.push(`💡 후속(통합) 규정: ${successors.map((s) => `「${s}」`).join(", ")} — execute_tool(tool_name="search_admin_rule", params={query:"${successors[0]}"})로 현행 규정을 조회해 그 기준으로 답변하세요.`)
   } else {
     lines.push(`💡 후속 규정 자동 추출 실패 — 위 폐지사유를 근거로 후속·통합 규정을 확인하거나, 소관부처(${latest.orgName})의 제도 키워드로 search_admin_rule 재검색하세요.`)
   }

@@ -34,7 +34,7 @@ describe("chain_amendment_track — includeHistory opt-in (#158)", () => {
     expect(text).toContain("[조문별 개정 이력 생략]")
     expect(text).toContain("includeHistory=true")
     // 침묵하면 사용자는 이 서버가 이력을 못 준다고 믿는다 — 대체 경로도 함께
-    expect(text).toContain('get_article_history(lawId="1001")')
+    expect(text).toContain('execute_tool(tool_name="get_article_history", params={lawId:"1001"')
   })
 
   it("includeHistory=true 면 종전대로 이력을 싣는다", async () => {

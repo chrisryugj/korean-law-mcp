@@ -121,16 +121,16 @@ export async function applicableAdminRule(
     ])
     lines.push("", `▶ 기준일 시점 조문: ${input.jo}`)
     lines.push(thenText
-      ? (thenText.length > 3000 ? `${thenText.slice(0, 3000)}\n…(생략 — get_admin_rule(id="${version.serial}", jo="${input.jo}")로 전체)` : thenText)
-      : `  [NOT_FOUND] 해당 버전에서 ${input.jo}를 찾지 못했습니다 (당시 미신설이거나 조문 체계가 다름). get_admin_rule(id="${version.serial}", keyword="…")로 본문을 검색하세요. LLM은 본문을 추측하지 마세요.`)
+      ? (thenText.length > 3000 ? `${thenText.slice(0, 3000)}\n…(생략 — execute_tool(tool_name="get_admin_rule", params={id:"${version.serial}", jo:"${input.jo}"})로 전체)` : thenText)
+      : `  [NOT_FOUND] 해당 버전에서 ${input.jo}를 찾지 못했습니다 (당시 미신설이거나 조문 체계가 다름). execute_tool(tool_name="get_admin_rule", params={id:"${version.serial}", keyword:"…"})로 본문을 검색하세요. LLM은 본문을 추측하지 마세요.`)
     if (thenText && nowText) {
       const norm = (s: string) => s.replace(/\s+/g, "")
       lines.push("", norm(thenText) === norm(nowText)
         ? "▶ 현행과 비교: ✅ 동일 (기준일 이후 이 조문은 바뀌지 않음)"
-        : `▶ 현행과 비교: △ 변경됨 — 현행 본문과 다릅니다. 기준일 사안에는 위 기준일 버전을 쓰세요. 현행: get_admin_rule(id="${current.serial}", jo="${input.jo}")`)
+        : `▶ 현행과 비교: △ 변경됨 — 현행 본문과 다릅니다. 기준일 사안에는 위 기준일 버전을 쓰세요. 현행: execute_tool(tool_name="get_admin_rule", params={id:"${current.serial}", jo:"${input.jo}"})`)
     }
   } else {
-    lines.push("", `▶ 본문: get_admin_rule(id="${version.serial}", jo="제N조" 또는 keyword="…")`)
+    lines.push("", `▶ 본문: execute_tool(tool_name="get_admin_rule", params={id:"${version.serial}", jo:"제N조"}) — 조문을 모르면 jo 대신 keyword:"…"`)
   }
 
   lines.push("", `▶ 발령 연혁 (${group.length}개 버전, 최신순${group.length > 15 ? " — 상위 15개" : ""})`)

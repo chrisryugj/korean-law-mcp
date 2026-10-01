@@ -66,7 +66,7 @@ describe("penalty: 벌칙 장만 싣고, 목차·전체 이력을 벌칙으로 �
     const r = await runPenaltyScenario({ apiClient: c, query: "도로교통법 과태료", law: LAW })
     expect(c.calls).not.toContain("getArticleHistory")
     const hist = r.sections.find(s => s.title === "벌칙 조항 개정이력")
-    expect(hist?.content).toContain(`get_article_history(lawId="001638", jo="제148조")`)
+    expect(hist?.content).toContain(`execute_tool(tool_name="get_article_history", params={lawId:"001638", jo:"제148조"})`)
     expect(hist?.content).toContain("제148조·제148조의2·제159조·제160조")
   })
 

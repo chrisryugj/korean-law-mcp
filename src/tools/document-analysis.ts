@@ -134,8 +134,8 @@ export async function analyzeDocument(
   // 도구 안내
   out += `\n[안내] 관련 법령을 확인하려면:\n`
   out += `  search_law(query="관련 법령명") / get_law_text()\n`
-  out += `  search_precedents(query="관련 키워드") / 판례 검색\n`
-  out += `  chain_document_review(text="...") / 리스크+법령+판례 종합 검토\n`
+  out += `  search_decisions(domain="precedent", query="관련 키워드") / 판례 검색\n`
+  out += `  legal_research(task="document_review", text="...") / 리스크+법령+판례 종합 검토\n`
 
   return {
     content: [{ type: "text", text: truncateResponse(out) }],

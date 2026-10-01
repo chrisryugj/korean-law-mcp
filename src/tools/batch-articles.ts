@@ -100,7 +100,8 @@ async function fetchArticlesForLaw(
   apiKey?: string
 ): Promise<FetchResult> {
   throwIfRequestCancelled()
-  const cacheKey = `batch:${lawReq.mst || lawReq.lawId}:full:${efYd || 'current'}`
+  // mst·lawId 는 번호 체계가 달라 같은 값이 다른 법령이다 — 접두로 가른다 (law-text 캐시 키와 같은 이유)
+  const cacheKey = `batch:${lawReq.mst ? `m${lawReq.mst}` : `i${lawReq.lawId}`}:full:${efYd || 'current'}`
   let fullLawData: LawResponse
 
   const cached = batchLawCache.get<LawResponse>(cacheKey)

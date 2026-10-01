@@ -85,7 +85,7 @@ export async function searchHistoricalLaw(
     if (source === "name") {
       output += `⚠️ 법령ID 계보를 확인하지 못해 법령명이 '${args.lawName}'과 같은 연혁만 모았습니다 — 제명이 바뀐 법령이면 옛 이름 시절 연혁이 빠졌을 수 있습니다.\n`;
     }
-    output += `본문: get_historical_law(mst, efYd) — 아래 MST와 시행일을 함께 넘긴다 (같은 MST가 시행일별로 나뉜 분리시행이 있다)\n\n`;
+    output += `본문: execute_tool(tool_name="get_historical_law", params={mst, efYd}) — 아래 MST와 시행일을 함께 넘긴다 (같은 MST가 시행일별로 나뉜 분리시행이 있다)\n\n`;
 
     let prevName = histories[0]?.lawNm || currentName;
     for (const h of histories) {

@@ -1,10 +1,10 @@
 /**
  * precedents 렌더·HTML 정규화 회귀 (2026-09-23 리뷰 C5·C7)
  */
-import { describe, it, expect } from "vitest"
-import { normalizeHtmlText, renderPrecedentSearchResult } from "./precedents.js"
+import { describe, it, expect, vi, afterEach } from "vitest"
+import { getPrecedentText, normalizeHtmlText, renderPrecedentSearchResult } from "./precedents.js"
 import { searchPrecedentsStructured } from "./precedent-search-core.js"
-import type { LawApiClient } from "../lib/api-client.js"
+import { LawApiClient } from "../lib/api-client.js"
 
 // 국세법령정보 HWP 편집기 HTML은 &nbsp; 를 줄지어 쓴다. `[ \t]+\n` 이 그 덩어리에서 제곱이었다
 // (&nbsp; 3만 개 842ms, 10만 개 13.8초).
@@ -36,9 +36,32 @@ describe("판례 검색 렌더: 원시 상세링크를 싣지 않는다 (리뷰 
     const result = await searchPrecedentsStructured(api, { query: "손해배상", display: 20, page: 1 })
     const text = renderPrecedentSearchResult(result)
     expect(text).toContain("[623009] 손해배상(기)")
-    expect(text).toContain('get_precedent_text(id="623009")')
+    expect(text).toContain('get_decision_text(domain="precedent", id="623009")')
     expect(text).not.toContain("SECRETKEY")
     expect(text).not.toContain("&amp;")
     expect(text).not.toContain("링크:")
+  })
+})
+
+// 법제처 판례 JSON 필드는 줄바꿈을 <br/> 로 싣는다(실측 ID 616245: 판시사항·판결요지·전문에 77개).
+// 그대로 내보내면 토큰만 먹고, 전문이 한 줄이라 축약이 줄 경계("다.\n")를 못 쓴다.
+describe("판례 본문 렌더: <br/> 를 줄바꿈으로 편다", () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it("판시사항·판결요지·전문에 <br/> 가 남지 않는다", async () => {
+    const body = JSON.stringify({ PrecService: {
+      사건명: "부당해고구제재심판정취소", 사건번호: "2023두54914", 법원명: "대법원", 선고일자: "20260129",
+      판시사항: "<br/> [1] 근로자 판단 기준<br/><br/> [2] 영업양도 승계",
+      판결요지: "[1] 종속적 관계 여부로 판단한다.<br/>[2] 원칙적으로 승계된다.",
+      판례내용: "【주    문】<br/>  원심판결을 파기한다. <br/><br/>【이    유】  상고이유를 판단한다.",
+    } })
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(body, { status: 200, headers: { "content-type": "application/json" } })))
+
+    const text = (await getPrecedentText(new LawApiClient({ apiKey: "test" }), { id: "616245" })).content[0].text
+
+    expect(text).not.toMatch(/<br\s*\/?>/i)
+    expect(text).toContain("판시사항:\n[1] 근로자 판단 기준\n\n[2] 영업양도 승계")
+    expect(text).toContain("[1] 종속적 관계 여부로 판단한다.\n[2] 원칙적으로 승계된다.")
+    expect(text).toContain("원심판결을 파기한다.\n\n【이 유】 상고이유를 판단한다.")
   })
 })

@@ -56,3 +56,21 @@ describe("get_batch_articles 전문 캐시 자리", () => {
     expect(lawCache.size()).toBe(before)
   })
 })
+
+// mst 와 lawId 는 다른 번호 체계다. 같은 값("001706")이 mst 로는 사방사업법, lawId 로는 민법이라
+// 한 키 공간을 쓰면 앞 조회가 뒤 조회의 답이 된다(실측). HTTP 모드에선 캐시가 프로세스 공용이라 남의 응답까지 오염된다.
+describe("캐시 키: mst 와 lawId 를 섞지 않는다", () => {
+  it("get_law_text: mst=X 뒤의 lawId=X 는 새로 가져온다", async () => {
+    const { client, calls } = stub()
+    await getLawText(client, { mst: "001706", jo: "제1조" })
+    await getLawText(client, { lawId: "001706", jo: "제1조" })
+    expect(calls).toHaveLength(2)
+  })
+
+  it("get_batch_articles: mst=X 뒤의 lawId=X 는 새로 가져온다", async () => {
+    const { client, calls } = stub()
+    await getBatchArticles(client, { mst: "001706", articles: ["제1조"] })
+    await getBatchArticles(client, { lawId: "001706", articles: ["제1조"] })
+    expect(calls).toHaveLength(2)
+  })
+})

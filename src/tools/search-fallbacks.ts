@@ -88,7 +88,7 @@ export async function searchLawFallbacks(
     if (ordinFallback && !ordinFallback.isError) {
       return asText(
         `[FALLBACK] 법령 '${input.query}' 0건 → 자치법규로 자동 폴백.\n` +
-        `💡 조례·규칙(지자체)은 자치법규이며 search_ordinance(execute_tool 경유)가 본 도구입니다.\n\n` +
+        `💡 조례·규칙(지자체)은 자치법규이며 execute_tool(tool_name="search_ordinance", params={query:"…"})가 본 도구입니다.\n\n` +
         (ordinFallback.content[0]?.text || "")
       )
     }
