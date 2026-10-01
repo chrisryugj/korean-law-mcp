@@ -23,6 +23,24 @@ export function splitSections(body: string): Array<{ num?: string, text: string 
   return out.map(s => ({ num: s.num, text: s.lines.join("\n").replace(/\n{3,}/g, "\n\n").trim() })).filter(s => s.text)
 }
 
+/**
+ * 키워드 첫 매칭을 품은 max 자 안팎의 발췌. 앞 max 자만 자르면 긴 조문(외국환거래규정 제1-2조 9,880자)에서
+ * 매칭 부분이 빠졌다. 창은 줄 경계에 맞추고, 앞을 건너뛰면 첫 줄(조문 제목)을 남긴다.
+ */
+function excerptAround(text: string, kw: string, max: number): string {
+  if (text.length <= max) return text
+  const at = Math.max(0, text.indexOf(kw))
+  let start = Math.max(0, Math.min(at - Math.floor(max / 3), text.length - max))
+  const lineStart = text.lastIndexOf("\n", start) + 1
+  if (at + kw.length <= lineStart + max) start = lineStart // 줄 머리로 당겨도 매칭이 창 안에 있을 때만
+  let end = Math.min(text.length, start + max)
+  const lineEnd = text.lastIndexOf("\n", end)
+  if (end < text.length && lineEnd > at + kw.length) end = lineEnd
+  const firstLineEnd = text.indexOf("\n")
+  const head = start > 0 && firstLineEnd > 0 ? `${text.slice(0, Math.min(firstLineEnd, 200))}\n   …\n` : ""
+  return head + text.slice(start, end)
+}
+
 function sectionKeywordView(body: string, kw: string, maxResults: number): string {
   const hits = splitSections(body).filter(s => s.text.includes(kw))
   if (hits.length === 0) return `[NOT_FOUND] 본문에 '${kw}'을(를) 포함한 절이 없습니다.\n⚠️ LLM은 기준 내용을 추측/생성하지 마세요.`
@@ -30,7 +48,7 @@ function sectionKeywordView(body: string, kw: string, maxResults: number): strin
   const labels = hits.map(s => s.num).filter(Boolean)
   let text = `'${kw}' 포함 ${hits.length}곳${labels.length ? `: ${labels.join(", ")}` : ""}\n`
   text += hits.length > cap ? `(아래 본문은 상위 ${cap}곳 — 절 번호는 jo:"2.7.3"처럼 조회)\n\n` : "\n"
-  return text + hits.slice(0, cap).map(s => s.text.length > 2500 ? `${s.text.slice(0, 2500)}\n   …` : s.text).join("\n\n---\n\n")
+  return text + hits.slice(0, cap).map(s => s.text.length > 2500 ? `${excerptAround(s.text, kw, 2500)}\n   …` : s.text).join("\n\n---\n\n")
 }
 
 export function keywordView(parsed: ParsedAdminRule, keyword: string, maxResults: number, body = ""): string {
@@ -52,7 +70,7 @@ export function keywordView(parsed: ParsedAdminRule, keyword: string, maxResults
   for (const a of shown) {
     const joLabel = a.key.includes("의") ? `제${a.key.replace("의", "조의")}` : `제${a.key}조`
     let body = a.lines.join("\n")
-    if (body.length > PER) body = body.slice(0, PER) + `\n   … (이 조문 ${body.length.toLocaleString()}자 — jo:"${joLabel}"로 전체 조회)`
+    if (body.length > PER) body = excerptAround(body, kw, PER) + `\n   … (이 조문 ${body.length.toLocaleString()}자 — jo:"${joLabel}"로 전체 조회)`
     text += `${body}\n\n---\n\n`
   }
   return text.replace(/\n\n---\n\n$/u, "")
