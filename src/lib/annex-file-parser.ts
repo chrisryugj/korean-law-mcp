@@ -29,7 +29,8 @@ export interface AnnexParseResult {
 
 export async function parseAnnexFile(buffer: ArrayBuffer): Promise<AnnexParseResult> {
   const { parse } = await import("kordoc")
-  const result: ParseResult = await parse(buffer)
+  // kordoc 4.17 은 OCR 모델이 캐시에 있으면 PDF 를 자동 OCR 한다 — 모델 유무로 결과·시간(파일당 최대 7초)이 갈리지 않게 끈다
+  const result: ParseResult = await parse(buffer, { ocr: false })
 
   if (result.success) {
     return {
