@@ -31,6 +31,18 @@
 
 ---
 
+## v4.15.2: Audit fixes for recent releases
+
+An audit of 4.14.0 to 4.15.1 turned up places that gave silently wrong answers or ran slow. Exposed tools and arguments are unchanged.
+
+- Next-step hints in tool output now point only at exposed tools (22 hints named tools that are not in the tool list)
+- Precedent text no longer carries raw `<br/>` tags, and the condensed body no longer cuts in the middle of a date
+- History lookups: admin-rule version on a reference date, the pre-1997 history of laws re-enacted under the same name, and repeal/current labels when a reference date is resolved
+- Chains keep what they received when they hit the time limit; document_review and law statistics now have a time limit too
+- kordoc pinned to 4.18.2, automatic PDF OCR turned off
+
+---
+
 ## v4.15.1: Annexes as they look in the original
 
 The annex parser (kordoc 4.17.0) now reads annexes the way they look in the original HWP. 103 of 272 annexes lay out the whole page with
