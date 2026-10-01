@@ -8,7 +8,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
 import {
   chainActionBasis, chainFullResearch, chainDisputePrep,
-  chainLawSystem, chainProcedureDetail, chainOrdinanceCompare, chainAmendmentTrack,
+  chainLawSystem, chainProcedureDetail, chainOrdinanceCompare, chainAmendmentTrack, chainDocumentReview,
 } from "./chains.js"
 import { lawCache } from "../lib/cache.js"
 import type { LawApiClient } from "../lib/api-client.js"
@@ -468,5 +468,44 @@ describe("판례 갈래는 검색과 근거(상세)를 단계별로 race 한다"
     expect(text).toContain("[245008]")
     expect(text).toMatch(/▶ 대법원 판례 상세\n⏱/)
     expect(res.isError).toBeFalsy()
+  })
+})
+
+// document_review 만 데드라인 밖이었다 — 판례 사다리 직렬과 근거 조회가 매달리면 60초 클라이언트 한도를 넘겼다(2026-10-01 감사).
+// 문서 리스크 분석(로컬)은 싣고, 매달린 법령·판례 검색 자리만 마커로 남긴다
+describe("document_review 데드라인", () => {
+  const DOC = [
+    "주택 임대차 계약서",
+    "제1조(보증금) 임대인은 계약 종료 후 보증금 반환을 지체할 수 있다.",
+    "제2조(위약금) 임차인이 계약을 위반하면 보증금 전액을 위약금으로 몰수한다.",
+  ].join("\n")
+
+  it("업스트림이 매달려도 시간 한도 안에 리스크 분석과 마커를 돌려준다", async () => {
+    process.env.MCP_CHAIN_DEADLINE_MS = "5000"
+    const client = {
+      async searchLaw() { return hang<string>() },
+      async fetchApi() { return hang<string>() },
+    } as unknown as LawApiClient
+    const res = await runPastDeadline(chainDocumentReview(client, { text: DOC, maxClauses: 15 }))
+    const text = res.content[0]?.text ?? ""
+    expect(text).toContain("문서 리스크 분석")
+    expect(text).toContain("시간 한도로 이 섹션은 수집하지 못했습니다")
+    expect(res.isError).toBeFalsy()
+  })
+
+  it("법령 검색은 시간 안에 왔고 판례만 매달리면 법령은 싣는다", async () => {
+    process.env.MCP_CHAIN_DEADLINE_MS = "5000"
+    const client = {
+      async searchLaw() { return hang<string>() },
+      async fetchApi({ target }: { target?: string }) {
+        if (target === "aiSearch") return aiXml("주택임대차보호법")
+        return hang<string>()
+      },
+    } as unknown as LawApiClient
+    const res = await runPastDeadline(chainDocumentReview(client, { text: DOC, maxClauses: 15 }))
+    const text = res.content[0]?.text ?? ""
+    expect(text).toContain("▶ 근거 법령")
+    expect(text).toContain("주택임대차보호법")
+    expect(text).toContain("▶ 관련 판례\n⏱")
   })
 })

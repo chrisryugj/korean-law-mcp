@@ -136,3 +136,30 @@ describe("getLawStatistics: 부분 결과는 부분이라고 말한다 (D2)", ()
     expect(r.content[0].text).toContain("첫 실패 원인: API 오류 (403)")
   })
 })
+
+// 하루 조회가 4.5~5.7초(실측)라 days 가 크면 60초 클라이언트 한도를 넘겼다 — 데드라인이 없었다(2026-10-01 감사).
+// 체인과 같은 시간 한도로 최신일부터 받고, 넘기면 남은(가장 오래된) 날을 미조회로 밝힌다
+describe("getLawStatistics: 시간 한도", () => {
+  const ORIGINAL = process.env.MCP_CHAIN_DEADLINE_MS
+  afterEach(() => {
+    if (ORIGINAL === undefined) delete process.env.MCP_CHAIN_DEADLINE_MS
+    else process.env.MCP_CHAIN_DEADLINE_MS = ORIGINAL
+  })
+
+  it("한도를 넘기면 받은 날까지 답하고 미조회 범위를 밝힌다", async () => {
+    process.env.MCP_CHAIN_DEADLINE_MS = "5000"
+    const client = {
+      // 하루당 2초 — 5개씩 배치라 첫 배치(5일)는 2초, 둘째 배치는 4초에, 셋째 배치가 한도를 넘는다
+      getLawHistory: ({ regDt }: { regDt: string }) =>
+        new Promise<string>(resolve => setTimeout(() => resolve(DAYS[regDt] ?? EMPTY_DAY), 2000)),
+    } as unknown as LawApiClient
+    const pending = getLawStatistics(client, { days: 30, limit: 10 })
+    await vi.advanceTimersByTimeAsync(6000)
+    const r = await pending
+    const text = r.content[0].text
+    expect(r.isError).toBeFalsy()
+    expect(text).toContain("경찰공무원 임용령")          // 최신 이틀은 받았다
+    expect(text).toContain("시간 한도")
+    expect(text).toContain("부분 결과")
+  })
+})

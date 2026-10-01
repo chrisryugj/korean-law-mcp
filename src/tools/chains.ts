@@ -1106,9 +1106,11 @@ export async function chainDocumentReview(
   apiClient: LawApiClient,
   input: z.infer<typeof chainDocumentReviewSchema>
 ): Promise<ToolResponse> {
-  try {
+  const parts = [`═══ 문서 종합 검토 ═══`]
+  // 이 체인만 데드라인 밖이었다 — 판례 사다리·근거 조회가 업스트림 꼬리를 그대로 타 60초 클라이언트 한도를 넘겼다(2026-10-01 감사).
+  // 다른 체인과 같은 틀로 돌고, 만료 시 받은 섹션까지 싣는다
+  return withChainDeadline(parts, async dl => {
     throwIfRequestCancelled()
-    const parts = [`═══ 문서 종합 검토 ═══`]
 
     // Step 1: analyze_document 로 리스크 분석
     const analysisResult = await callTool(analyzeDocument, apiClient, {
@@ -1139,8 +1141,9 @@ export async function chainDocumentReview(
 
     // 판례 검색과 AI 법령 검색은 서로 독립이다. 종전엔 판례 사다리 5개가 모두 끝난 뒤에야 법령 검색을
     // 시작했다 (2026-09-23 리뷰 B#11). 함께 띄우고, 싣는 순서(판례 → 법령)는 아래 조립에서 지킨다.
-    const [precedentSearches, lawResults] = await Promise.all([
-      Promise.all(
+    // 갈래마다 띄우는 시점에 데드라인과 경주시킨다 — 만료 뒤에 새로 race 하면 이미 끝난 갈래도 {ok:false}다
+    const [precedentO, lawO] = await Promise.all([
+      raceDeadline(dl, Promise.all(
         uniqueHints.map(hint => safeSearchPrecedentsStructured(apiClient, {
           query: hint,
           display: 3,
@@ -1151,78 +1154,88 @@ export async function chainDocumentReview(
           maxFallbackAttempts: 3,
           validateResult: validation => validatePrecedentSearchResult(apiClient, validation, { apiKey: input.apiKey, detailMemo }),
         }))
-      ),
-      Promise.all(
+      )),
+      raceDeadline(dl, Promise.all(
         lawHints.map(hint => callTool(searchAiLaw, apiClient, { query: hint, display: 3, apiKey: input.apiKey }))
-      ),
+      )),
     ])
-    throwIfRequestCancelled()
-    const precedentResults = precedentSearches.map(search => search.result)
 
-    // 판례 결과 합산
-    const precTexts: string[] = []
-    for (let i = 0; i < uniqueHints.length; i++) {
-      const r = precedentResults[i]
-      if (r.hits.length > 0) {
-        precTexts.push(`[${uniqueHints[i]}]\n${renderPrecedentSearchResult(r)}`)
+    if (!precedentO.ok) {
+      parts.push(timedOutSection("관련 판례", "search_decisions"))
+    } else {
+      const precedentSearches = precedentO.value
+      const precedentResults = precedentSearches.map(search => search.result)
+
+      // 판례 결과 합산
+      const precTexts: string[] = []
+      for (let i = 0; i < uniqueHints.length; i++) {
+        const r = precedentResults[i]
+        if (r.hits.length > 0) {
+          precTexts.push(`[${uniqueHints[i]}]\n${renderPrecedentSearchResult(r)}`)
+        }
+      }
+      if (precTexts.length > 0) {
+        parts.push(sec("관련 판례", precTexts.join("\n\n")))
+      }
+      const precedentErrors = precedentSearches
+        .map((search, index) => search.error ? `[${uniqueHints[index]}]\n${search.error.text}` : "")
+        .filter(text => text.trim())
+      if (precedentErrors.length > 0) {
+        parts.push(secOrSkip("판례 검색 실패", {
+          text: precedentErrors.join("\n\n"),
+          isError: true,
+        }))
+      }
+
+      const combinedPrecedents = combineStructuredPrecedentResults(precedentResults)
+      if (combinedPrecedents) {
+        const evidenceO = await raceDeadline(dl, fetchPrecedentEvidence(apiClient, combinedPrecedents, {
+          apiKey: input.apiKey,
+          detailLimit: 2,
+          full: false,
+          detailMemo,
+        }))
+        if (!evidenceO.ok) {
+          parts.push(timedOutSection("관련 판례 상세", "get_decision_text"))
+        } else if (evidenceO.value) {
+          parts.push(secOrSkip("관련 판례 상세", {
+            text: evidenceO.value.text,
+            isError: evidenceO.value.isError,
+          }))
+        }
       }
     }
-    if (precTexts.length > 0) {
-      parts.push(sec("관련 판례", precTexts.join("\n\n")))
-    }
-    const precedentErrors = precedentSearches
-      .map((search, index) => search.error ? `[${uniqueHints[index]}]\n${search.error.text}` : "")
-      .filter(text => text.trim())
-    if (precedentErrors.length > 0) {
-      parts.push(secOrSkip("판례 검색 실패", {
-        text: precedentErrors.join("\n\n"),
-        isError: true,
-      }))
-    }
 
-    const combinedPrecedents = combineStructuredPrecedentResults(precedentResults)
-    if (combinedPrecedents) {
-      const precedentEvidence = await fetchPrecedentEvidence(apiClient, combinedPrecedents, {
-        apiKey: input.apiKey,
-        detailLimit: 2,
-        full: false,
-        detailMemo,
-      })
-      if (precedentEvidence) {
-        parts.push(secOrSkip("관련 판례 상세", {
-          text: precedentEvidence.text,
-          isError: precedentEvidence.isError,
+    if (!lawO.ok) {
+      parts.push(timedOutSection("근거 법령", "search_law"))
+    } else {
+      // 법령 결과 합산
+      const lawResults = lawO.value
+      const lawTexts: string[] = []
+      const lawErrors: string[] = []
+      for (let i = 0; i < lawHints.length; i++) {
+        const r = lawResults[i]
+        if (!r.isError && r.text.trim()) {
+          lawTexts.push(`[${lawHints[i]}]\n${r.text}`)
+        } else if (r.isError && !/\[NOT_FOUND\]/.test(r.text)) {
+          // 0건([NOT_FOUND])은 종전대로 생략하되, 검색 장애는 판례 쪽처럼 밝힌다. 섹션이 조용히
+          // 빠지면 "근거 법령 없음"으로 읽힌다 (2026-09-23 리뷰 B#11)
+          lawErrors.push(`[${lawHints[i]}]\n${r.text}`)
+        }
+      }
+      if (lawTexts.length > 0) {
+        parts.push(sec("근거 법령", lawTexts.join("\n\n")))
+      }
+      if (lawErrors.length > 0) {
+        parts.push(secOrSkip("근거 법령 검색 실패", {
+          text: lawErrors.join("\n\n"),
+          isError: true,
         }))
       }
     }
 
-    // 법령 결과 합산
-    const lawTexts: string[] = []
-    const lawErrors: string[] = []
-    for (let i = 0; i < lawHints.length; i++) {
-      const r = lawResults[i]
-      if (!r.isError && r.text.trim()) {
-        lawTexts.push(`[${lawHints[i]}]\n${r.text}`)
-      } else if (r.isError && !/\[NOT_FOUND\]/.test(r.text)) {
-        // 0건([NOT_FOUND])은 종전대로 생략하되, 검색 장애는 판례 쪽처럼 밝힌다. 섹션이 조용히
-        // 빠지면 "근거 법령 없음"으로 읽힌다 (2026-09-23 리뷰 B#11)
-        lawErrors.push(`[${lawHints[i]}]\n${r.text}`)
-      }
-    }
-    if (lawTexts.length > 0) {
-      parts.push(sec("근거 법령", lawTexts.join("\n\n")))
-    }
-    if (lawErrors.length > 0) {
-      parts.push(secOrSkip("근거 법령 검색 실패", {
-        text: lawErrors.join("\n\n"),
-        isError: true,
-      }))
-    }
-
     return wrapResult(parts.join("\n"))
-  } catch (error) {
-    return wrapError(error)
-  }
+  })
 }
 
 /** analyze_document 결과 텍스트에서 "검색: ..." 라인의 힌트를 추출 */

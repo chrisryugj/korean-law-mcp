@@ -9,6 +9,8 @@ import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError } from "../lib/errors.js"
 import { rethrowIfFatal } from "../lib/fatal-errors.js"
 import { ExecutionLimitError } from "../lib/execution-limits.js"
+import { runWithRequestContext } from "../lib/session-state.js"
+import { raceDeadline, startChainDeadline } from "./chain-deadline.js"
 
 export const LawStatisticsSchema = z.object({
   days: z.number().min(1).max(90).optional().default(30).describe("최근 변경 분석 기간 (일 단위, 기본값: 30, 최대: 90)"),
@@ -22,10 +24,17 @@ export async function getLawStatistics(
   apiClient: LawApiClient,
   input: LawStatisticsInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
+  // 하루 조회가 4.5~5.7초(실측)라 days 가 크면 60초 클라이언트 한도를 넘겼다(2026-10-01 감사). 체인과 같은 시간 한도
+  // (MCP_CHAIN_DEADLINE_MS) 아래에서 돌고, 만료되면 진행 중 조회를 끊는다
+  let deadline: ReturnType<typeof startChainDeadline> | undefined
   try {
-    return await getRecentChanges(apiClient, input.days, input.limit, input.apiKey)
+    deadline = startChainDeadline()
+    const dl = deadline
+    return await runWithRequestContext({ signal: dl.signal }, () => getRecentChanges(apiClient, input.days, input.limit, input.apiKey, dl))
   } catch (error) {
     return formatToolError(error, "get_law_statistics")
+  } finally {
+    deadline?.dispose()
   }
 }
 
@@ -82,7 +91,8 @@ async function getRecentChanges(
   apiClient: LawApiClient,
   days: number,
   limit: number,
-  apiKey?: string
+  apiKey: string | undefined,
+  deadline: ReturnType<typeof startChainDeadline>
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   // 최신일부터 거슬러 오른다. 요청 예산(기본 48회)이 먼저 바닥나도 잘리는 쪽이 가장 오래된 날이 되게 한다.
   // 종전처럼 오래된 날부터 돌면 days가 크면 정작 최근 며칠이 조용히 빠졌다 (2026-09-23 리뷰 D2).
@@ -99,10 +109,17 @@ async function getRecentChanges(
   let firstFailure = ""
   const cappedDays: string[] = []
   const unscannedDays: string[] = []
+  const timedOutDays: string[] = []
 
   for (let i = 0; i < dateStrings.length; i += BATCH_SIZE) {
     const batch = dateStrings.slice(i, i + BATCH_SIZE)
-    const settled = await Promise.allSettled(batch.map((dateStr) => fetchDay(apiClient, dateStr, apiKey)))
+    const outcome = await raceDeadline(deadline, Promise.allSettled(batch.map((dateStr) => fetchDay(apiClient, dateStr, apiKey))))
+    // 시간 한도: 이 배치부터 남은(더 오래된) 날은 받지 못했다. 받은 날까지로 답하되 빠진 범위를 밝힌다
+    if (!outcome.ok) {
+      timedOutDays.push(...dateStrings.slice(i))
+      break
+    }
+    const settled = outcome.value
 
     settled.forEach((r, k) => {
       const day = batch[k]
@@ -131,12 +148,12 @@ async function getRecentChanges(
     }
   }
 
-  const scannedDays = dateStrings.length - failedDays.length - unscannedDays.length
+  const scannedDays = dateStrings.length - failedDays.length - unscannedDays.length - timedOutDays.length
   if (scannedDays === 0) {
     // 한 날도 받지 못했다. "0건"으로 답하면 개정이 없었다는 거짓 결론이 된다.
     throw new Error(
       `최근 ${days}일 법령 변경이력을 한 날도 조회하지 못했습니다 ` +
-      `(조회 실패 ${failedDays.length}일, 요청 예산 소진으로 미조회 ${unscannedDays.length}일)` +
+      `(조회 실패 ${failedDays.length}일, 요청 예산 소진으로 미조회 ${unscannedDays.length}일, 시간 한도로 미조회 ${timedOutDays.length}일)` +
       // 키 없음·권한 오류(401/403)는 재시도로 낫지 않는다: 첫 실패 원인을 그대로 보여준다(독립 리뷰)
       (firstFailure ? `. 첫 실패 원인: ${firstFailure}` : ". 잠시 후 다시 시도하세요.")
     )
@@ -164,6 +181,9 @@ async function getRecentChanges(
   const notes: string[] = []
   if (unscannedDays.length > 0) {
     notes.push(`⚠️ 요청 예산 소진으로 가장 오래된 ${unscannedDays.length}일(${formatYmd(unscannedDays[unscannedDays.length - 1])} ~ ${formatYmd(unscannedDays[0])})은 조회하지 못했습니다. 위 집계는 부분 결과입니다. days를 줄여 다시 조회하세요.`)
+  }
+  if (timedOutDays.length > 0) {
+    notes.push(`⚠️ 시간 한도로 가장 오래된 ${timedOutDays.length}일(${formatYmd(timedOutDays[timedOutDays.length - 1])} ~ ${formatYmd(timedOutDays[0])})은 조회하지 못했습니다. 위 집계는 부분 결과입니다. days를 줄여 다시 조회하세요.`)
   }
   if (failedDays.length > 0) {
     notes.push(`⚠️ ${failedDays.length}일 조회 실패(${failedDays.map(formatYmd).join(", ")}): 그날 반영분은 집계에서 빠졌습니다.`)
