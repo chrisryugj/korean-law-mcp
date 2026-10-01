@@ -108,10 +108,14 @@ function fetchLineagePage(apiClient: LawApiClient, lawId: string, page: number, 
 export async function fetchLineageVersions(apiClient: LawApiClient, lawId: string, apiKey?: string): Promise<HistoricalFetchResult> {
   const first = await fetchLineagePage(apiClient, lawId, 1, apiKey)
   const firstRows = parseEffectiveRows(first)
+  // 법령ID 는 0 채움 6자리로 오지만 호출부는 "1638"처럼 줄 수 있다 — 업스트림은 LID=1638 에도 001638 행을 준다(감사 실측).
+  // 문자열 그대로 비교하면 행을 전부 버려 계보가 비었다. 앞의 0을 떼고 비교한다
+  const wanted = lawId.replace(/^0+/, "")
+  const sameId = (id: string) => id.replace(/^0+/, "") === wanted
   // LID 가 무시되면 전 법령 목록(실측 ID= 는 무시돼 16만 행)이 온다. 첫 페이지에 그 법령ID가 없거나 총계가 상한을 넘으면
   // (실측 최대 367행) 필터가 안 걸린 것으로 보고 더 받지 않는다 — 조용히 1,000행에서 자른 목록을 계보로 쓰지 않는다.
   const totalCount = parseInt(extractTag(first, "totalCnt") || "0", 10) || 0
-  if (!firstRows.some(r => r.lawId === lawId) || totalCount > LINEAGE_MAX_PAGES * LINEAGE_PAGE_SIZE) {
+  if (!firstRows.some(r => sameId(r.lawId)) || totalCount > LINEAGE_MAX_PAGES * LINEAGE_PAGE_SIZE) {
     return { versions: [], totalCount: 0, fetchedPages: 1 }
   }
 
@@ -123,7 +127,7 @@ export async function fetchLineageVersions(apiClient: LawApiClient, lawId: strin
   const versions: HistoricalVersion[] = []
   for (const r of [firstRows, ...rest.map(parseEffectiveRows)].flat()) {
     const key = `${r.mst}:${r.efYd}`
-    if (r.lawId !== lawId || seen.has(key)) continue
+    if (!sameId(r.lawId) || seen.has(key)) continue
     seen.add(key)
     versions.push({ mst: r.mst, efYd: r.efYd, ancNo: r.ancNo, ancYd: r.ancYd, lawNm: r.lawNm, rrCls: r.rrCls })
   }

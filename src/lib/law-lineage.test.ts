@@ -52,6 +52,11 @@ describe("fetchLineageVersions — 법령ID 계보", () => {
     expect(calls).toBe(1)
   })
 
+  it("0 채움 없는 법령ID도 같은 계보로 본다 — 업스트림은 LID=1638 에도 001638 행을 준다 (감사 실측)", async () => {
+    const client = { fetchApi: async () => lineageXml(5, ROWS) } as unknown as LawApiClient
+    expect((await fetchLineageVersions(client, "9694")).versions).toHaveLength(5)
+  })
+
   it("총계가 한 페이지를 넘으면 나머지 페이지를 받는다", async () => {
     const pages: string[] = []
     const client = {
