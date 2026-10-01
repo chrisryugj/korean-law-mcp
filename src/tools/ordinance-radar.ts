@@ -205,7 +205,7 @@ export async function ordinanceRadar(
     out += `\n📋 요약: `
     if (needReview > 0) {
       out += `근거 상위법 ${parentNames.length}건 중 ${needReview}건이 조례 시행 이후 개정됨 → 정비 검토 대상.\n`
-      out += `개정 내용이 조례 위임사항과 관련되는지 확인 권장 — get_law_text(mst=...)로 개정 조문을, compare_law로 신구 대조를 확인하세요.\n`
+      out += `개정 내용이 조례 위임사항과 관련되는지 확인 권장 — get_law_text(mst=...)로 개정 조문을, execute_tool(tool_name="compare_old_new", params={mst:"…"})로 신구 대조를 확인하세요.\n`
     } else if (unknown === parentNames.length) {
       out += `상위법 현행 시행일을 확인하지 못했습니다. 개별 search_law로 확인하세요.\n`
     } else {
