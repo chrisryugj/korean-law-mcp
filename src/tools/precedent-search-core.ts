@@ -3,6 +3,8 @@ import { parsePrecedentXML, type PrecedentItem } from "../lib/xml-parser.js"
 import { buildCompactLegalQueries } from "./compact-query-planner.js"
 import type { AiLawArticleSignal } from "./life-law.js"
 import type { SearchPrecedentsInput } from "./precedents.js"
+import { rethrowIfFatal } from "../lib/fatal-errors.js"
+import { extractCaseNumbers, fieldHasExactCase } from "../lib/case-citation.js"
 
 export type PrecedentSearchMode = 1 | 2
 
@@ -159,7 +161,10 @@ async function runPrecedentSearchOnce(
     apiKey: args.apiKey,
   })
   const parsed = parsePrecedentXML(xmlText)
-  const rawHits = parsed.items.map(item => toHit(item, input.query, input.search, input.semanticAnchor))
+  const items = input.caseNumber
+    ? parsed.items.filter(item => fieldHasExactCase(item.사건번호 || "", input.caseNumber!))
+    : parsed.items
+  const rawHits = items.map(item => toHit(item, input.query, input.search, input.semanticAnchor))
   const hits = input.relaxDateRange || !hasDateRange(args)
     ? markDateRelaxed(rawHits, args)
     : rawHits.filter(hit => isDateInRange(hit.date, args.fromDate, args.toDate))
@@ -171,7 +176,7 @@ async function runPrecedentSearchOnce(
     fromDate: args.fromDate,
     toDate: args.toDate,
     reason: input.reason,
-    totalCount: parsed.totalCnt,
+    totalCount: input.caseNumber ? items.length : parsed.totalCnt,
     hitCount: hits.length,
     success: hits.length > 0,
     outOfRequestedDateRange: input.relaxDateRange ? hits.some(hit => hit.outOfRequestedDateRange) : undefined,
@@ -188,10 +193,19 @@ async function runPrecedentSearchOnce(
   }
 }
 
+function exactCaseNumber(args: SearchPrecedentsInput): string | undefined {
+  if (args.caseNumber) return args.caseNumber.replace(/\s/g, "")
+  if (args.search === 2) return undefined
+  const query = (args.query || "").replace(/\s/g, "")
+  const [caseNo] = extractCaseNumbers(query)
+  return caseNo === query ? caseNo : undefined
+}
+
 function firstAttempt(args: SearchPrecedentsInput): SearchOnceInput {
-  if (args.caseNumber) {
+  const caseNumber = exactCaseNumber(args)
+  if (caseNumber) {
     return {
-      caseNumber: args.caseNumber,
+      caseNumber,
       search: (args.search || 1) as PrecedentSearchMode,
       reason: "case_number",
     }
@@ -209,7 +223,7 @@ function fallbackInputs(args: SearchPrecedentsInput, context: PrecedentSearchCon
   const inputs: SearchOnceInput[] = []
   const fallbackPolicy = context.fallbackPolicy ?? "full"
 
-  if (fallbackPolicy === "none") return inputs
+  if (fallbackPolicy === "none" || exactCaseNumber(args)) return inputs
 
   if (args.query && (args.search || 1) === 1) {
     inputs.push({
@@ -278,12 +292,13 @@ export async function searchPrecedentsStructured(
     attempts.push(result.attempt)
     page = result.page
 
-    if (result.attempt.success && result.attempt.requiresResultValidation && context.validateResult) {
+    const validationHits = result.hits.length > 0 ? result.hits : hasDateRange(args) ? result.rawHits : []
+    if (validationHits.length > 0 && result.attempt.requiresResultValidation && context.validateResult) {
       try {
         const accepted = await context.validateResult({
           originalArgs: args,
           attempt: result.attempt,
-          hits: result.hits,
+          hits: validationHits,
         })
         if (!accepted) {
           result.attempt.success = false
@@ -293,6 +308,7 @@ export async function searchPrecedentsStructured(
           result.hits = []
         }
       } catch (error) {
+        rethrowIfFatal(error)
         result.attempt.success = false
         result.attempt.hitCount = 0
         result.attempt.validationFailed = true

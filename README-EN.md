@@ -31,6 +31,16 @@
 
 ---
 
+## v4.15.3: Retrieval correctness and performance
+
+- Exact case-number searches, per-case fallback validation, and explicit unconfirmed status when treatment scanning is disabled
+- A bounded cache of 20 parsed precedent records shared by text retrieval and citation tracking
+- Shared in-progress statute reads within a batch of article requests
+- Total deadlines and cancellation through body reads; corrected annex/article selection and effective-date slice comparisons
+- Patch release with no added features. [Changelog](CHANGELOG.md), [review evidence](docs/PRODUCTION-REVIEW-2026-10-02.md)
+
+---
+
 ## v4.15.2: Audit fixes for recent releases
 
 An audit of 4.14.0 to 4.15.1 turned up places that gave silently wrong answers or ran slow. Exposed tools and arguments are unchanged.

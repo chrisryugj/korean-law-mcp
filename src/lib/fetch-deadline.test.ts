@@ -106,3 +106,95 @@ describe("본문 무응답 한도 (A5)", () => {
     expect(await response.text()).toBe("<ok/>")
   })
 })
+
+describe("headers, probes and final body share the deadline", () => {
+  it("late headers do not grant a stalled probe another idle window", async () => {
+    vi.useFakeTimers()
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      await new Promise(resolve => setTimeout(resolve, 4_000))
+      return stalledResponse()
+    }))
+    const started = Date.now()
+    let settledAt = 0
+    const pending = fetchWithRetry("https://example.com/x", { timeout: 5_000, deadline: 5_000 })
+      .finally(() => { settledAt = Date.now() })
+    const assertion = expect(pending).rejects.toThrow(/timeout/i)
+    await vi.advanceTimersByTimeAsync(30_000)
+    await assertion
+    expect(settledAt - started).toBeLessThanOrEqual(5_000)
+  })
+
+  it("a caller signal interrupts inspection without a request context", async () => {
+    vi.useFakeTimers()
+    const controller = new AbortController()
+    vi.stubGlobal("fetch", vi.fn(async () => stalledResponse()))
+    let settled = false
+    const pending = fetchWithRetry("https://example.com/x", { signal: controller.signal })
+      .finally(() => { settled = true })
+    const assertion = expect(pending).rejects.toMatchObject({ name: "AbortError" })
+    await vi.advanceTimersByTimeAsync(1)
+    controller.abort()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(settled).toBe(true)
+    await assertion
+  })
+
+  it("a final response cannot stream chunks beyond the total deadline", async () => {
+    vi.useFakeTimers()
+    let interval: ReturnType<typeof setInterval>
+    const cancel = vi.fn(() => clearInterval(interval))
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("<ok>"))
+        interval = setInterval(() => controller.enqueue(new TextEncoder().encode("data")), 500)
+      },
+      cancel,
+    }))))
+    const started = Date.now()
+    let settledAt = 0
+    const pending = fetchWithRetry("https://example.com/x", { retries: 0, deadline: 2_000 })
+      .then(readResponseText).finally(() => { settledAt = Date.now() })
+    const assertion = expect(pending).rejects.toThrow(/timeout/i)
+    await vi.advanceTimersByTimeAsync(30_000)
+    await assertion
+    expect(settledAt - started).toBeLessThanOrEqual(2_000)
+    expect(cancel).toHaveBeenCalledOnce()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it("a caller signal also interrupts the returned response body", async () => {
+    vi.useFakeTimers()
+    const controller = new AbortController()
+    vi.stubGlobal("fetch", vi.fn(async () => stalledResponse()))
+    let settled = false
+    const response = await fetchWithRetry("https://example.com/x", { retries: 0, signal: controller.signal })
+    const pending = readResponseText(response).finally(() => { settled = true })
+    const assertion = expect(pending).rejects.toMatchObject({ name: "AbortError" })
+    controller.abort()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(settled).toBe(true)
+    await assertion
+  })
+
+  it("successful reads clear deadline timers and preserve the native response", async () => {
+    vi.useFakeTimers()
+    const upstream = new Response("<ok/>")
+    vi.stubGlobal("fetch", vi.fn(async () => upstream))
+    const response = await fetchWithRetry("https://example.com/x", { retries: 0 })
+    expect(response).toBe(upstream)
+    await expect(readResponseText(response)).resolves.toBe("<ok/>")
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it("an expired deadline abandons the body even before the first read", async () => {
+    vi.useFakeTimers()
+    const cancel = vi.fn()
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(new ReadableStream<Uint8Array>({ cancel }))))
+    const response = await fetchWithRetry("https://example.com/x", { retries: 0, deadline: 100 })
+    await vi.advanceTimersByTimeAsync(101)
+    await expect(readResponseText(response)).rejects.toThrow(/timeout/i)
+    expect(cancel).toHaveBeenCalledOnce()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+})

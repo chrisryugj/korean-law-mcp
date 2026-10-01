@@ -196,7 +196,7 @@ function titleMatchesAnnexNumber(title: string, annexNumber: string): boolean {
   // 꼬리의 `서식`까지 받는 이유도 그 표기다(번호가 낱말 사이에 낀다).
   const patterns = [
     new RegExp(`\\[\\s*(?:${kw})\\s*(?:제)?\\s*${numberSrc}\\s*(?:호)?\\s*(?:서식)?\\s*\\]`),
-    new RegExp(`(?:${kw})\\s*제?\\s*${numberSrc}\\s*(?:호)?`),
+    new RegExp(`(?:${kw})\\s*제?\\s*${numberSrc}(?!\\d|\\s*(?:호\\s*)?의)\\s*(?:호)?`),
   ]
 
   if (patterns.some((pattern) => pattern.test(title))) {
@@ -205,7 +205,7 @@ function titleMatchesAnnexNumber(title: string, annexNumber: string): boolean {
 
   // 묶음 별표 범위 매칭: "[별표1~5]", "[별표 1 ~ 5]" 등
   const num = Number.parseInt(annexNumber, 10)
-  if (!Number.isNaN(num)) {
+  if (!Number.isNaN(num) && parsed?.sub == null) {
     const rangePattern = /별표\s*(\d+)\s*[~\-]\s*(\d+)/g
     let match: RegExpExecArray | null
     while ((match = rangePattern.exec(title)) !== null) {

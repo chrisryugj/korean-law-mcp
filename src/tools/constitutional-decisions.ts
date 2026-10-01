@@ -3,6 +3,7 @@ import type { LawApiClient } from "../lib/api-client.js";
 import { parseConstitutionalXML } from "../lib/xml-parser.js";
 import { truncateResponse } from "../lib/schemas.js";
 import { formatToolError, noResultHint } from "../lib/errors.js";
+import { decisionFields } from "../lib/decision-fields.js";
 import {
   compactBody,
   densifyLawRefs,
@@ -114,7 +115,7 @@ export async function getConstitutionalDecisionText(
       throw new Error("헌재결정례를 찾을 수 없거나 응답 형식이 올바르지 않습니다.");
     }
 
-    const decision = data.DetcService || data.헌재결정례;
+    const decision = decisionFields(data.DetcService || data.헌재결정례);
 
     let output = `=== ${decision.사건명 || "헌재결정례"} ===\n\n`;
 

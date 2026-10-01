@@ -180,6 +180,7 @@ export async function executeNaturalQueryJson(
     applyDateRange(route)
 
     const result = await executeTool(apiClient, route.tool, route.params)
+    let isError = Boolean(result.isError)
 
     let pipelineResult: string | undefined
     if (route.pipeline && route.pipeline.length > 0 && !result.isError) {
@@ -191,6 +192,7 @@ export async function executeNaturalQueryJson(
         for (const step of route.pipeline) {
           const pResult = await executeTool(apiClient, step.tool, { ...step.params, ...pipeId })
           outputs.push(pResult.content.map(c => c.text).join("\n"))
+          isError ||= Boolean(pResult.isError)
         }
         pipelineResult = outputs.join("\n\n")
       }
@@ -201,8 +203,9 @@ export async function executeNaturalQueryJson(
       route: { tool: route.tool, reason: route.reason, params: route.params },
       result: result.content.map(c => c.text).join("\n"),
       pipelineResult,
-      isError: result.isError || false,
+      isError,
     }, null, 2))
+    if (isError) process.exitCode = 1
   } catch (error) {
     console.log(JSON.stringify({
       query,

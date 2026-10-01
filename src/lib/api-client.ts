@@ -69,8 +69,9 @@ export class LawApiClient {
   /** HTTP 응답 검증 — 상태 코드 분류 + HTML 에러 페이지 감지 */
   private async throwIfError(response: Response, endpoint: string): Promise<void> {
     if (!response.ok) {
-      // body stream 리크 방지: throw 전에 body consume
-      try { await readResponseText(response) } catch { /* ignore */ }
+      // The status already determines the failure. Reading a stalled/large
+      // error page only delays it; cancellation is cleanup and must not block.
+      void response.body?.cancel().catch(() => {})
       const status = response.status
       if (status === 429) throw new Error(`API 요청 한도 초과 (429) - 잠시 후 다시 시도하세요.`)
       if (status >= 500) throw new Error(`법제처 서버 오류 (${status}) - ${endpoint}`)

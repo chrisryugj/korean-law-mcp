@@ -2,10 +2,9 @@
  * precedents 렌더·HTML 정규화 회귀 (2026-09-23 리뷰 C5·C7)
  */
 import { describe, it, expect, vi, afterEach } from "vitest"
-import { getPrecedentText, normalizeHtmlText, renderPrecedentSearchResult } from "./precedents.js"
+import { getPrecedentText, normalizeHtmlText, renderPrecedentSearchResult, precedentCache } from "./precedents.js"
 import { searchPrecedentsStructured } from "./precedent-search-core.js"
 import { LawApiClient } from "../lib/api-client.js"
-import { lawCache } from "../lib/cache.js"
 
 // 국세법령정보 HWP 편집기 HTML은 &nbsp; 를 줄지어 쓴다. `[ \t]+\n` 이 그 덩어리에서 제곱이었다
 // (&nbsp; 3만 개 842ms, 10만 개 13.8초).
@@ -73,7 +72,7 @@ describe("판례 원문 캐시", () => {
   afterEach(() => vi.unstubAllGlobals())
 
   it("같은 판례를 full·축약으로 두 번 받아도 업스트림은 한 번", async () => {
-    lawCache.clear()
+    precedentCache.clear()
     const body = JSON.stringify({ PrecService: { 사건명: "손해배상", 사건번호: "2020다1", 법원명: "대법원", 판례내용: "본문" } })
     const fetchMock = vi.fn(async () => new Response(body, { status: 200, headers: { "content-type": "application/json" } }))
     vi.stubGlobal("fetch", fetchMock)

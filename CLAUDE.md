@@ -9,7 +9,7 @@
 >   - `.github/workflows/publish.yml`(GitHub Release → OIDC trusted publishing + provenance)은 **npm 쪽 trusted publisher 등록이 아직 안 됐다**. 그래서 게시는 위 로컬 `npm publish` 가 정규 경로이고, Release 는 그 뒤에 만든다 — 워크플로는 같은 버전이 이미 레지스트리에 있으면 게시를 건너뛰고 검증(typecheck·test·build·verify:package·audit)만 릴리스 시점에 재확인한다.
 > - **🚫 이 레포에서 `fly deploy` 직접 실행 절대 금지** — 통합 이미지를 law 단독 이미지로 덮어써 stats·patent·archhub·school까지 전부 죽는다. 자세한 배경: [docs/FLY-COST.md](docs/FLY-COST.md)
 
-Korean Law MCP Server v4.15.2 - 법제처 42개 API → 10개 통합 도구 (내부 99개) + 9개 시나리오 + 자연어 CLI + HTTP stateless + 판례 토큰 74% 감축 + **legal_research (체인 8종 통합, task 파라미터)** + **legal_analysis (인용검증·판례생사·행위시법·영향그래프 통합, mode 파라미터)** + **time_travel (시점 diff)** + **action_plan (이럴 땐 이렇게, 5단계 안내)** + **시행예정 감지 (search_law가 제명변경·미시행 개정 자동 병기)** + **ordinance_radar (조례 정비 레이더 — 근거 상위법 개정 자동 대조, v4.7.0)** + **인용 검증 표기 내성 (낫표·가운뎃점·`같은 법` 조응, v4.9.0)** + **폐지 감지 (검색 0건 시 폐지 법령·행정규칙 연혁 추적 — 폐지사유·후속 통합 규정 자동 안내, v4.10.0)** + **search_law_bulk (등록부 대량 조회 + MST diff 감시, v4.13.0)** + **행정규칙 부분 조회 (get_admin_rule 의 jo·chapter·keyword·page — 통짜 전문을 조문 단위로, v4.14.0)** + **법령ID 계보 연혁 (제명이 바뀌기 전 버전까지 — search_historical_law·applicable_law·time_travel, get_annexes date 시점 별표, get_law_text efYd 기준일 보정, 행정규칙 기준일 판단, v4.15.0)**
+Korean Law MCP Server v4.15.3 - 법제처 42개 API → 10개 통합 도구 (내부 99개) + 9개 시나리오 + 자연어 CLI + HTTP stateless + 판례 토큰 74% 감축 + **legal_research (체인 8종 통합, task 파라미터)** + **legal_analysis (인용검증·판례생사·행위시법·영향그래프 통합, mode 파라미터)** + **time_travel (시점 diff)** + **action_plan (이럴 땐 이렇게, 5단계 안내)** + **시행예정 감지 (search_law가 제명변경·미시행 개정 자동 병기)** + **ordinance_radar (조례 정비 레이더 — 근거 상위법 개정 자동 대조, v4.7.0)** + **인용 검증 표기 내성 (낫표·가운뎃점·`같은 법` 조응, v4.9.0)** + **폐지 감지 (검색 0건 시 폐지 법령·행정규칙 연혁 추적 — 폐지사유·후속 통합 규정 자동 안내, v4.10.0)** + **search_law_bulk (등록부 대량 조회 + MST diff 감시, v4.13.0)** + **행정규칙 부분 조회 (get_admin_rule 의 jo·chapter·keyword·page — 통짜 전문을 조문 단위로, v4.14.0)** + **법령ID 계보 연혁 (제명이 바뀌기 전 버전까지 — search_historical_law·applicable_law·time_travel, get_annexes date 시점 별표, get_law_text efYd 기준일 보정, 행정규칙 기준일 판단, v4.15.0)**
 
 ## Structure
 
@@ -115,7 +115,7 @@ korean-law get_law_text --mst 160001 --jo "제1조"
 - `MCP_MAX_UPSTREAM_REQUESTS`: 한 outer request가 사용할 수 있는 upstream attempt 수 (기본 `48`, 재시도/안티봇 hop 포함)
 - `MCP_MAX_UPSTREAM_BODY_BYTES` / `MCP_MAX_TOTAL_UPSTREAM_BODY_BYTES`: 단일/전체 upstream 응답 본문 byte 한도
 - `MCP_MAX_TOOL_RESPONSE_CHARS`: MCP 도구 응답 문자 한도 (기본 `50000`)
-- `MCP_CHAIN_DEADLINE_MS`: 체인 한 건의 데드라인 (기본 `45000`, 허용 `5000`~`300000`, HTTP 모드는 부팅 시점 fail-fast 검증). **적용 task는 `legal_research` 8종 중 `document_review` 를 뺀 7종** (v4.14.1: `law_system`·`amendment_track`·`ordinance_compare`·`procedure_detail` 추가, 공용 `withChainDeadline` 헬퍼). `document_review` 는 기반 법령 프리픽스가 없고 갈래 수가 고정이라 개별 fetch 한도(전체 45초)만 건다. 적용 체인은 기반 법령 탐색(프리픽스)부터 시계 안이며, 만료 시 받은 갈래까지 조립해 **부분 결과**를 돌려주고 못 받은 자리는 마커로 남긴다 — MCP 클라이언트 기본 타임아웃 60초보다 넉넉히 짧게 잡을 것
+- `MCP_CHAIN_DEADLINE_MS`: 체인 한 건의 데드라인 (기본 `45000`, 허용 `5000`~`300000`, HTTP 모드는 부팅 시점 fail-fast 검증). `legal_research` 8종과 `get_law_statistics`에 적용한다. 적용 체인은 기반 법령 탐색(프리픽스)부터 시계 안이며, 만료 시 받은 갈래까지 조립해 **부분 결과**를 돌려주고 못 받은 자리는 마커로 남긴다 — MCP 클라이언트 기본 타임아웃 60초보다 넉넉히 짧게 잡을 것
 
 ## Domain Knowledge
 
@@ -159,7 +159,7 @@ get_law_text(mst, jo="006300") → 제63조(휴직) 조회
 7. **cleanHtml 재사용**: HTML 엔티티 디코딩은 `article-parser.ts`의 `cleanHtml()` 사용 (수동 디코딩 금지). 태그 제거는 영문 태그·주석만이다: `<개정 2012.8.1.>`·`부칙 <제N호,…>` 같은 한글 꺾쇠 표기는 개정 시점 근거라 남긴다(v4.14.2)
 8. **console.log/error 금지**: STDIO 모드에서 간섭 방지. 에러는 throw로 전파. HTTP 모드 에러 로깅은 반드시 `scrubError()` 경유 (API 키 유출 방지)
 9. **String() 방어 코딩**: MCP 클라이언트가 숫자를 보낼 수 있음 — `URLSearchParams.append(key, String(value))` 사용
-10. **캐시 키 분리**: `lawtext:` (law-text.ts, 문자열, lawCache), `batch:` (batch-articles.ts, 파싱된 JSON 객체, **전용 `batchLawCache` 12건**: 전역 500건 캐시에 두면 큰 법령 한 건이 힙 4MB 대라 메모리를 먹는다), `admrulxml:` (admin-rule-doc.ts `AdminRuleDoc` 파싱 문서, 전용 캐시 20건 — applicable-admin-rule 의 선적재만 XML 문자열을 넣고 get_admin_rule 이 첫 조회 때 문서로 바꿔 넣는다), `mstlawid:` (law-text.ts, mst→법령ID 문자열, 24시간), `lineage:` (law-text.ts, 법령ID 계보 `HistoricalVersion[]`, 1시간), `precjson:` (precedents.ts, 판례 원문 JSON 문자열, 24시간 — 렌더(full·축약)만 갈리고 원문은 같다) — 타입 충돌 금지. lawId 만 준 "현행" 본문은 개정 시행일을 넘기면 낡으므로 TTL 1시간(MST·efYd 는 24시간)
+10. **캐시 키 분리**: `lawtext:` (law-text.ts, 문자열, lawCache), `batch:` (batch-articles.ts, 파싱된 JSON 객체, **전용 `batchLawCache` 12건**: 전역 500건 캐시에 두면 큰 법령 한 건이 힙 4MB 대라 메모리를 먹는다), `admrulxml:` (admin-rule-doc.ts `AdminRuleDoc` 파싱 문서, 전용 캐시 20건 — applicable-admin-rule 의 선적재만 XML 문자열을 넣고 get_admin_rule 이 첫 조회 때 문서로 바꿔 넣는다), `mstlawid:` (law-text.ts, mst→법령ID 문자열, 24시간), `lineage:` (law-text.ts, 법령ID 계보 `HistoricalVersion[]`, 1시간), `precedentCache` (precedents.ts, 전용 20건, ID:caseName 키, 파싱된 PrecService record, 24시간 — 상세 full·축약 렌더와 cite_check가 공유하며 원시 JSON은 보관하지 않는다) — 타입 충돌 금지. lawId 만 준 "현행" 본문은 개정 시행일을 넘기면 낡으므로 TTL 1시간(MST·efYd 는 24시간)
 11. **API 키 마스킹**: URL/에러 메시지 외부 노출 전 `maskSensitiveUrl()` 적용. 새 fetch 래퍼 추가 시 주의. 도구 **출력 전체**는 tool-registry 최종 게이트가 `maskKeysInText()` 로 한 번 더 가린다(법제처 상세링크에 요청 OC 가 실려 와 서버 키가 노출되던 문제, v4.14.1)
 12. **full 옵션 일관성**: 판례류 도메인 추가 시 `unified-decisions.ts`의 `ALREADY_COMPACTED` set 고려. 자체 compact 미구현이면 `compactLongSections` 후처리에 자동 편입됨
 13. **인자 길이 상한**: tool-registry 가 스키마 검증 전에 모든 문자열 인자를 본다(중첩 포함). 일반 2,000자, `text` 50,000자. 사용자 입력이 닿는 정규식은 그래도 선형이어야 한다: 공백 연속은 먼저 뭉치고(`\s+` → `" "`), 라벨과 값 사이 간격은 `{0,200}` 처럼 상한을 둔다(v4.14.1 ReDoS 3경로)

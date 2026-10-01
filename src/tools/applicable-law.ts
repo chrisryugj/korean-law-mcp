@@ -24,7 +24,7 @@ import { fetchEffectiveSlices, type HistoricalVersion } from "../lib/historical-
 import { fetchLawVersions, lawStateAt, resolveLawId, sameLawName, todayKst, wholeRevisionLabel, wholeRevisionsBetween } from "../lib/law-lineage.js"
 import { applicableAdminRule } from "./applicable-admin-rule.js"
 import { buildJO } from "../lib/law-parser.js"
-import { cleanHtml } from "../lib/article-parser.js"
+import { cleanHtml, formatArticleUnit } from "../lib/article-parser.js"
 import { toArray } from "../lib/xml-parser.js"
 import { rethrowIfFatal } from "../lib/fatal-errors.js"
 import type { ToolResponse } from "../lib/types.js"
@@ -40,15 +40,14 @@ export type ApplicableLawInput = z.infer<typeof ApplicableLawSchema>
 
 /** 다양한 날짜 표기 → YYYYMMDD. 실패 시 null */
 export function normalizeDate(input: string): string | null {
-  const m = input.trim().match(/(\d{4})\s*[.\-/년\s]?\s*(\d{1,2})\s*[.\-/월\s]?\s*(\d{1,2})\s*일?/)
-  if (!m) {
-    const digits = input.replace(/\D/g, "")
-    return /^\d{8}$/.test(digits) ? digits : null
-  }
+  const m = input.trim().match(/^(\d{4})\s*[.\-/년\s]?\s*(\d{1,2})\s*[.\-/월\s]?\s*(\d{1,2})\s*(?:일|\.)?$/)
+  if (!m) return null
   const y = parseInt(m[1], 10)
   const mo = parseInt(m[2], 10)
   const d = parseInt(m[3], 10)
   if (y < 1900 || y > 2100 || mo < 1 || mo > 12 || d < 1 || d > 31) return null
+  const parsed = new Date(Date.UTC(y, mo - 1, d))
+  if (parsed.getUTCMonth() !== mo - 1 || parsed.getUTCDate() !== d) return null
   return `${y}${String(mo).padStart(2, "0")}${String(d).padStart(2, "0")}`
 }
 
@@ -76,15 +75,7 @@ function extractJoText(jsonText: string, joCode?: string): string {
       return num === wantNum && branch === wantBranch
     })
     if (!found) return ""
-    const parts: string[] = []
-    parts.push(cleanHtml(String(found.조문내용 || "")))
-    for (const h of toArray<any>(found.항)) {
-      if (h?.항내용) parts.push(cleanHtml(String(h.항내용)))
-      for (const ho of toArray<any>(h?.호)) {
-        if (ho?.호내용) parts.push(cleanHtml(String(ho.호내용)))
-      }
-    }
-    return parts.join("\n").trim()
+    return formatArticleUnit(found)?.body.trim() || ""
   } catch {
     return ""
   }
@@ -244,6 +235,7 @@ export async function applicableLaw(
     // 전부개정은 조문 번호 체계를 새로 짠다(소방시설법 시행령 2022.12.1.: 구 제15조 → 현 제11조).
     // 그 사이에 끼면 같은 조번호 비교는 다른 조문끼리의 비교가 된다.
     const wholeSince = current ? wholeRevisionsBetween(versions, effective.efYd, current.efYd) : []
+    const differsFromCurrent = Boolean(current && (current.mst !== effective.mst || current.efYd !== effective.efYd))
 
     // 적용 버전 표시 — 당시 법령명이 지금과 다르면 인용은 당시 이름으로 해야 한다
     lines.push(`▶ 기준일에 시행 중이던 버전`)
@@ -308,7 +300,7 @@ export async function applicableLaw(
       const [thenJson, nowJson] = await Promise.all([
         apiClient.getLawText({ mst: effective.mst, jo: joCode, efYd: effective.efYd, apiKey: input.apiKey }).catch(softFail),
         // 전부개정이 끼면 같은 조번호 비교가 무의미하다 — 현행 조문은 받지 않는다
-        current && current.mst !== effective.mst && wholeSince.length === 0
+        current && differsFromCurrent && wholeSince.length === 0
           ? apiClient.getLawText({ mst: current.mst, jo: joCode, efYd: current.efYd, apiKey: input.apiKey }).catch(softFail)
           : Promise.resolve(""),
       ])
@@ -323,7 +315,7 @@ export async function applicableLaw(
         lines.push(`  [NOT_FOUND] 해당 버전에서 ${joDisplay}를 찾지 못했습니다 (당시 미신설이거나 조회 실패). LLM은 본문을 추측하지 마세요.`)
       }
 
-      if (current && current.mst !== effective.mst) {
+      if (current && differsFromCurrent) {
         lines.push("")
         const norm = (s: string) => s.replace(/\s+/g, "")
         if (wholeSince.length > 0) {

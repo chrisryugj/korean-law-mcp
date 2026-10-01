@@ -1,7 +1,10 @@
-import { describe, it, expect } from "vitest"
+import { beforeEach, describe, it, expect } from "vitest"
 import { citeCheck } from "./cite-check.js"
 import { extractHolding } from "../lib/precedent-body.js"
 import type { LawApiClient } from "../lib/api-client.js"
+import { precedentCache } from "./precedents.js"
+
+beforeEach(() => precedentCache.clear())
 
 const TARGET_SEARCH_XML = `<?xml version="1.0" encoding="UTF-8"?><PrecSearch><totalCnt>1</totalCnt><page>1</page>` +
   `<prec><판례일련번호>204201</판례일련번호><사건명><![CDATA[손해배상(기)]]></사건명>` +
