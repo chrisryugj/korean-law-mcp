@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest"
 import { getHistoricalLaw, searchHistoricalLaw } from "./historical-law.js"
+import { UpstreamRecordMissingError } from "../lib/upstream-miss.js"
+import { ExecutionLimitError } from "../lib/execution-limits.js"
 import type { LawApiClient } from "../lib/api-client.js"
 
 // 실제 lawService(target=law) JSON 축약 — 법령명은 "법령명_한글" 키, 소관부처는 {content} 객체,
@@ -75,6 +77,53 @@ describe("getHistoricalLaw — 조문단위 래퍼를 풀어 읽는다 (#153)", 
     expect(t).toContain("[NOT_FOUND]")
     expect(t).toContain("- 제1조 목적")
     expect(t).toContain("- 제2조의3 적용범위")
+  })
+})
+
+// 감사 실측(MST 212383 + efYd=20200101): 그 MST 의 시행일이 아닌 efYd 면 eflaw 가 HTML 안내로 답한다.
+// 종전엔 4회 재시도(3.7초) 뒤 "[EXTERNAL_API_ERROR] 파라미터를 확인해주세요" — v4.14.2 는 efYd 를 무시하고 MST 본문을 줬다.
+describe("getHistoricalLaw — 시행일이 아닌 efYd", () => {
+  const missClient = (calls: string[], eflaw: () => Promise<string>) => ({
+    getLawText: async (p: { mst?: string, efYd?: string, efYdMayMiss?: boolean }) => {
+      calls.push(`eflaw:${p.mst}:${p.efYd}:${p.efYdMayMiss}`)
+      return eflaw()
+    },
+    fetchApi: async (p: { target: string, extraParams?: Record<string, string> }) => {
+      calls.push(`${p.target}:${p.extraParams?.MST}:${p.extraParams?.efYd ?? ""}`)
+      return HIST_JSON
+    },
+  }) as unknown as LawApiClient
+
+  it("eflaw 미스는 확인 1회 장치로 끊고 target=law&MST 본문으로 물러서며 한 줄로 밝힌다", async () => {
+    const calls: string[] = []
+    const r = await getHistoricalLaw(missClient(calls, async () => { throw new UpstreamRecordMissingError("url", "html") }), { mst: "212383", efYd: "20200101" })
+    const t = r.content[0].text
+    expect(r.isError).toBeFalsy()
+    expect(t).toContain("법령명: 상법")
+    expect(t).toContain("efYd=20200101 기준 조회가 비어(MST 212383의 시행일이 아니면")
+    expect(calls).toEqual(["eflaw:212383:20200101:true", "law:212383:"])
+  })
+
+  it("eflaw 가 법령 노드 없는 봉투로 와도 물러선다", async () => {
+    const calls: string[] = []
+    const t = (await getHistoricalLaw(missClient(calls, async () => "{}"), { mst: "212383", efYd: "2020-01-01" })).content[0].text
+    expect(t).toContain("법령명: 상법")
+    expect(calls).toEqual(["eflaw:212383:20200101:true", "law:212383:"])
+  })
+
+  it("시행일이 맞으면 그 슬라이스 본문 그대로 (안내 없음)", async () => {
+    const calls: string[] = []
+    const t = (await getHistoricalLaw(missClient(calls, async () => HIST_JSON), { mst: "273629", efYd: "20260910" })).content[0].text
+    expect(t).toContain("법령명: 상법")
+    expect(t).not.toContain("기준 조회가 비어")
+    expect(calls).toEqual(["eflaw:273629:20260910:true"])
+  })
+
+  it("예산 소진은 물러서지 않는다", async () => {
+    const calls: string[] = []
+    const r = await getHistoricalLaw(missClient(calls, async () => { throw new ExecutionLimitError("budget") }), { mst: "212383", efYd: "20200101" })
+    expect(r.isError).toBe(true)
+    expect(calls).toEqual(["eflaw:212383:20200101:true"])
   })
 })
 

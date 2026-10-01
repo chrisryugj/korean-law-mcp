@@ -1,5 +1,6 @@
 import { z } from "zod";
-import type { LawApiClient } from "../lib/api-client.js";
+import { hasLawNode, type LawApiClient } from "../lib/api-client.js";
+import { UpstreamRecordMissingError } from "../lib/upstream-miss.js";
 import { truncateResponse, formatDateDot } from "../lib/schemas.js";
 import { formatToolError } from "../lib/errors.js";
 import { flattenContent, formatArticleUnit } from "../lib/article-parser.js";
@@ -131,12 +132,27 @@ export async function getHistoricalLaw(
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
     // target=law&MST 는 공포본 단위라 분리시행이면 마지막 시행 슬라이스를 준다. 시행일이 오면 eflaw 로 그 슬라이스를 집는다.
+    // 그 MST 의 시행일이 아닌 efYd 면 eflaw 는 HTML 안내로 답한다(감사 실측 MST 212383 + 20200101: 4회 재시도 3.7초 뒤
+    // EXTERNAL_API_ERROR). 사용자 efYd 미스 장치(efYdMayMiss)로 확인 1회에 끊고, time_travel 처럼 target=law&MST 로 물러선다.
     const efYd = args.efYd ? normalizeDate(args.efYd) || args.efYd : undefined
-    const responseText = await apiClient.fetchApi({
+    let responseText: string | undefined;
+    let efYdMissed = false;
+    if (efYd) {
+      try {
+        responseText = await apiClient.getLawText({ mst: args.mst, efYd, efYdMayMiss: true, apiKey: args.apiKey });
+      } catch (error) {
+        if (!(error instanceof UpstreamRecordMissingError)) throw error;
+      }
+      if (!responseText || !hasLawNode(responseText)) {
+        responseText = undefined;
+        efYdMissed = true;
+      }
+    }
+    responseText ??= await apiClient.fetchApi({
       endpoint: "lawService.do",
-      target: efYd ? "eflaw" : "law",
+      target: "law",
       type: "JSON",
-      extraParams: efYd ? { MST: args.mst, efYd } : { MST: args.mst },
+      extraParams: { MST: args.mst },
       apiKey: args.apiKey,
     });
 
@@ -158,6 +174,9 @@ export async function getHistoricalLaw(
     // 소관부처는 {content: "..."} 객체로 온다 — 그대로 보간하면 "[object Object]"가 노출됐다.
     const lawTitle = safeText(basic.법령명_한글 || basic.법령명한글 || basic.법령명) || "연혁법령";
     let output = `=== ${lawTitle} ===\n\n`;
+    if (efYdMissed) {
+      output += `ℹ️ efYd=${args.efYd} 기준 조회가 비어(MST ${args.mst}의 시행일이 아니면 이렇게 온다) 시행일 없이 그 공포본 본문을 조회했습니다 — 분리시행 공포본이면 마지막 시행분입니다(실제 시행일은 아래 기본 정보).\n\n`;
+    }
 
     output += `기본 정보:\n`;
     output += `  법령명: ${lawTitle}\n`;
