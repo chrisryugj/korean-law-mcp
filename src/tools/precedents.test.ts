@@ -5,6 +5,7 @@ import { describe, it, expect, vi, afterEach } from "vitest"
 import { getPrecedentText, normalizeHtmlText, renderPrecedentSearchResult } from "./precedents.js"
 import { searchPrecedentsStructured } from "./precedent-search-core.js"
 import { LawApiClient } from "../lib/api-client.js"
+import { lawCache } from "../lib/cache.js"
 
 // 국세법령정보 HWP 편집기 HTML은 &nbsp; 를 줄지어 쓴다. `[ \t]+\n` 이 그 덩어리에서 제곱이었다
 // (&nbsp; 3만 개 842ms, 10만 개 13.8초).
@@ -63,5 +64,24 @@ describe("판례 본문 렌더: <br/> 를 줄바꿈으로 편다", () => {
     expect(text).toContain("판시사항:\n[1] 근로자 판단 기준\n\n[2] 영업양도 승계")
     expect(text).toContain("[1] 종속적 관계 여부로 판단한다.\n[2] 원칙적으로 승계된다.")
     expect(text).toContain("원심판결을 파기한다.\n\n【이 유】 상고이유를 판단한다.")
+  })
+})
+
+// 같은 판례를 한 체인 안에서 전문(본문검색 검증)과 축약(근거)으로 받으면 업스트림을 두 번 쳤다(2026-10-01 감사 dispute_prep 실측).
+// 렌더만 다르고 원문은 같다 — 판례 원문은 바뀌지 않으므로 원문 JSON 을 캐시한다
+describe("판례 원문 캐시", () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it("같은 판례를 full·축약으로 두 번 받아도 업스트림은 한 번", async () => {
+    lawCache.clear()
+    const body = JSON.stringify({ PrecService: { 사건명: "손해배상", 사건번호: "2020다1", 법원명: "대법원", 판례내용: "본문" } })
+    const fetchMock = vi.fn(async () => new Response(body, { status: 200, headers: { "content-type": "application/json" } }))
+    vi.stubGlobal("fetch", fetchMock)
+    const api = new LawApiClient({ apiKey: "test" })
+    const a = await getPrecedentText(api, { id: "325170", full: true })
+    const b = await getPrecedentText(api, { id: "325170" })
+    expect(a.isError).toBeFalsy()
+    expect(b.isError).toBeFalsy()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })

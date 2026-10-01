@@ -126,8 +126,13 @@ async function testIncludeTextPassesPrecedentOptionsToSearch() {
 }
 
 async function main() {
+  // 판례 원문은 프로세스 캐시에 남는다(precjson:) — 시나리오마다 같은 ID 를 다른 가짜 응답으로 쓰므로 비우고 시작한다
+  const { lawCache } = await import("../build/lib/cache.js")
+  lawCache.clear()
   await testDefaultPrecedentSearchRemainsListOnly()
+  lawCache.clear()
   await testIncludeTextFetchesBoundedPrecedentDetails()
+  lawCache.clear()
   await testIncludeTextPassesPrecedentOptionsToSearch()
   console.log("search_decisions precedent includeText tests passed")
 }

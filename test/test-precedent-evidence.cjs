@@ -190,11 +190,19 @@ async function testValidationAcceptsSeparatedAxisTerms() {
 }
 
 async function main() {
+  // 판례 원문은 프로세스 캐시에 남는다(precjson:) — 시나리오마다 같은 ID 를 다른 가짜 응답으로 쓰므로 비우고 시작한다
+  const { lawCache } = await import("../build/lib/cache.js")
+  lawCache.clear()
   await testFetchesTopTwoStructuredHits()
+  lawCache.clear()
   await testPreservesPartialDetailFailure()
+  lawCache.clear()
   await testCapsDetailLimit()
+  lawCache.clear()
   await testReturnsNullForNoHits()
+  lawCache.clear()
   await testValidationRequiresAllAxisGroups()
+  lawCache.clear()
   await testValidationAcceptsSeparatedAxisTerms()
   console.log("precedent evidence tests passed")
 }

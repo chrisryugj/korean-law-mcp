@@ -2,6 +2,7 @@ import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 import { cleanHtml } from "../lib/article-parser.js"
 import { truncateResponse } from "../lib/schemas.js"
+import { lawCache } from "../lib/cache.js"
 import { formatToolError, notFoundResponse } from "../lib/errors.js"
 import { fetchWithRetry } from "../lib/fetch-with-retry.js"
 import { readResponseText } from "../lib/response-body.js"
@@ -456,9 +457,13 @@ export async function getPrecedentText(
     const extraParams: Record<string, string> = { ID: args.id };
     if (args.caseName) extraParams.LM = args.caseName;
 
+    // 판례 원문은 바뀌지 않는다. 한 체인 안에서 같은 판례를 전문(본문검색 검증)·축약(근거)으로 받거나 다시 조회할 때
+    // 업스트림을 또 치지 않게 원문 JSON 을 둔다 — 렌더만 full 로 갈린다(2026-10-01 감사: dispute_prep 이 같은 상세를 두 번 받음)
+    const rawKey = `precjson:${args.id}:${args.caseName ?? ""}`
+    const cachedRaw = lawCache.get<string>(rawKey)
     let responseText: string;
     try {
-      responseText = await apiClient.fetchApi({
+      responseText = cachedRaw ?? await apiClient.fetchApi({
         endpoint: "lawService.do",
         target: "prec",
         type: "JSON",
@@ -509,6 +514,7 @@ export async function getPrecedentText(
   if (!data.PrecService) {
     throw new Error("Precedent not found or invalid response format");
   }
+  if (!cachedRaw) lawCache.set(rawKey, responseText, 24 * 60 * 60 * 1000)
 
   const prec = data.PrecService;
   // API returns fields directly in PrecService, not nested
