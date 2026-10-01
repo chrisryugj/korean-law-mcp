@@ -284,7 +284,7 @@ export function pickRepealed(rows: LawInfo[], query: string): LawInfo | undefine
 
 /**
  * 폐지(연혁) 법령 조회 — target=eflaw로 과거·폐지본을 검색해 최신 연혁본을 반환.
- * 현행 검색이 0건일 때만 보조로 호출(환각 vs 폐지 구분용). 실패 시 undefined.
+ * 현행 검색이 0건일 때만 보조로 호출(환각 vs 폐지 구분용). 실패 시 undefined, 예산 소진·취소는 올린다.
  */
 export async function findRepealedLaw(
   apiClient: LawApiClient,
@@ -294,7 +294,10 @@ export async function findRepealedLaw(
   let xmlText: string
   try {
     xmlText = await apiClient.searchLaw(query, apiKey, 30, "eflaw")
-  } catch {
+  } catch (error) {
+    // 예산 소진·취소는 "폐지 법령 없음"이 아니다. 삼키면 호출부(verify_citations)가 확인하지 못한 법령을
+    // ✗ NOT_FOUND(지어낸 법령)로 단정했다(2026-10-01 감사). 올려서 그 인용을 "검색 실패"(⚠)로 남긴다
+    rethrowIfFatal(error)
     return undefined  // eflaw 조회 실패는 조용히 폴백(기존 NOT_FOUND 경로 유지)
   }
   return pickRepealed(parseLawXml(xmlText, 100), query)

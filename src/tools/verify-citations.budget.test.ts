@@ -10,7 +10,7 @@ import { verifyCitations } from "./verify-citations.js"
 import { LawApiClient } from "../lib/api-client.js"
 import { lawCache } from "../lib/cache.js"
 import { requestContext } from "../lib/session-state.js"
-import { RequestExecutionBudget, DEFAULT_EXECUTION_LIMITS } from "../lib/execution-limits.js"
+import { RequestExecutionBudget, DEFAULT_EXECUTION_LIMITS, ExecutionLimitError } from "../lib/execution-limits.js"
 
 const CIVIL_LAW_XML = `<?xml version="1.0" encoding="UTF-8"?><LawSearch><totalCnt>1</totalCnt>` +
   `<law id="1"><법령일련번호>284415</법령일련번호><법령명한글><![CDATA[민법]]></법령명한글>` +
@@ -166,5 +166,20 @@ describe("verify_citations: 예산 소진은 그 인용만의 실패다 (2026-10
       verifyCitations(client, { text: `${OLD} 제9조에 따라`, maxCitations: 5 }))
     expect(res.isError).toBe(true)
     expect(res.content[0].text).not.toContain("[RENAMED]")
+  })
+
+  it("폐지 법령(연혁) 확인이 예산에 걸리면 '법령 없음'으로 단정하지 않는다", async () => {
+    const client = {
+      searchLaw: async (_q: string, _k?: string, _d?: number, target?: string) => {
+        if (target === "eflaw") throw new ExecutionLimitError("Request upstream work budget exceeded (max 48 attempts).")
+        return lawList([])
+      },
+      fetchApi: async () => EMPTY_PREC,
+    } as unknown as LawApiClient
+    const res = await verifyCitations(client, { text: "가상토지 보전 및 관리에 관한 특별법 제3조", maxCitations: 5 })
+    const text = res.content[0].text
+    expect(text).not.toContain("[NOT_FOUND]")             // 종전: 연혁 확인 실패를 '없음'으로 삼켜 ✗ 환각 판정
+    expect(text).not.toContain("[HALLUCINATION_DETECTED]")
+    expect(text).toMatch(/⚠ 가상토지 보전 및 관리에 관한 특별법 제3조 — .*budget exceeded/)
   })
 })
