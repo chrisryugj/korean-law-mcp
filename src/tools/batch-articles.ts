@@ -136,7 +136,7 @@ async function fetchArticlesForLaw(
   for (const article of lawReq.articles) {
     throwIfRequestCancelled()
     try {
-      const joCode = buildJO(article)
+      const joCode = /^\d{6}$/.test(article) ? article : buildJO(article)
       joCodes.add(joCode)
     } catch (e) {
       return { error: `조문 번호 변환 실패 (${article}): ${e instanceof Error ? e.message : String(e)}` }
@@ -180,7 +180,7 @@ async function fetchArticlesForLaw(
   }
 
   if (foundCount === 0) {
-    resultText += "요청한 조문을 찾을 수 없습니다.\n"
+    return { error: `${lawName}: 요청한 조문을 찾을 수 없습니다.` }
   } else if (foundCount < lawReq.articles.length) {
     resultText += `[주의] ${lawReq.articles.length}개 중 ${foundCount}개 조문만 찾았습니다.\n`
   }

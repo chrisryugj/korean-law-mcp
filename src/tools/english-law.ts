@@ -1,9 +1,11 @@
 import { z } from "zod";
 import type { LawApiClient } from "../lib/api-client.js";
 import { truncateResponse } from "../lib/schemas.js";
-import { parseSearchXML, extractTag, stripHtml } from "../lib/xml-parser.js";
+import { parseSearchXML, extractTag, stripHtml, toArray } from "../lib/xml-parser.js";
 import { formatToolError, noResultHint } from "../lib/errors.js";
 import { cleanHtml } from "../lib/article-parser.js";
+import { decisionFields } from "../lib/decision-fields.js";
+import { fieldText } from "../lib/precedent-body.js";
 
 // English law search tool - Search for English translations of Korean laws
 export const searchEnglishLawSchema = z.object({
@@ -132,14 +134,14 @@ export async function getEnglishLawText(
 
     // 신형 API: Law.InfSection에 기본정보, Law.JoSection.Jo[]에 조문
     const inf = law.InfSection || {};
-    const basic = {
+    const basic = decisionFields({
       영문법령명: law.영문법령명 || law.법령명_영문 || inf.lsNmEng,
       한글법령명: law.한글법령명 || law.법령명_한글 || inf.lsNmKor,
-      시행일자: law.시행일자 || inf.ancYd,
+      시행일자: law.시행일자,
       공포일자: law.공포일자 || inf.ancYd,
       법령구분: law.법령구분,
       소관부처: law.소관부처,
-    };
+    });
 
     let output = `=== ${basic.영문법령명 || "English Law"} ===\n`;
     output += `(${basic.한글법령명 || "N/A"})\n\n`;
@@ -154,15 +156,19 @@ export async function getEnglishLawText(
 
     // 조문 추출: ElawService 형식 또는 Law.JoSection.Jo[] 형식
     const joSection = law.JoSection?.Jo;
-    const articles = law.조문 || law.조문목록 || (joSection ? (Array.isArray(joSection) ? joSection : [joSection]) : []);
-    if (Array.isArray(articles) && articles.length > 0) {
+    const articles = toArray<any>(law.조문 || law.조문목록 || joSection);
+    if (articles.length > 0) {
       output += `Articles:\n\n`;
-      for (const article of articles.slice(0, 50)) {
+      for (const rawArticle of articles.slice(0, 50)) {
+        const article = decisionFields(rawArticle);
         const articleNo = article.조문번호 || article.조번호 || article.joNo || "";
         const articleTitle = article.조문제목_영문 || article.조문제목 || "";
         const articleContent = article.조문내용_영문 || article.조문내용 || article.joCts || "";
 
-        if (articleNo || articleTitle) {
+        // elaw 편·장·절 헤더는 후속 조문과 joNo를 공유하고 joYn=N으로 구분된다.
+        if (article.joYn === "N") {
+          if (articleTitle) output += `${articleTitle}\n`;
+        } else if (articleNo || articleTitle) {
           output += `Article ${articleNo}`;
           if (articleTitle) output += ` ${articleTitle}`;
           output += `\n`;
@@ -175,7 +181,7 @@ export async function getEnglishLawText(
         output += `\n... and ${articles.length - 50} more articles\n`;
       }
     } else if (law.법령내용_영문 || law.법령내용) {
-      output += `Content:\n${law.법령내용_영문 || law.법령내용}\n`;
+      output += `Content:\n${fieldText(law.법령내용_영문 || law.법령내용)}\n`;
     }
 
     return {
@@ -188,4 +194,3 @@ export async function getEnglishLawText(
     return formatToolError(error, "get_english_law_text");
   }
 }
-

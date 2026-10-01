@@ -10,7 +10,8 @@ import { formatToolError, noResultHint, ErrorCodes } from "../lib/errors.js"
 import { rethrowIfFatal } from "../lib/fatal-errors.js"
 import { maskSensitiveUrl } from "../lib/fetch-with-retry.js"
 import { detectAbolishedAdminRule } from "../lib/abolished-laws.js"
-import { fetchAdminRuleHistory, pickAdminRuleGroup } from "../lib/admin-rule-history.js"
+import { todayKst } from "../lib/law-lineage.js"
+import { adminVersionAt, fetchAdminRuleHistory, pickAdminRuleGroup } from "../lib/admin-rule-history.js"
 import { adminRuleSourceUrl, buildImageOnlyWarning } from "../lib/image-only-body.js"
 import { buildPartialBody, pickPartialMode, PARTIAL_HINT } from "../lib/admin-rule-views.js"
 import { loadAdminRuleDoc, adminRuleExtrasText, adminRuleExtraBlocks, adminRuleParsed } from "../lib/admin-rule-doc.js"
@@ -102,13 +103,17 @@ async function formatAdminRuleHistory(
   const lists = picked ? [picked] : [...groups.values()].slice(0, Math.max(1, Math.min(input.display, 20)))
   let text = `행정규칙 발령 연혁: '${input.query}' (${picked ? "일치 계보 1개" : `계보 ${groups.size}개${groups.size > lists.length ? ` 중 ${lists.length}개` : ""}`}, 연혁 검색 ${totalCount}건)\n`
   if (truncated) text += `⚠️ 검색 결과가 많아 일부만 받았습니다 — 정식 명칭으로 좁히면 전 버전을 봅니다.\n`
+  const today = todayKst()
   for (const list of lists) {
-    const current = list.find(v => v.isCurrent) ?? list[0]
+    const state = adminVersionAt(list, today)
+    const current = state.version ?? state.abolished ?? list[0]
     text += `\n■ ${current.name} (행정규칙ID ${current.ruleId}, 버전 ${list.length}개)\n`
     const names = [...new Set([...list].reverse().map(v => v.name))]
     if (names.length > 1) text += `  명칭 변천: ${names.join(" → ")}\n`
     for (const v of list) {
-      text += `  시행 ${formatDateDot(v.efYd || v.issuedYd)} | 발령 ${formatDateDot(v.issuedYd)} 제${v.issuedNo}호 ${v.rrCls} | ${v.serial}${v.isCurrent ? " [현행]" : ""}${v.name !== current.name ? ` | ${v.name}` : ""}\n`
+      const mark = v === state.version ? " [현행]" : v === state.abolished ? " [폐지]"
+        : (v.efYd || v.issuedYd) > today ? " [시행예정]" : ""
+      text += `  시행 ${formatDateDot(v.efYd || v.issuedYd)} | 발령 ${formatDateDot(v.issuedYd)} 제${v.issuedNo}호 ${v.rrCls} | ${v.serial}${mark}${v.name !== current.name ? ` | ${v.name}` : ""}\n`
     }
   }
   text += `\n본문: execute_tool(tool_name="get_admin_rule", params={id:"일련번호", jo:"제N조"}) · 기준일 시행 버전 판단: legal_analysis(mode="applicable_law", lawName, date)`

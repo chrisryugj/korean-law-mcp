@@ -3,6 +3,7 @@ import { hasLawNode, type LawApiClient } from "../lib/api-client.js";
 import { UpstreamRecordMissingError } from "../lib/upstream-miss.js";
 import { truncateResponse, formatDateDot } from "../lib/schemas.js";
 import { formatToolError } from "../lib/errors.js";
+import { buildJO } from "../lib/law-parser.js";
 import { flattenContent, formatArticleUnit } from "../lib/article-parser.js";
 import { normalizeDate } from "./applicable-law.js";
 import { fetchLawVersions, isRepealRow, nameTimeline, sameLawName, todayKst, versionInForce } from "../lib/law-lineage.js";
@@ -202,15 +203,18 @@ export async function getHistoricalLaw(
     // 조문단위에는 장·절 헤더가 조문여부="전문"으로 섞여 온다 (실측 아동복지법 MST 285697:
     // 123개 중 12개). 조문으로 세면 개수와 목록이 함께 오염된다.
     const articles = units.filter((a: any) => a?.조문여부 === "조문");
+    let articleMissing = Boolean(args.jo) && articles.length === 0;
     if (articles.length > 0) {
       if (args.jo) {
         // Filter to specific article
         // parseJoNumber는 "75"/"75의2" 꼴을 돌려주고, 페이로드는 조문번호와 조문가지번호로
         // 나눠 온다 — 합쳐진 문자열끼리 비교하면 가지번호 조문이 늘 NOT_FOUND가 된다.
-        const [wantNum, wantBranch = "0"] = parseJoNumber(args.jo).split("의");
+        const joCode = /^\d{6}$/.test(args.jo) ? args.jo : buildJO(args.jo);
+        const wantNum = Number(joCode.slice(0, 4));
+        const wantBranch = Number(joCode.slice(4, 6));
         const article = articles.find((a: any) => {
-          const num = String(a.조문번호 ?? a.조번호 ?? "");
-          const branch = String(a.조문가지번호 || "0");
+          const num = Number(a.조문번호 ?? a.조번호);
+          const branch = Number(a.조문가지번호 || 0);
           return num === wantNum && branch === wantBranch;
         });
 
@@ -222,6 +226,7 @@ export async function getHistoricalLaw(
           if (article.조문제목) output += `제목: ${safeText(article.조문제목)}\n`;
           output += `${formatted?.body || "내용 없음"}\n`;
         } else {
+          articleMissing = true;
           output += `[NOT_FOUND] ${args.jo}를 찾을 수 없습니다.\n⚠️ LLM은 조문을 추측/생성하지 마세요.\n`;
           output += `\n조문 목록:\n`;
           for (const a of articles.slice(0, 20)) {
@@ -252,13 +257,16 @@ export async function getHistoricalLaw(
       }
     }
 
-    // 후속 도구 안내 제거 (LLM이 이미 도구 목록을 알고 있음)
+    if (articleMissing && articles.length === 0) {
+      output += `[NOT_FOUND] ${args.jo}를 찾을 수 없습니다.\n⚠️ LLM은 조문을 추측/생성하지 마세요.\n`;
+    }
 
     return {
       content: [{
         type: "text",
         text: truncateResponse(output)
-      }]
+      }],
+      ...(articleMissing ? { isError: true } : {}),
     };
   } catch (error) {
     return formatToolError(error, "get_historical_law");
@@ -266,11 +274,3 @@ export async function getHistoricalLaw(
 }
 
 // formatDate → schemas.ts의 formatDateDot 사용
-
-function parseJoNumber(joText: string): string {
-  const match = joText.match(/제?(\d+)조?(의\d+)?/);
-  if (match) {
-    return match[1] + (match[2] || "");
-  }
-  return joText.replace(/[^0-9의]/g, "");
-}

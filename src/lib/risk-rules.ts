@@ -127,7 +127,7 @@ export function extractClauses(text: string, max: number): Clause[] {
     const label = labelMatch[1].replace(/\s+/g, "")
     const body = chunk.slice(labelMatch[0].length).trim()
     if (body.length > 0) {
-      clauses.push({ label, body: body.slice(0, 500) })
+      clauses.push({ label, body })
     }
   }
   return clauses

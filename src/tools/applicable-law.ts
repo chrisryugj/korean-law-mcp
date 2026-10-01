@@ -23,7 +23,7 @@ import { findLaws } from "../lib/law-search.js"
 import { fetchEffectiveSlices, type HistoricalVersion } from "../lib/historical-utils.js"
 import { fetchLawVersions, lawStateAt, resolveLawId, sameLawName, todayKst, wholeRevisionLabel, wholeRevisionsBetween } from "../lib/law-lineage.js"
 import { applicableAdminRule } from "./applicable-admin-rule.js"
-import { buildJO } from "../lib/law-parser.js"
+import { buildJO, formatJO } from "../lib/law-parser.js"
 import { cleanHtml, formatArticleUnit } from "../lib/article-parser.js"
 import { toArray } from "../lib/xml-parser.js"
 import { rethrowIfFatal } from "../lib/fatal-errors.js"
@@ -288,9 +288,9 @@ export async function applicableLaw(
     addendaJson?.catch(() => {})  // 아래에서 await 하기 전에 실패해도 미처리 거부로 새지 않게
 
     // 3. 조문 비교 (jo 지정 시)
-    const joDisplay = input.jo ? (input.jo.startsWith("제") ? input.jo : `제${input.jo}`) : undefined
-    if (joDisplay) {
-      const joCode = buildJO(joDisplay)
+    const joCode = input.jo ? (/^\d{6}$/.test(input.jo) ? input.jo : buildJO(input.jo)) : undefined
+    const joDisplay = joCode ? formatJO(joCode) : undefined
+    if (joDisplay && joCode) {
       // eflaw는 MST 단독 조회 불가 — 해당 버전의 efYd 동반 필수 (없으면 "일치하는 법령이 없습니다")
       // 예산 소진·요청 취소는 "해당 버전에서 조문을 찾지 못함"으로 적지 않고 올린다 (B#11)
       const softFail = (error: unknown): string => {
@@ -357,7 +357,8 @@ export async function applicableLaw(
         } else {
           lines.push(`▶ 적용례·경과조치: 관련 부칙에서 경과규정 신호 미발견 (부칙 원문 확인: get_law_text)`)
         }
-      } catch {
+      } catch (error) {
+        rethrowIfFatal(error)
         lines.push("")
         lines.push(`▶ 적용례·경과조치: [FAILED] 부칙 조회 실패 — get_law_text(mst="${current.mst}")로 부칙을 직접 확인하세요.`)
       }

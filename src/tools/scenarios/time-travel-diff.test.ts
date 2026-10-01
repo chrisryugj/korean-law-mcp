@@ -1,6 +1,13 @@
 import { describe, it, expect } from "vitest"
 import { changeExcerpt, diffArticles, excerptBudget, extractLawSnapshot, dot, normalizeText, snapToClauseStart } from "./time-travel-diff.js"
 
+describe("normalizeText 법령 원문 표기", () => {
+  it("HTML 태그만 공백으로 바꾸고 한글 개정·삭제 표기는 보존한다", () => {
+    expect(normalizeText("제1조 내용 <개정 2024.1.1.><br/>다음 내용 <삭제>"))
+      .toBe("제1조 내용 <개정 2024.1.1.> 다음 내용 <삭제>")
+  })
+})
+
 describe("extractLawSnapshot 출처 메타 (#96)", () => {
   const json = {
     법령: {

@@ -47,3 +47,19 @@ describe("get_batch_articles production regressions", () => {
     expect(response.content[0].text).not.toContain("조문 본문")
   })
 })
+
+
+describe("get_batch_articles: 6자리 JO와 조회 미스", () => {
+  it("6자리 JO는 조번호로 재해석하지 않고 그대로 선택한다", async () => {
+    const r = await getBatchArticles({ getLawText: async () => law(10, 2) } as unknown as LawApiClient,
+      { mst: "batch-six-digit-second-review", articles: ["001002"] })
+    expect(r.isError).toBeFalsy()
+    expect(r.content[0].text).toContain("조문 본문")
+  })
+  it("요청한 조문이 전부 없으면 성공으로 반환하지 않는다", async () => {
+    const r = await getBatchArticles({ getLawText: async () => law(10, 2) } as unknown as LawApiClient,
+      { mst: "batch-missing-second-review", articles: ["제99조"] })
+    expect(r.isError).toBe(true)
+    expect(r.content[0].text).toContain("요청한 조문을 찾을 수 없습니다")
+  })
+})

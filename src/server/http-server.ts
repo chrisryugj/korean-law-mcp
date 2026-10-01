@@ -236,7 +236,7 @@ export async function startHTTPServer(
   // 보안 헤더 (Access-Control-Allow-Origin은 위 Origin 검증 미들웨어가 설정)
   app.use((req, res, next) => {
     res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-    res.header("Access-Control-Allow-Headers", "Content-Type, mcp-session-id, last-event-id, apikey, x-api-key, x-mcp-token, authorization")
+    res.header("Access-Control-Allow-Headers", "Content-Type, mcp-protocol-version, mcp-session-id, last-event-id, apikey, law_oc, law-oc, x-law-oc, x-api-key, x-mcp-token, authorization")
     res.header("X-Content-Type-Options", "nosniff")
     res.header("X-Frame-Options", "DENY")
     res.header("Referrer-Policy", "strict-origin-when-cross-origin")
@@ -295,8 +295,8 @@ export async function startHTTPServer(
     // 인증이 켜진 경우 Authorization 헤더는 접근 토큰이므로 법제처 키로 오인하면 안 된다.
     const authHeader = bearerValue(req.headers["authorization"] as string | undefined)
     const authHeaderIsAccessToken = Boolean(authToken) && authHeader && safeEqual(authHeader, authToken)
-    const queryKey = process.env.ALLOW_QUERY_API_KEY === "0" ? undefined : (req.query.oc as string | undefined)
-    const apiKey =
+    const queryKey = process.env.ALLOW_QUERY_API_KEY === "0" ? undefined : req.query.oc
+    const candidateApiKey =
       (req.headers["apikey"] as string | undefined) ||
       (req.headers["law_oc"] as string | undefined) ||
       (req.headers["law-oc"] as string | undefined) ||
@@ -304,6 +304,18 @@ export async function startHTTPServer(
       (authHeaderIsAccessToken ? undefined : authHeader || undefined) ||
       (req.headers["x-law-oc"] as string | undefined) ||
       queryKey
+
+    // Repeated query parameters are arrays in Express. They must not bypass
+    // the fallback gate or enter a context whose consumers expect a string.
+    if (candidateApiKey !== undefined && typeof candidateApiKey !== "string") {
+      res.status(400).json({
+        jsonrpc: "2.0",
+        error: { code: -32600, message: "API key must be a single string." },
+        id: null,
+      })
+      return
+    }
+    const apiKey = candidateApiKey
 
     // 자체 키 없는 요청은 서버 LAW_OC로 폴백 — 전역 상한 적용
     // initialize/tools/list 등 핸드셰이크는 법제처 쿼터를 안 쓰므로 tools/call만 게이트

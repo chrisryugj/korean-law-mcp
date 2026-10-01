@@ -82,7 +82,8 @@ export function parseKBXML(xml: string, _rootTag: string): KBParseResult {
 export async function fallbackTermSearch(
   apiClient: Pick<import("../lib/api-client.js").LawApiClient, "fetchApi">,
   term: string,
-  termType: string
+  termType: string,
+  apiKey?: string
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
   // 조회 오류는 삼키지 않고 호출부(도구의 catch → formatToolError)로 올린다. 종전엔 장애를
   // "연계 정보를 찾을 수 없습니다"로 바꿔 부존재처럼 답했다 (2026-09-23 리뷰 D8).
@@ -90,6 +91,7 @@ export async function fallbackTermSearch(
     endpoint: "lawSearch.do",
     target: "lstrm",
     extraParams: { query: term, display: "10" },
+    apiKey,
   })
 
   const result = parseKBXML(xmlText, "LsTrmSearch")

@@ -108,6 +108,10 @@ function renderDiff(rows: BulkRow[], previous: Record<string, string>): string {
   let same = 0
   for (const r of rows) {
     if (!r.hit) continue
+    if (r.looseMatch) {
+      changed.push(`？ 「${r.query}」 부분매칭 후보: ${r.hit.name} | ID ${r.hit.lawId} | MST ${r.hit.mst} — 다른 법령일 수 있어 요청 법령의 변경 여부를 판단하지 않았습니다.\n`)
+      continue
+    }
     const prev = previous[r.hit.lawId]
     if (prev === r.hit.mst) {
       // MST 동일 = 본문 개정 없음. 다만 공포됐으나 미시행인 개정은 MST가 아직 안 바뀌므로
@@ -150,6 +154,7 @@ export async function searchLawBulk(
       const settled = await Promise.allSettled(
         chunk.map(q => lookupOne(apiClient, q, input.includeUpcoming, input.apiKey))
       )
+      throwIfRequestCancelled()
       for (let k = 0; k < settled.length; k++) {
         const r = settled[k]
         if (r.status === "fulfilled") { rows.push(r.value); continue }

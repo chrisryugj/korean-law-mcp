@@ -26,3 +26,17 @@ describe("analyze_document: 비정상 입력 10만 자", () => {
     expect(r.isError).toBeUndefined()
   })
 })
+
+describe("analyze_document: 긴 조항의 분석 범위", () => {
+  it("조항 500자 이후의 일방 해지 문구도 분석한다", async () => {
+    const text = "제1조(계약) " + "계약 내용의 일반적인 설명이다. ".repeat(40) + "회사는 사전 통지 없이 즉시 해지할 수 있다."
+    const result = await analyzeDocument(null, { text, maxClauses: 15 })
+    expect(result.content[0].text).toContain("일방 해지 조항 (제1조)")
+  })
+
+  it("긴 조항 말미의 충돌 문구도 조항 간 대조에 포함한다", async () => {
+    const text = "제1조 " + "계약 내용의 일반적인 설명이다. ".repeat(40) + "해지 통보는 30일 전에 한다.\n제2조 회사는 즉시 해지할 수 있다."
+    const result = await analyzeDocument(null, { text, maxClauses: 15 })
+    expect(result.content[0].text).toContain("해지통보 vs 즉시해지 (제1조 vs 제2조)")
+  })
+})

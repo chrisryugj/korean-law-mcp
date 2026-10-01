@@ -31,6 +31,16 @@
 
 ---
 
+## v4.15.4: Full feature review and fixes
+
+- Corrected case-number matching, summary boundaries, article/annex selection, and citation-mode three-tier responses
+- Preserved decision, treaty and English-law fields; marked skipped citations and failed scenario lookups
+- Corrected ordinance dates and parent-law references, and restored risk detection beyond truncated article excerpts
+- Fixed HTTP cancellation/key forwarding, competition research routing, official links and CLI inputs
+- Reviewed all 99 internal tools and 10 exposed tools. No new features or dependency changes. [Changelog](CHANGELOG.md), [review evidence](docs/PRODUCTION-REVIEW-2-2026-10-02.md)
+
+---
+
 ## v4.15.3: Retrieval correctness and performance
 
 - Exact case-number searches, per-case fallback validation, and explicit unconfirmed status when treatment scanning is disabled

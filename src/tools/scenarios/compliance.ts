@@ -5,7 +5,7 @@
  * 추가 조회: 상위법 위임근거 + 헌재 위헌 판결 + 권익위 심판례
  */
 import type { ScenarioContext, ScenarioResult, ScenarioSection } from "./types.js"
-import { callTool } from "./types.js"
+import { callTool, pushResultSection } from "./types.js"
 import { searchConstitutionalDecisions } from "../constitutional-decisions.js"
 import { searchAdminAppeals } from "../admin-appeals.js"
 import { getLinkedLawsFromOrdinance } from "../law-linkage.js"
@@ -33,17 +33,11 @@ export async function runComplianceScenario(ctx: ScenarioContext): Promise<Scena
     }),
   ])
 
-  if (!linkedR.isError && linkedR.text.trim()) {
-    sections.push({ title: "조례의 상위법 근거", content: linkedR.text })
-  }
+  pushResultSection(sections, "조례의 상위법 근거", linkedR)
 
-  if (!constR.isError && constR.text.trim()) {
-    sections.push({ title: "헌재 결정 (조례 위헌·위법)", content: constR.text })
-  }
+  pushResultSection(sections, "헌재 결정 (조례 위헌·위법)", constR)
 
-  if (!appealR.isError && appealR.text.trim()) {
-    sections.push({ title: "행정심판 (조례 취소 사례)", content: appealR.text })
-  }
+  pushResultSection(sections, "행정심판 (조례 취소 사례)", appealR)
 
   // 후속 액션
   suggestedActions.push(

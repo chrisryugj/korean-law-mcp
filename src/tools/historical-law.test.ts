@@ -188,3 +188,18 @@ describe("search_historical_law — 동명 구법 연혁", () => {
     expect(text.indexOf("MST: 53681")).toBeLessThan(text.indexOf("MST: 4972"))
   })
 })
+
+
+describe("getHistoricalLaw: 조문 선택과 오류 상태", () => {
+  it.each(["제002조의03", "2조의3", "000203"])("%s 표기를 실제 조문 번호로 정규화한다", async jo => {
+    const r = await getHistoricalLaw(client, { mst: "273629", jo })
+    expect(r.isError).toBeFalsy()
+    expect(r.content[0].text).toContain("이 법은 상행위에 적용한다")
+    expect(r.content[0].text).not.toContain("[NOT_FOUND]")
+  })
+
+  it("없는 조문은 isError=true로 전달해 상위 체인의 성공 판정을 막는다", async () => {
+    const r = await getHistoricalLaw(client, { mst: "273629", jo: "제99조" })
+    expect(r.isError).toBe(true)
+  })
+})

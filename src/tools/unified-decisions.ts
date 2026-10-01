@@ -265,7 +265,7 @@ export async function getDecisionText(
 
     // 도메인별 추가 옵션 병합 (핵심 필드 덮어쓰기 방지)
     if (input.options) {
-      const reserved = new Set(["id", "apiKey", "domain", "full"])
+      const reserved = new Set(["id", "lawId", "apiKey", "domain", "full"])
       for (const [k, v] of Object.entries(input.options)) {
         if (!reserved.has(k)) args[k] = v
       }

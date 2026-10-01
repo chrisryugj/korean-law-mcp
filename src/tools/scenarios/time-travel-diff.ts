@@ -35,7 +35,7 @@ export interface LawSnapshot {
  */
 /** 테스트 도달용 공개 — 프로덕션 소비자는 이 파일 안뿐이다 (#143) */
 export function normalizeText(s: string): string {
-  return cleanHtml((s || "").replace(/<[^>]+>/g, " "))
+  return cleanHtml((s || "").replace(/<!--[\s\S]*?-->|<\/?[A-Za-z][^>]*>/g, " "))
     .replace(/\s+/g, " ")
     .trim()
 }

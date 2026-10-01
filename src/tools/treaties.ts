@@ -3,6 +3,7 @@ import type { LawApiClient } from "../lib/api-client.js"
 import { parseTreatyXML } from "../lib/xml-parser.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError, notFoundResponse } from "../lib/errors.js"
+import { fieldText } from "../lib/precedent-body.js"
 
 export const searchTreatiesSchema = z.object({
   query: z.string().optional().describe("검색 키워드 (예: '투자보장', '범죄인인도')"),
@@ -134,14 +135,14 @@ export async function getTreatyText(
 
     // 조약내용이 중첩 객체일 수 있음
     const bodyObj = trty.조약내용 || {}
-    const bodyText = typeof bodyObj === "string" ? bodyObj : bodyObj.조약내용 || ""
+    const bodyText = fieldText(bodyObj.조약내용 ?? bodyObj)
 
     // 메타데이터는 최상위가 아니라 조약기본정보·추가정보에 들어 있다. 최상위를 읽던 종전 코드는
     // 조약명까지 전부 N/A였다. 추가정보의 빈 값은 문자열 "null"로 온다 (2026-09-23 실측).
     const info = trty.조약기본정보 || trty
     const extra = trty.추가정보 || {}
     const val = (v: unknown): string => {
-      const s = v == null ? "" : String(v).trim()
+      const s = fieldText(v).trim()
       return s === "null" ? "" : s
     }
     const kindByCode: Record<string, string> = { "440101": "양자조약", "440102": "다자조약" }

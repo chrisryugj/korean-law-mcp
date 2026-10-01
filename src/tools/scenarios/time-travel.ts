@@ -13,6 +13,7 @@ import type { ScenarioContext, ScenarioResult, ScenarioSection } from "./types.j
 import type { HistoricalVersion } from "../../lib/historical-utils.js"
 import { fetchLawVersions, sameLawName, wholeRevisionLabel, wholeRevisionsBetween } from "../../lib/law-lineage.js"
 import { hasLawNode } from "../../lib/api-client.js"
+import { dateSchema } from "../../lib/schemas.js"
 import {
   changeExcerpt, diffArticles, displayJo, dot, excerptBudget, extractLawSnapshot,
   type ArticleSnapshot, type LawSnapshot,
@@ -80,10 +81,10 @@ export async function runTimeTravelScenario(ctx: ScenarioContext): Promise<Scena
     return { sections, suggestedActions }
   }
 
-  if (!/^\d{8}$/.test(fromDate) || !/^\d{8}$/.test(toDate)) {
+  if (!dateSchema.safeParse(fromDate).success || !dateSchema.safeParse(toDate).success) {
     sections.push({
       title: "Time Travel — 시점 비교 (v4.0)",
-      content: `⚠️ 날짜 형식 오류: fromDate=${fromDate}, toDate=${toDate} (YYYYMMDD 8자리 필요)`,
+      content: `⚠️ 날짜 오류: fromDate=${fromDate}, toDate=${toDate} (유효한 YYYYMMDD 날짜 필요)`,
     })
     return { sections, suggestedActions }
   }
@@ -207,7 +208,8 @@ export async function runTimeTravelScenario(ctx: ScenarioContext): Promise<Scena
   if (oldVer.lawNm && newVer.lawNm && !sameLawName(oldVer.lawNm, newVer.lawNm)) {
     body += `\n제명 변경: 「${oldVer.lawNm}」 → 「${newVer.lawNm}」 (같은 법령ID)`
   }
-  const whole = wholeRevisionsBetween(versions, oldVer.efYd, newVer.efYd)
+  const [intervalFrom, intervalTo] = [oldVer.efYd, newVer.efYd].sort()
+  const whole = wholeRevisionsBetween(versions, intervalFrom, intervalTo)
   if (whole.length > 0) {
     const w = whole[whole.length - 1]
     body += `\n⚠️ 두 시점 사이 ${wholeRevisionLabel(w)}(시행 ${dot(w.efYd) || w.efYd}, 공포 제${w.ancNo}호) — 조문 체계가 바뀌어 아래 조번호 대조는 번호만 같은 다른 조문일 수 있습니다. 조문 제목으로 대응 관계를 확인하세요.`
@@ -215,8 +217,8 @@ export async function runTimeTravelScenario(ctx: ScenarioContext): Promise<Scena
 
   // 두 시점 사이에 낀 개정들 — 각 변경의 근거 공포를 특정할 수 있게 한다 (#96)
   const between = versions
-    .filter(v => parseInt(v.efYd || "0", 10) > parseInt(oldVer.efYd || "0", 10)
-              && parseInt(v.efYd || "0", 10) <= parseInt(newVer.efYd || "0", 10))
+    .filter(v => parseInt(v.efYd || "0", 10) > parseInt(intervalFrom || "0", 10)
+              && parseInt(v.efYd || "0", 10) <= parseInt(intervalTo || "0", 10))
     .sort((x, y) => parseInt(x.efYd || "0", 10) - parseInt(y.efYd || "0", 10))
   if (between.length > 0) {
     body += `\n\n[구간 개정 연혁] ${between.length}건 — 아래 변경들의 근거`

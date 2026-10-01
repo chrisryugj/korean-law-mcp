@@ -4,6 +4,7 @@
 
 import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
+import { parseThreeTierCitation } from "../lib/three-tier-citation.js"
 import { parseThreeTierDelegation } from "../lib/three-tier-parser.js"
 import { cleanHtml } from "../lib/article-parser.js"
 import { truncateResponse } from "../lib/schemas.js"
@@ -42,7 +43,7 @@ export async function getThreeTier(
     })
     const json = JSON.parse(jsonText)
 
-    const threeTierData = parseThreeTierDelegation(json)
+    const threeTierData = input.knd === "1" ? parseThreeTierCitation(json) : parseThreeTierDelegation(json)
 
     const { meta, articles } = threeTierData
 
@@ -75,7 +76,15 @@ export async function getThreeTier(
       if (article.title) resultText += ` ${article.title}`
       resultText += `\n---\n\n`
 
+      if (threeTierData.kndType === "인용조문" && article.content) {
+        const content = cleanHtml(article.content)
+        resultText += content.length > 500
+          ? `${content.slice(0, 500)}\n   (법률 본문 ${content.length.toLocaleString()}자 중 일부만 표시)\n\n`
+          : `${content}\n\n`
+      }
+
       if (article.delegations.length === 0) {
+        if (threeTierData.kndType === "인용조문") continue
         resultText += `(위임 조문 없음)\n\n`
         continue
       }

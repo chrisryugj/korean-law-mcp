@@ -31,7 +31,7 @@ export async function getArticleDetail(
   try {
     // 조문 번호가 한글이면 JO 코드로 변환
     let joCode = input.jo
-    if (/제\d+조/.test(joCode)) {
+    if (!/^\d{6}$/.test(joCode)) {
       joCode = buildJO(joCode)
     }
 
@@ -71,7 +71,12 @@ export async function getArticleDetail(
 
     // 조문 추출
     const rawUnits = lawData.조문?.조문단위
-    const articleUnits: any[] = toArray(rawUnits)
+    const wantNumber = parseInt(joCode.slice(0, 4), 10)
+    const wantBranch = parseInt(joCode.slice(4, 6), 10)
+    // JO can be ignored upstream; validate the article before labelling its subunits.
+    const articleUnits: any[] = toArray(rawUnits).filter(unit => unit?.조문여부 === "조문"
+      && Number(unit.조문번호 ?? unit.조번호) === wantNumber
+      && Number(unit.조문가지번호 || 0) === wantBranch)
 
     if (articleUnits.length === 0) {
       return {

@@ -23,7 +23,7 @@ describe("getArticleDetail — 조회 위치 라벨 (#118)", () => {
   })
 
   it("보통 조문 표기는 종전대로", async () => {
-    const r = await getArticleDetail(client(), { jo: "제44조", mst: "281875" })
+    const r = await getArticleDetail(client({ 조문여부: "조문", 조문번호: "44", 조문내용: "제44조" }), { jo: "제44조", mst: "281875" })
     expect(r.content[0].text).toContain("조회 위치: 제44조")
   })
 
@@ -38,7 +38,7 @@ describe("getArticleDetail — 조회 위치 라벨 (#118)", () => {
 describe("getArticleDetail: getLawText 경유", () => {
   it("MST·JO 를 getLawText 에 넘긴다 (fetchApi 로 eflaw 를 직접 치지 않는다)", async () => {
     const calls: object[] = []
-    const r = await getArticleDetail(client(undefined, calls), { jo: "제44조", mst: "281875" })
+    const r = await getArticleDetail(client({ 조문여부: "조문", 조문번호: "44", 조문내용: "제44조" }, calls), { jo: "제44조", mst: "281875" })
     expect(r.isError).toBeFalsy()
     expect(calls).toEqual([{ mst: "281875", lawId: undefined, jo: "004400", apiKey: undefined }])
   })
@@ -84,5 +84,35 @@ describe("getArticleDetail: 항·호·목 로컬 선택", () => {
     expect(text).toContain("① 첫째 항")
     expect(text).toContain("② 둘째 항")
     expect(text).toContain("[주의] 제9항")
+  })
+})
+
+
+describe("getArticleDetail: upstream JO 필터 무시", () => {
+  it("반환된 여러 조문 중 요청한 번호와 가지번호만 출력한다", async () => {
+    const r = await getArticleDetail(client([
+      ARTICLE_38,
+      { 조문여부: "조문", 조문번호: "38", 조문가지번호: "2", 조문내용: "가지조문 본문" },
+      { 조문여부: "조문", 조문번호: "39", 조문내용: "이웃조문 본문" },
+    ]), { jo: "제38조의2", mst: "1" })
+    expect(r.isError).toBeFalsy()
+    expect(r.content[0].text).toContain("가지조문 본문")
+    expect(r.content[0].text).not.toContain("첫째 항")
+    expect(r.content[0].text).not.toContain("이웃조문 본문")
+  })
+
+  it("요청한 조문이 없으면 다른 조문을 성공 응답으로 반환하지 않는다", async () => {
+    const r = await getArticleDetail(client(ARTICLE_38), { jo: "제39조", mst: "1" })
+    expect(r.isError).toBe(true)
+    expect(r.content[0].text).toContain("[NOT_FOUND]")
+    expect(r.content[0].text).not.toContain("첫째 항")
+  })
+
+  it("제 없는 조문 표기도 JO 코드로 정규화한다", async () => {
+    const calls: object[] = []
+    const r = await getArticleDetail(client(ARTICLE_38, calls), { jo: "38조", mst: "1" })
+    expect(r.isError).toBeFalsy()
+    expect(calls).toEqual([{ mst: "1", lawId: undefined, jo: "003800", apiKey: undefined }])
+    expect(r.content[0].text).toContain("조회 위치: 제38조")
   })
 })

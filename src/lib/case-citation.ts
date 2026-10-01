@@ -11,6 +11,7 @@
  */
 import type { LawApiClient } from "./api-client.js"
 import { parsePrecedentXML } from "./xml-parser.js"
+import { throwIfRequestCancelled } from "./session-state.js"
 
 /*
  * 추출 규칙과 그 균형 (#93 → #137)
@@ -175,6 +176,7 @@ async function verifyOne(
       line: `⚠ ${caseNo} — 미확인 (법제처 수록 판례에서 검색되지 않음. 하급심·미수록 판례일 수 있어 부존재로 단정 불가)`,
     }
   } catch (e) {
+    throwIfRequestCancelled()
     return {
       mark: "unknown",
       line: `⚠ ${caseNo} — 미확인 (조회 실패: ${e instanceof Error ? e.message : String(e)})`,

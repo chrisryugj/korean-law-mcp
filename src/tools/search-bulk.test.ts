@@ -6,6 +6,7 @@
 import { describe, it, expect, beforeEach } from "vitest"
 import { searchLawBulk, SearchLawBulkSchema } from "./search-bulk.js"
 import { lawCache } from "../lib/cache.js"
+import { requestContext } from "../lib/session-state.js"
 import type { LawApiClient } from "../lib/api-client.js"
 
 const hit = (name: string, lawId: string, mst: string, effDate: string) =>
@@ -134,5 +135,37 @@ describe("search_law_bulk (#157)", () => {
     const many = Array.from({ length: 41 }, (_, i) => `법령${i}`)
     expect(SearchLawBulkSchema.safeParse({ queries: many }).success).toBe(false)
     expect(SearchLawBulkSchema.safeParse({ queries: ["민법"] }).success).toBe(true)
+  })
+})
+
+
+describe("search_law_bulk: 마지막 배치 취소·부분매칭 diff", () => {
+  it("마지막 배치가 취소되면 이미 받은 법령을 성공으로 반환하지 않는다", async () => {
+    const controller = new AbortController()
+    const client = { searchLaw: async (query: string) => {
+      if (query === "취소법") {
+        await new Promise(resolve => setImmediate(resolve))
+        controller.abort(new Error("bulk caller stopped"))
+        throw controller.signal.reason
+      }
+      return CURRENT[query] ?? EMPTY
+    } } as unknown as LawApiClient
+    const r = await requestContext.run({ signal: controller.signal }, () => searchLawBulk(client,
+      { queries: ["산업안전보건법", "취소법"], includeUpcoming: false }))
+    expect(r.isError).toBe(true)
+    expect(r.content[0].text).toContain("bulk caller stopped")
+    expect(r.content[0].text).not.toContain("다음 감시용 스냅샷")
+  })
+
+  it.each(["270000", "old", undefined])("부분매칭 후보의 MST=%s 상태로 요청 법령의 변경 여부를 확정하지 않는다", async previousMst => {
+    const client = { searchLaw: async () => CURRENT["물환경보전법"] } as unknown as LawApiClient
+    const r = await searchLawBulk(client, { queries: ["물환경법오타"], includeUpcoming: false,
+      previous: previousMst ? { "002233": previousMst } : {} })
+    const text = r.content[0].text
+    expect(text).toContain("부분매칭")
+    expect(text).toContain("물환경법오타")
+    expect(text).toContain("물환경보전법")
+    expect(text).not.toContain("변경 없음")
+    expect(text).toContain("본문 동일 0건")
   })
 })

@@ -5,7 +5,7 @@
  * 추가 조회: 법체계 트리 + 연계 조례 + 연계 조문 + 행정규칙
  */
 import type { ScenarioContext, ScenarioResult, ScenarioSection } from "./types.js"
-import { callTool } from "./types.js"
+import { callTool, pushResultSection } from "./types.js"
 import { getLawSystemTree } from "../law-system-tree.js"
 import { getLinkedOrdinances, getLinkedOrdinanceArticles } from "../law-linkage.js"
 import { searchAdminRule } from "../admin-rule.js"
@@ -43,21 +43,13 @@ export async function runImpactScenario(ctx: ScenarioContext): Promise<ScenarioR
     }),
   ])
 
-  if (!treeR.isError && treeR.text.trim()) {
-    sections.push({ title: "법체계 관계도 (상위법·하위법·관련법)", content: treeR.text })
-  }
+  pushResultSection(sections, "법체계 관계도 (상위법·하위법·관련법)", treeR)
 
-  if (!ordinR.isError && ordinR.text.trim()) {
-    sections.push({ title: "영향받는 자치법규 (전국)", content: ordinR.text })
-  }
+  pushResultSection(sections, "영향받는 자치법규 (전국)", ordinR)
 
-  if (!artOrdinR.isError && artOrdinR.text.trim()) {
-    sections.push({ title: "조문별 자치법규 연계", content: artOrdinR.text })
-  }
+  pushResultSection(sections, "조문별 자치법규 연계", artOrdinR)
 
-  if (!adminR.isError && adminR.text.trim()) {
-    sections.push({ title: "관련 행정규칙 (훈령·예규·고시)", content: adminR.text })
-  }
+  pushResultSection(sections, "관련 행정규칙 (훈령·예규·고시)", adminR)
 
   // 후속 액션
   suggestedActions.push(
