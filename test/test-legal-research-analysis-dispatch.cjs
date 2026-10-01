@@ -23,15 +23,27 @@ async function main() {
   const analysis = await load("../build/tools/legal-analysis.js")
   const chains = await load("../build/tools/chains.js")
 
-  const { allTools, toMcpInputSchema, TOOL_COUNTS } = registry
+  const { allTools, registerTools, TOOL_COUNTS } = registry
   const { legalResearch, LegalResearchSchema, pickScenario, withNote } = research
   const { legalAnalysis, LegalAnalysisSchema } = analysis
 
   // ── 1. 광고 스키마 계약 ──────────────────────────────────────────
+  // 광고 스키마는 실제 MCP 경로(tools/list)로 읽는다 — 변환 함수는 tool-registry 내부라 공개하지 않는다
+  const { Server } = await import("@modelcontextprotocol/sdk/server/index.js")
+  const { Client } = await import("@modelcontextprotocol/sdk/client/index.js")
+  const { InMemoryTransport } = await import("@modelcontextprotocol/sdk/inMemory.js")
+  const server = new Server({ name: "t", version: "1" }, { capabilities: { tools: {} } })
+  registerTools(server, {})
+  const [a, b] = InMemoryTransport.createLinkedPair()
+  const client = new Client({ name: "c", version: "1" })
+  await Promise.all([server.connect(a), client.connect(b)])
+  const listed = (await client.listTools()).tools
+  await client.close()
   const advertised = (name) => {
-    const tool = allTools.find((t) => t.name === name)
-    assert.ok(tool, `${name} 도구가 allTools에 없음`)
-    return toMcpInputSchema(tool.schema)
+    assert.ok(allTools.find((t) => t.name === name), `${name} 도구가 allTools에 없음`)
+    const tool = listed.find((t) => t.name === name)
+    assert.ok(tool, `${name} 도구가 tools/list 에 없음`)
+    return tool.inputSchema
   }
 
   // .default() 필드(task, display)는 required가 아니어야 함 (io:"input" 회귀 방지)
@@ -107,16 +119,16 @@ async function main() {
 
   // ── 4. withNote 주입 ───────────────────────────────────────────
   const base = { content: [{ type: "text", text: "본문" }] }
+  // 경고는 별도 content 가 아니라 첫 텍스트의 첫 줄로 합쳐진다 (legal-research.ts withNote)
   const noted = withNote("⚠ 경고", base)
-  assert.strictEqual(noted.content.length, 2)
-  assert.strictEqual(noted.content[0].text, "⚠ 경고", "경고는 첫 줄이어야 함")
-  assert.strictEqual(noted.content[1].text, "본문")
+  assert.strictEqual(noted.content.length, 1)
+  assert.strictEqual(noted.content[0].text, "⚠ 경고\n본문", "경고는 첫 줄이어야 함")
   assert.strictEqual(base.content.length, 1, "원본 응답 변형 금지")
   assert.strictEqual(withNote(undefined, base), base, "노트 없으면 원본 그대로")
   console.log("✓ withNote 경고 첫 줄 주입")
 
   // ── 5. 노출 수 파생값 ──────────────────────────────────────────
-  assert.strictEqual(TOOL_COUNTS.exposed, 9, "노출 도구는 9개")
+  assert.strictEqual(TOOL_COUNTS.exposed, 10, "노출 도구는 10개 (v4.7.0 ordinance_radar 추가)")
   assert.ok(TOOL_COUNTS.total > 90, "전체 도구 수 파생 확인")
   console.log(`✓ TOOL_COUNTS (exposed=${TOOL_COUNTS.exposed}, total=${TOOL_COUNTS.total})`)
 
