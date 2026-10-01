@@ -122,7 +122,7 @@ export const GetAdminRuleSchema = z.object({
   id: z.string().describe("행정규칙일련번호 13자리 (search_admin_rule 결과의 '행정규칙일련번호'. 4~5자리 '행정규칙ID'는 조회되지 않음)"),
   jo: z.string().optional().describe("조문 지정 — '제9-5조', '9-5', '제10조의2', '9-5-2' 형식 모두 수용. 지정 조문만 반환"),
   context: z.number().optional().describe("jo와 함께 사용 — 전후 n개 조문을 함께 반환 (기본 0, 최대 10)"),
-  chapter: z.string().optional().describe("장 지정 — '제9장' 또는 '9'. 해당 장 전체 반환"),
+  chapter: z.string().optional().describe("장 지정 — '제9장' 또는 '9'. 해당 장 전체 반환. 편마다 장 번호가 다시 시작하는 규칙(금융투자업규정 등)은 '제4편 제3장', 편 전체는 '제4편'"),
   keyword: z.string().optional().describe("본문 키워드 — 키워드가 포함된 조문 블록 목록 반환"),
   max_results: z.number().optional().describe("keyword와 함께 사용 — 최대 조문 수 (기본 10, 최대 30)"),
   page: z.number().optional().describe("전문을 청크로 페이징 조회 (1부터). 응답에 page/total_pages 표기"),

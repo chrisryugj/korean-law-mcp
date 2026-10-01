@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest"
-import { buildPartialBody, splitSections } from "./admin-rule-views.js"
+import { buildPartialBody } from "./admin-rule-views.js"
+import { splitSections } from "./admin-rule-keyword.js"
 
 // 화재안전기술기준(NFTC 103) 본문 형식 — 조문(제N조) 없이 "2.7.3" 절 번호 줄 (2026-09-28 실측 축약)
 const NFTC = [

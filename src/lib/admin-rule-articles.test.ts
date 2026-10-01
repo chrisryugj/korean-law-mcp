@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest"
-import { parseAdminRuleArticles, normalizeAdminJo, normalizeChapter, findArticle } from "./admin-rule-articles.js"
+import { parseAdminRuleArticles } from "./admin-rule-articles.js"
+import { normalizeAdminJo, normalizeChapter, findArticle } from "./admin-rule-jo.js"
 import { buildPartialBody, paginateFullText, pickPartialMode } from "./admin-rule-views.js"
 
 // 외국환거래규정 실측 패턴 축약 픽스처 — 하이픈형(제{장}-{조}조) 체계
@@ -60,8 +61,8 @@ describe("parseAdminRuleArticles — 헤더 패턴 (AC#10)", () => {
   })
 
   it("장 헤더를 인식하고 조문을 장에 귀속시킨다", () => {
-    expect(parsed.chapters.map((c) => c.num)).toEqual([1, 2, 9, 10])
-    expect(parsed.articles.find((a) => a.key === "9-5")!.chapter).toBe(9)
+    expect(parsed.chapters.map((c) => c.key)).toEqual(["1", "2", "9", "10"])
+    expect(parsed.articles.find((a) => a.key === "9-5")!.chapter).toBe("9")
   })
 
   it("항목식 본문은 조문 0개로 파싱된다", () => {
@@ -94,7 +95,15 @@ describe("normalizeAdminJo — 입력 정규화", () => {
   })
 
   it("normalizeChapter — 제9장·9장·9 모두 9", () => {
-    expect([normalizeChapter("제9장"), normalizeChapter("9장"), normalizeChapter("9")]).toEqual([9, 9, 9])
+    expect([normalizeChapter("제9장"), normalizeChapter("9장"), normalizeChapter("9")]).toEqual([{ chapter: "9" }, { chapter: "9" }, { chapter: "9" }])
+  })
+
+  it("normalizeChapter — 편 지정·장의N·편의N", () => {
+    expect(normalizeChapter("제4편 제3장")).toEqual({ part: "4", chapter: "3" })
+    expect(normalizeChapter("4편3장")).toEqual({ part: "4", chapter: "3" })
+    expect(normalizeChapter("제11장의2")).toEqual({ chapter: "11의2" })
+    expect(normalizeChapter("제4편의2")).toEqual({ part: "4의2" })
+    expect(normalizeChapter("총칙")).toBeNull()
   })
 })
 
@@ -158,8 +167,8 @@ describe("parseAdminRuleArticles — 라인 유실 방어", () => {
     const body = ["제1장 총칙", "제1조(목적) 가.", "제2조(정의) 나.", "제2장 벌칙", "제1조(과태료) 다.", "제2조(경과) 라."].join("\n")
     const p = parseAdminRuleArticles(body)
     expect(p.articles).toHaveLength(4)
-    expect(p.articles.map((a) => a.chapter)).toEqual([1, 1, 2, 2])
-    expect(p.articles.filter((a) => a.chapter === 2).map((a) => a.lines.join(""))).toEqual([
+    expect(p.articles.map((a) => a.chapter)).toEqual(["1", "1", "2", "2"])
+    expect(p.articles.filter((a) => a.chapter === "2").map((a) => a.lines.join(""))).toEqual([
       "제1조(과태료) 다.", "제2조(경과) 라.",
     ])
   })
@@ -211,11 +220,12 @@ describe("parseAdminRuleArticles: 라인 안 공백 덩어리 (리뷰 C7)", () =
   it("줄 끝 공백 제거는 종전과 같다", () => {
     expect(parseAdminRuleArticles("제1장 총칙\n제1조(목적) 가.   \n  본문\t\n제2조 나\n제3조의2 다  \n")).toEqual({
       articles: [
-        { key: "1", ord: [1, 0, 0], label: "제1조(목적) 가.", lines: ["제1조(목적) 가.", "  본문"], chapter: 1 },
-        { key: "2", ord: [2, 0, 0], label: "제2조 나", lines: ["제2조 나"], chapter: 1 },
-        { key: "3의2", ord: [3, 0, 2], label: "제3조의2 다", lines: ["제3조의2 다", ""], chapter: 1 },
+        { key: "1", ord: [1, 0, 0], label: "제1조(목적) 가.", lines: ["제1조(목적) 가.", "  본문"], chapter: "1", part: "" },
+        { key: "2", ord: [2, 0, 0], label: "제2조 나", lines: ["제2조 나"], chapter: "1", part: "" },
+        { key: "3의2", ord: [3, 0, 2], label: "제3조의2 다", lines: ["제3조의2 다", ""], chapter: "1", part: "" },
       ],
-      chapters: [{ num: 1, title: "제1장 총칙" }],
+      chapters: [{ part: "", key: "1", title: "제1장 총칙" }],
+      parts: [],
       preamble: [],
     })
   })
