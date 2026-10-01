@@ -1,5 +1,7 @@
 import { describe, expect, it, vi, afterEach } from "vitest"
 import { getAnnexes } from "./annex.js"
+import { ExecutionLimitError } from "../lib/execution-limits.js"
+import { runWithRequestContext } from "../lib/session-state.js"
 import type { LawApiClient } from "../lib/api-client.js"
 
 // 부록 3 — `fetchLawAnnexUnits` 실패가 #127 마커 커버리지 안인지 밖인지.
@@ -56,4 +58,51 @@ describe("현행 본문 병합 실패 — 삼키지 않고 마커로 (#127 커�
     expect(text).toContain("flSeq=1")
     expect(text).not.toContain("no canonical")
   }, 30000)
+})
+
+
+describe("별표 정본 조회: 중단 명령", () => {
+  it("목록 병합의 예산 소진을 부분 성공으로 삼키지 않는다", async () => {
+    const client = clientWithFailingCanonical()
+    client.fetchApi = vi.fn(async () => { throw new ExecutionLimitError("budget depleted") })
+    const r = await getAnnexes(client, { lawName: "도로교통법 시행규칙" })
+    expect(r.isError).toBe(true)
+    expect(r.content[0].text).toContain("budget depleted")
+    expect(r.content[0].text).not.toContain("신설 별표 병합 확인 불가")
+  })
+
+  it("추출 경로의 예산 소진도 인덱스 링크 다운로드로 이어지지 않는다", async () => {
+    const client = clientWithFailingCanonical()
+    client.fetchApi = vi.fn(async () => { throw new ExecutionLimitError("budget depleted") })
+    const fetch = vi.fn(async () => new Response("fallback"))
+    vi.stubGlobal("fetch", fetch)
+    try {
+      const r = await getAnnexes(client, { lawName: "도로교통법 시행규칙", bylSeq: "000100" })
+      expect(r.isError).toBe(true)
+      expect(r.content[0].text).toContain("budget depleted")
+      expect(fetch).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it("정본 확인 중 취소되면 인덱스 링크 다운로드를 시작하지 않는다", async () => {
+    const controller = new AbortController()
+    const client = clientWithFailingCanonical()
+    client.fetchApi = vi.fn(async () => {
+      controller.abort(new Error("caller stopped"))
+      throw controller.signal.reason
+    })
+    const fetch = vi.fn(async () => new Response("fallback"))
+    vi.stubGlobal("fetch", fetch)
+    try {
+      const r = await runWithRequestContext({ signal: controller.signal }, () =>
+        getAnnexes(client, { lawName: "도로교통법 시행규칙", bylSeq: "000100" }))
+      expect(r.isError).toBe(true)
+      expect(r.content[0].text).toContain("caller stopped")
+      expect(fetch).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
 })

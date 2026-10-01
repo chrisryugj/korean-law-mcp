@@ -3,6 +3,7 @@ import type { LawApiClient } from "../lib/api-client.js";
 import { truncateResponse } from "../lib/schemas.js";
 import { parseSearchXML, extractTag } from "../lib/xml-parser.js";
 import { formatToolError, noResultHint } from "../lib/errors.js";
+import { decisionFields } from "../lib/decision-fields.js";
 
 // 관세청(kcsCgmExpc)·국세청(ntsCgmExpc) 응답 구조가 동일하므로 target만 분기해 재사용
 type CgmExpcTarget = "kcsCgmExpc" | "ntsCgmExpc";
@@ -181,7 +182,7 @@ async function getCgmExpcTextByTarget(
       throw new Error("Customs interpretation not found or invalid response format");
     }
 
-    const expc = data.CgmExpcService;
+    const expc = decisionFields(data.CgmExpcService);
     const basic = {
       안건명: expc.안건명,
       법령해석일련번호: expc.법령해석일련번호,
@@ -239,4 +240,3 @@ async function getCgmExpcTextByTarget(
     return formatToolError(error, target === "ntsCgmExpc" ? "get_nts_interpretation_text" : "get_customs_interpretation_text");
   }
 }
-

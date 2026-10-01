@@ -10,6 +10,7 @@ import { isDownloadNoticeOnly, parseAnnexFile } from "../lib/annex-file-parser.j
 import { truncateResponse, MAX_RESPONSE_SIZE } from "../lib/schemas.js"
 import { ErrorCodes, formatToolError, LawApiError, notFoundResponse } from "../lib/errors.js"
 import { ExecutionLimitError } from "../lib/execution-limits.js"
+import { rethrowIfFatal } from "../lib/fatal-errors.js"
 import { getRequestSignal } from "../lib/session-state.js"
 import { getLawSiteBaseUrl } from "../lib/law-url-config.js"
 import { fetchLawAnnexUnits, findMissingUnits, pickAnnexUnit, type LawAnnexUnit } from "../lib/annex-canonical.js"
@@ -206,7 +207,8 @@ export async function getAnnexes(
               관련법령명: normalizedLawName,
             })),
           ]
-        } catch {
+        } catch (error) {
+          rethrowIfFatal(error)
           // 병합 실패를 삼키면 신설 별표가 빠진 목록이 완전한 목록으로 보인다 (#127).
           // 목록 자체는 유효하므로 isError가 아니라 마커로 알린다.
           mergeIssue = "현행 본문 조회 실패"
@@ -271,7 +273,8 @@ async function extractAnnexContent(
             별표서식PDF파일링크: unit.pdfLink || matched?.별표서식PDF파일링크,
           }
         }
-      } catch {
+      } catch (error) {
+        rethrowIfFatal(error)
         // 정본 조회 실패 → licbyl 링크로 진행. 그 링크가 구본을 가리킬 수 있다는
         // 사실을 삼키면 구본 내용이 현행으로 읽힌다 (#127, #77과 같은 손실).
         canonicalIssue = true

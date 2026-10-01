@@ -75,7 +75,10 @@ export function findMatchingAnnex(
     // 모델이 "별표1" 등 임의 번호로 불러도 매칭 0건 → NOT_FOUND로 새는 대신 유일 별표를 반환.
     // 단, 가지번호(1의2) 요청은 폴백 금지 — 유일 항목이 본번(별표 1)이어도 다른 별표라서,
     // 위 buildSelectorCandidates가 막은 "별표 1 무음 오선택"이 여기로 재개방되면 안 된다.
-    if (annexList.length === 1 && parseAnnexNumber(annexSelector)?.sub == null) {
+    const sole = annexList[0]
+    const unnumbered = sole && !String(sole.별표번호 || "").trim()
+      && !String(sole.별표명 || "").match(ANNEX_NOTATION_RE)?.some(label => parseAnnexNumber(label))
+    if (annexList.length === 1 && unnumbered && parseAnnexNumber(annexSelector)?.sub == null) {
       return annexList[0]
     }
     return undefined

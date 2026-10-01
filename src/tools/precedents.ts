@@ -362,6 +362,7 @@ async function fetchManualRedirect(
   }
 
   const response = await fetchWithRetry(url, { redirect: "manual" })
+  void response.body?.cancel().catch(() => {})
   return {
     status: response.status,
     location: response.headers.get("location"),

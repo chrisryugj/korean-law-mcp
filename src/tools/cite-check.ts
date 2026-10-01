@@ -15,7 +15,7 @@ import type { LawApiClient } from "../lib/api-client.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError, notFoundResponse } from "../lib/errors.js"
 import { parsePrecedentXML, type PrecedentItem } from "../lib/xml-parser.js"
-import { extractCaseNumbers, fieldHasExactCase } from "../lib/case-citation.js"
+import { CASE_CODE_PATTERN, extractCaseNumbers, fieldHasExactCase } from "../lib/case-citation.js"
 import { extractHolding, scanTreatment, fieldText } from "../lib/precedent-body.js"
 import { rethrowIfFatal } from "../lib/fatal-errors.js"
 import type { ToolResponse } from "../lib/types.js"
@@ -58,7 +58,9 @@ export async function citeCheck(
   input: CiteCheckInput
 ): Promise<ToolResponse> {
   try {
-    const candidates = extractCaseNumbers(input.caseNumber)
+    const spacedCase = new RegExp(`(?<![\\d제])\\d{2,4}\\s*${CASE_CODE_PATTERN}\\s*\\d{1,7}(?!\\d)`, "g")
+    const normalizedInput = input.caseNumber.replace(spacedCase, match => match.replace(/\s/g, ""))
+    const candidates = extractCaseNumbers(normalizedInput)
     if (candidates.length === 0) {
       return notFoundResponse(`'${input.caseNumber}'에서 사건번호를 추출하지 못했습니다.`, [
         "사건번호 형식 예: 2013다61381, 96누4671, 2018두42559",
@@ -86,7 +88,8 @@ export async function citeCheck(
     const targetParsed = parsePrecedentXML(targetXml)
     // 동일 사건번호 정확 매칭 우선, 대법원 우선
     const exact = targetParsed.items.filter(i => fieldHasExactCase(i.사건번호 || "", caseNo))
-    const pool = exact.length > 0 ? exact : targetParsed.items
+    const pool = exact.length > 0 ? exact : targetParsed.items.filter(i =>
+      extractCaseNumbers((i.사건번호 || "").replace(/\s/g, "")).some(c => c.startsWith(caseNo)))
     const target = pool.find(i => /대법원/.test(i.법원명 || "")) || pool[0]
 
     if (!target) {
@@ -98,8 +101,7 @@ export async function citeCheck(
 
     const resolvedCaseNo = fieldHasExactCase(target.사건번호 || "", caseNo)
       ? caseNo
-      : extractCaseNumbers(target.사건번호 || "").find(c => c.startsWith(caseNo)) ||
-        extractCaseNumbers(target.사건번호 || "")[0] || caseNo
+      : extractCaseNumbers((target.사건번호 || "").replace(/\s/g, "")).find(c => c.startsWith(caseNo)) || caseNo
     const resolvedCitingP = resolvedCaseNo === caseNo ? citingP : apiClient.fetchApi({
       endpoint: "lawSearch.do",
       target: "prec",

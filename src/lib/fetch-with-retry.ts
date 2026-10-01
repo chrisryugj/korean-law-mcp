@@ -159,6 +159,7 @@ export async function fetchWithRetry(
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     throwIfRequestCancelled()
+    if (externalSignal?.aborted) throw requestCancelledError(externalSignal.reason)
     attempts = attempt + 1
     const attemptTimeout = Math.max(1, Math.min(timeout, deadlineAt - Date.now()))
     const controller = new AbortController()

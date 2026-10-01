@@ -5,7 +5,7 @@
  * 추가 조회: 법령체계(행정규칙 포함) + 자치법규 특칙 + 법령해석례
  */
 import type { ScenarioContext, ScenarioResult, ScenarioSection } from "./types.js"
-import { callTool } from "./types.js"
+import { callTool, pushResultSection } from "./types.js"
 import { getLawSystemTree } from "../law-system-tree.js"
 import { getLinkedOrdinances } from "../law-linkage.js"
 import { searchInterpretations } from "../interpretations.js"
@@ -45,17 +45,11 @@ export async function runManualScenario(ctx: ScenarioContext): Promise<ScenarioR
   const results = await Promise.all(promises)
   const [treeR, interpR, ordinR] = results
 
-  if (!treeR.isError && treeR.text.trim()) {
-    sections.push({ title: "법령체계 + 행정규칙 (훈령·예규·고시)", content: treeR.text })
-  }
+  pushResultSection(sections, "법령체계 + 행정규칙 (훈령·예규·고시)", treeR)
 
-  if (!interpR.isError && interpR.text.trim()) {
-    sections.push({ title: "법령해석례 (유권해석·질의회신)", content: interpR.text })
-  }
+  pushResultSection(sections, "법령해석례 (유권해석·질의회신)", interpR)
 
-  if (ordinR && !ordinR.isError && ordinR.text.trim()) {
-    sections.push({ title: "연계 자치법규 (조례 특칙)", content: ordinR.text })
-  }
+  pushResultSection(sections, "연계 자치법규 (조례 특칙)", ordinR ?? null)
 
   // 후속 액션
   suggestedActions.push(

@@ -40,7 +40,7 @@ export const fmt = {
 export function printBanner() {
   console.log()
   console.log(fmt.bold("  Korean Law CLI v" + VERSION))
-  console.log(fmt.dim("  법제처 API 기반 · 64개 도구 · 자연어 지원"))
+  console.log(fmt.dim(`  법제처 API 기반 · ${allTools.length}개 도구 · 자연어 지원`))
   console.log()
 }
 
@@ -96,15 +96,15 @@ export function getCategory(tool: McpTool): string {
   return match ? match[1] : "기타"
 }
 
-export function printToolList() {
+export function printToolList(tools: McpTool[] = allTools) {
   const grouped = new Map<string, McpTool[]>()
-  for (const tool of allTools) {
+  for (const tool of tools) {
     const cat = getCategory(tool)
     if (!grouped.has(cat)) grouped.set(cat, [])
     grouped.get(cat)!.push(tool)
   }
 
-  console.log(`\n${fmt.bold(`  ${allTools.length}개 도구`)}\n`)
+  console.log(`\n${fmt.bold(`  ${tools.length}개 도구`)}\n`)
   for (const [cat, catTools] of grouped) {
     console.log(fmt.bold(`  ── ${cat} ──`))
     for (const t of catTools) {
@@ -168,7 +168,8 @@ export function extractOptionsFromSchema(schema: z.ZodSchema): CliOption[] {
   return options
 }
 
-export function coerceValue(value: string, type: string): unknown {
+export function coerceValue(value: string | boolean, type: string): unknown {
+  if (typeof value === "boolean") return value
   switch (type) {
     case "number": return Number(value)
     case "boolean": return value === "true" || value === "1"
@@ -179,4 +180,3 @@ export function coerceValue(value: string, type: string): unknown {
     default: return value
   }
 }
-

@@ -80,16 +80,18 @@ function extractPrecedentSummary(fullText: string, maxLength: number): string {
     const trimmed = line.trim()
 
     // 섹션 구분
-    if (trimmed.includes("사건번호:") || trimmed.startsWith("사건:")) {
+    if (!sections.caseNumber && (trimmed.startsWith("사건번호:") || trimmed.startsWith("사건:"))) {
       sections.caseNumber = trimmed
-    } else if (trimmed.includes("법원:") || trimmed.includes("선고:")) {
+    } else if (!sections.court && (trimmed.startsWith("법원:") || trimmed.startsWith("선고:"))) {
       sections.court = trimmed
-    } else if (trimmed === "【판시사항】" || trimmed.startsWith("판시사항")) {
+    } else if (trimmed === "【판시사항】" || trimmed === "판시사항:") {
       currentSection = "judgment"
-    } else if (trimmed === "【판결요지】" || trimmed.startsWith("판결요지")) {
+    } else if (trimmed === "【판결요지】" || trimmed === "판결요지:") {
       currentSection = "summary"
-    } else if (trimmed === "【주문】" || trimmed.startsWith("주문")) {
+    } else if (trimmed === "【주문】" || trimmed === "주문:") {
       currentSection = "mainText"
+    } else if (/^【[^】]+】$/.test(trimmed) || ["참조조문:", "참조판례:", "전문:", "이유:"].includes(trimmed)) {
+      currentSection = ""
     } else if (currentSection === "judgment" && trimmed.length > 0) {
       sections.judgment += trimmed + "\n"
     } else if (currentSection === "summary" && trimmed.length > 0) {

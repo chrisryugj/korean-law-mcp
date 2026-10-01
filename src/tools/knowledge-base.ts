@@ -255,7 +255,7 @@ export async function getDailyToLegal(
     const items = parseRelationXML(xmlText, "연계용어", mapRelatedTerm);
 
     if (items.length === 0) {
-      return await fallbackTermSearch(apiClient, args.dailyTerm, "일상용어");
+      return await fallbackTermSearch(apiClient, args.dailyTerm, "일상용어", args.apiKey);
     }
 
     let output = `일상용어 → 법령용어 연계\n\n`;
@@ -295,7 +295,7 @@ export async function getLegalToDaily(
     const items = parseRelationXML(xmlText, "연계용어", mapRelatedTerm);
 
     if (items.length === 0) {
-      return await fallbackTermSearch(apiClient, args.legalTerm, "법령용어");
+      return await fallbackTermSearch(apiClient, args.legalTerm, "법령용어", args.apiKey);
     }
 
     let output = `법령용어 → 일상용어 연계\n\n`;
@@ -463,4 +463,3 @@ export async function getRelatedLaws(
     return formatToolError(error, "get_related_laws");
   }
 }
-

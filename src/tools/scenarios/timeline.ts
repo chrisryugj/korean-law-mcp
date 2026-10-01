@@ -5,7 +5,7 @@
  * 추가 조회: 개정 구간별 판례 + 해석례 + 과거 법령 조회
  */
 import type { ScenarioContext, ScenarioResult, ScenarioSection } from "./types.js"
-import { callTool } from "./types.js"
+import { callTool, pushResultSection } from "./types.js"
 import { searchPrecedents } from "../precedents.js"
 import { searchInterpretations } from "../interpretations.js"
 
@@ -29,13 +29,9 @@ export async function runTimelineScenario(ctx: ScenarioContext): Promise<Scenari
     }),
   ])
 
-  if (!precR.isError && precR.text.trim()) {
-    sections.push({ title: "관련 판례 (시계열 참조)", content: precR.text })
-  }
+  pushResultSection(sections, "관련 판례 (시계열 참조)", precR)
 
-  if (!interpR.isError && interpR.text.trim()) {
-    sections.push({ title: "법령해석례 (시계열 참조)", content: interpR.text })
-  }
+  pushResultSection(sections, "법령해석례 (시계열 참조)", interpR)
 
   // 후속 액션
   suggestedActions.push(

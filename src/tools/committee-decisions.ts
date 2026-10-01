@@ -176,7 +176,8 @@ async function searchCommitteeDecisions(
         결정일련번호: extractTag(content, "결정문일련번호") || extractTag(content, "결정일련번호") || extractTag(content, "판례일련번호") || extractTag(content, "일련번호"),
         사건명: extractTag(content, "사건명") || extractTag(content, "안건명") || extractTag(content, "제목"),
         사건번호: extractTag(content, "사건번호") || extractTag(content, "의안번호"),
-        결정일자: extractTag(content, "결정일자") || extractTag(content, "의결일") || extractTag(content, "선고일자") || extractTag(content, "등록일"),
+        결정일자: extractTag(content, "결정일자") || extractTag(content, "의결일자") || extractTag(content, "의결일") || extractTag(content, "선고일자") || extractTag(content, "판정일자"),
+        등록일: extractTag(content, "등록일"),
         결정유형: extractTag(content, "결정유형") || extractTag(content, "결정구분") || extractTag(content, "판결유형") || extractTag(content, "회의종류"),
         재결청: extractTag(content, "재결청") || extractTag(content, "기관명"),
         상세링크: extractTag(content, "결정문상세링크") || extractTag(content, "상세링크") || extractTag(content, "판례상세링크"),
@@ -197,6 +198,7 @@ async function searchCommitteeDecisions(
       output += `[${decision.결정일련번호}] ${title}\n`;
       if (decision.사건번호) output += `  사건번호: ${decision.사건번호}\n`;
       if (decision.결정일자) output += `  결정일: ${decision.결정일자}\n`;
+      if (decision.등록일) output += `  등록일: ${decision.등록일}\n`;
       if (decision.결정유형) output += `  결정유형: ${decision.결정유형}\n`;
       if (decision.재결청) output += `  재결청: ${decision.재결청}\n`;
       if (decision.상세링크) output += `  링크: ${decision.상세링크}\n`;
@@ -243,14 +245,17 @@ async function getCommitteeDecisionText(
       throw new Error(`${committeeName}을(를) 찾을 수 없거나 응답 형식이 올바르지 않습니다.`);
     }
 
-    const decision = decisionFields(data[serviceKey]);
+    const record = data[serviceKey];
+    const decision = decisionFields(record.의결서 || record);
 
-    let output = `=== ${decision.사건명 || committeeName} ===\n\n`;
+    let output = `=== ${decision.사건명 || decision.안건명 || decision.제목 || committeeName} ===\n\n`;
 
     output += `기본 정보:\n`;
-    output += `  사건번호: ${decision.사건번호 || "N/A"}\n`;
-    output += `  결정일자: ${decision.결정일자 || "N/A"}\n`;
-    output += `  결정유형: ${decision.결정유형 || "N/A"}\n`;
+    output += `  사건번호: ${decision.사건번호 || decision.안건번호 || decision.의안번호 || decision.결정번호 || "N/A"}\n`;
+    output += `  결정일자: ${decision.결정일자 || decision.의결일자 || decision.의결연월일 || decision.의결일 || decision.판정일자 || "N/A"}\n`;
+    if (decision.등록일) output += `  등록일: ${decision.등록일}\n`;
+    output += `  결정유형: ${decision.결정유형 || decision.결정구분 || decision.회의종류 || decision.자료구분 || "N/A"}\n`;
+    if (decision.판정결과) output += `  판정결과: ${decision.판정결과}\n`;
     if (decision.당사자) output += `  당사자: ${decision.당사자}\n`;
     if (decision.피심인) output += `  피심인: ${decision.피심인}\n`;
     output += `\n`;
@@ -259,8 +264,10 @@ async function getCommitteeDecisionText(
       output += `주문:\n${decision.주문}\n\n`;
     }
 
-    if (decision.결정요지 || decision.요지) {
-      output += `결정요지:\n${decision.결정요지 || decision.요지}\n\n`;
+    if (decision.판정사항) output += `판정사항:\n${decision.판정사항}\n\n`;
+
+    if (decision.결정요지 || decision.요지 || decision.판정요지) {
+      output += `결정요지:\n${decision.결정요지 || decision.요지 || decision.판정요지}\n\n`;
     }
 
     if (decision.이유) {
@@ -271,8 +278,8 @@ async function getCommitteeDecisionText(
       output += `참조조문:\n${decision.참조조문}\n\n`;
     }
 
-    if (decision.결정내용 || decision.전문) {
-      output += `전문:\n${decision.결정내용 || decision.전문}\n`;
+    if (decision.결정내용 || decision.전문 || decision.내용 || decision.의결문 || decision.주요내용) {
+      output += `전문:\n${decision.결정내용 || decision.전문 || decision.내용 || decision.의결문 || decision.주요내용}\n`;
     }
 
     return {

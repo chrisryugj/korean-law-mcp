@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { applicableLaw, normalizeDate } from "./applicable-law.js"
 import { lawCache } from "../lib/cache.js"
+import { ExecutionLimitError } from "../lib/execution-limits.js"
 import type { LawApiClient } from "../lib/api-client.js"
 
 const row = (date: string) => `<law><법령일련번호>900001</법령일련번호><법령명한글>검토법</법령명한글><법령ID>000001</법령ID><제개정구분명>일부개정</제개정구분명><시행일자>${date}</시행일자><공포번호>1</공포번호></law>`
@@ -34,5 +35,35 @@ describe("applicable_law production regressions", () => {
 
   it.each(["2024-02-29", "2024.2.29", "20240229", "2024년 2월 29일"])("accepts a real leap day: %s", input => {
     expect(normalizeDate(input)).toBe("20240229")
+  })
+})
+
+
+describe("applicable_law: 조문 표기와 부칙 실패 상태", () => {
+  it("6자리 JO를 유지하고 표시에는 자연어 조문을 사용한다", async () => {
+    const getLawText = vi.fn(async () => article("가. 종전 대상"))
+    const client = {
+      searchLaw: async () => `<LawSearch>${row("20210101")}</LawSearch>`,
+      fetchApi: async (input: { target: string }) => input.target === "eflaw"
+        ? lineage : JSON.stringify({ 법령: { 부칙: { 부칙단위: [] } } }),
+      getLawText,
+    } as unknown as LawApiClient
+    const r = await applicableLaw(client, { lawName: "검토법", date: "2020-06-01", jo: "000100" })
+    expect(r.content[0].text).toContain("▶ 기준일 시점 조문: 제1조")
+    expect(r.content[0].text).toContain("가. 종전 대상")
+    expect(getLawText.mock.calls.map(c => (c as unknown as [{jo:string}])[0].jo)).toEqual(["000100", "000100"])
+  })
+  it("부칙 조회의 예산 소진을 성공과 FAILED 마커로 바꾸지 않는다", async () => {
+    const client = {
+      searchLaw: async () => `<LawSearch>${row("20210101")}</LawSearch>`,
+      fetchApi: async (input: { target: string }) => {
+        if (input.target === "eflaw") return lineage
+        throw new ExecutionLimitError("addenda budget depleted")
+      },
+    } as unknown as LawApiClient
+    const r = await applicableLaw(client, { lawName: "검토법", date: "2020-06-01" })
+    expect(r.isError).toBe(true)
+    expect(r.content[0].text).toContain("addenda budget depleted")
+    expect(r.content[0].text).not.toContain("[FAILED]")
   })
 })

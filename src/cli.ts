@@ -14,6 +14,8 @@
  */
 
 import { Command } from "commander"
+import { pathToFileURL } from "node:url"
+import { existsSync, realpathSync } from "node:fs"
 import { z } from "zod"
 import * as readline from "readline"
 import { LawApiClient } from "./lib/api-client.js"
@@ -185,7 +187,7 @@ async function handleDirectCall(apiClient: LawApiClient, input: string): Promise
 // Program Setup
 // ────────────────────────────────────────
 
-function createProgram(): Command {
+export function createProgram(): Command {
   const program = new Command()
     .name("korean-law")
     .description("한국 법령 검색 CLI - 자연어 한 줄로 모든 법령 조회")
@@ -255,7 +257,7 @@ function createProgram(): Command {
       }
 
       printBanner()
-      printToolList()
+      printToolList(tools)
       console.log(fmt.dim("  사용법: korean-law <도구명> [옵션]"))
       console.log(fmt.dim("  자연어: korean-law query \"민법 제1조\""))
       console.log(fmt.dim("  대화형: korean-law interactive"))
@@ -314,7 +316,8 @@ function createProgram(): Command {
         : `--${opt.name} <value>`
 
       if (opt.required) {
-        cmd.requiredOption(flag, opt.description)
+        // Required fields are validated by Zod after JSON input or flags are assembled.
+        cmd.option(flag, opt.description)
       } else {
         if (opt.defaultValue !== undefined) {
           cmd.option(flag, opt.description, String(opt.defaultValue))
@@ -326,21 +329,12 @@ function createProgram(): Command {
 
     cmd.option("--json-input <json>", "JSON 문자열로 전체 파라미터 전달")
 
-    cmd.action(async (cmdOpts: Record<string, string>) => {
-      const apiKey = cmdOpts.apiKey || process.env.LAW_OC || ""
-      if (!apiKey) {
-        console.error(fmt.red("LAW_OC 환경변수 또는 --apiKey 옵션이 필요합니다."))
-        console.error(fmt.dim("API 키 발급: https://open.law.go.kr/LSO/openApi/guideResult.do"))
-        process.exit(1)
-      }
-
-      const apiClient = new LawApiClient({ apiKey })
-
+    cmd.action(async (cmdOpts: Record<string, string | boolean>) => {
       let input: Record<string, unknown>
 
       if (cmdOpts.jsonInput) {
         try {
-          input = JSON.parse(cmdOpts.jsonInput)
+          input = JSON.parse(String(cmdOpts.jsonInput))
         } catch {
           console.error(fmt.red("--json-input 파싱 실패: 유효한 JSON을 입력하세요."))
           process.exit(1)
@@ -357,6 +351,12 @@ function createProgram(): Command {
 
       try {
         const parsed = tool.schema.parse(input)
+        const apiKey = (typeof input?.apiKey === "string" && input.apiKey) || cmdOpts.apiKey || process.env.LAW_OC || ""
+        if (typeof apiKey !== "string" || !apiKey) {
+          console.error(fmt.red("LAW_OC 환경변수 또는 apiKey 파라미터가 필요합니다."))
+          process.exit(1)
+        }
+        const apiClient = new LawApiClient({ apiKey })
         const result = await tool.handler(apiClient, parsed)
 
         for (const c of result.content) {
@@ -444,7 +444,9 @@ async function main() {
   await createProgram().parseAsync(process.argv)
 }
 
-main().catch((error) => {
-  console.error(fmt.red(error instanceof Error ? error.message : String(error)))
-  process.exit(1)
-})
+if (process.argv[1] && existsSync(process.argv[1]) && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
+  main().catch((error) => {
+    console.error(fmt.red(error instanceof Error ? error.message : String(error)))
+    process.exit(1)
+  })
+}

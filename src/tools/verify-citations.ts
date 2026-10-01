@@ -27,7 +27,7 @@ import { matchCitationContent } from "../lib/citation-content-matcher.js"
 import { verifyCaseCitations } from "../lib/case-citation.js"
 import { fetchLineageVersions, sameLawName, todayKst, versionInForce } from "../lib/law-lineage.js"
 import { rethrowIfFatal } from "../lib/fatal-errors.js"
-import { getRequestSignal } from "../lib/session-state.js"
+import { getRequestSignal, throwIfRequestCancelled } from "../lib/session-state.js"
 import type { HistoricalVersion } from "../lib/historical-utils.js"
 
 export const VerifyCitationsSchema = z.object({
@@ -289,6 +289,7 @@ async function resolveCitedLaw(
     if (repealed) return (await renamedLineage(apiClient, repealed, apiKey)) ?? { kind: "repealed", law: repealed }
     return fallback ? { kind: "loose_only", fallback } : { kind: "not_found" }
   } catch (e) {
+    throwIfRequestCancelled()
     return { kind: "error", message: e instanceof Error ? e.message : String(e) }
   }
 }
@@ -326,7 +327,7 @@ async function articleRangeHint(apiClient: LawApiClient, mst: string, apiKey?: s
     if (nums.length > 0) {
       return ` (존재 범위: 제${Math.min(...nums)}조~제${Math.max(...nums)}조)`
     }
-  } catch { /* ignore */ }
+  } catch { throwIfRequestCancelled() }
   return ""
 }
 
@@ -378,6 +379,7 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T)
   let next = 0
   const worker = async (): Promise<void> => {
     while (next < items.length) {
+      throwIfRequestCancelled()
       const index = next++
       results[index] = await fn(items[index])
     }
@@ -398,6 +400,7 @@ async function identifiedByFirstCandidate(apiClient: LawApiClient, lawName: stri
     const results = await findLaws(apiClient, first, apiKey, 5, 100)
     return results.length > 0 && looseMatchLawName(first, results[0].lawName)
   } catch {
+    throwIfRequestCancelled()
     return false
   }
 }
@@ -554,7 +557,11 @@ export async function verifyCitations(
   input: VerifyCitationsInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    const citations = parseCitations(input.text, input.maxCitations ?? 15)
+    throwIfRequestCancelled()
+    const maxCitations = input.maxCitations ?? 15
+    const allCitations = parseCitations(input.text, Infinity)
+    const citations = allCitations.slice(0, maxCitations)
+    const skipped = allCitations.length - citations.length
     // 판례 인용은 법령 인용과 독립 축이다 — 사건번호를 추출조차 않으면 [HALLUCINATION_DETECTED]
     // 배너가 "전체 인용이 검증됐다"로 오독된다(#93).
     // 같은 법령명은 한 번만 특정하고, 인용은 상한 동시 실행으로 검증한다 (2026-09-23 리뷰 B#3)
@@ -563,6 +570,7 @@ export async function verifyCitations(
       verifyInPriorityOrder(apiClient, citations, memo, input.apiKey),
       verifyCaseCitations(apiClient, input.text, input.apiKey),
     ])
+    throwIfRequestCancelled()
 
     if (citations.length === 0 && cases.total === 0) {
       return {
@@ -585,13 +593,16 @@ export async function verifyCitations(
     const headerMarker = hasHallucination
       ? "[HALLUCINATION_DETECTED] "
       : repealedCount > 0 ? "[REPEALED_REFERENCE] "
-        : (warnCount > 0 || cases.unknown > 0) ? "[PARTIAL_VERIFIED] " : "[VERIFIED] "
+        : (warnCount > 0 || cases.unknown > 0 || skipped > 0 || cases.skipped > 0) ? "[PARTIAL_VERIFIED] " : "[VERIFIED] "
     let output = `${headerMarker}== 인용 검증 결과 ==\n`
-    output += `법령 인용 ${citations.length}건 | ✓ ${okCount} 실존 | ✗ ${failCount} 오류 | ⌛ ${repealedCount} 폐지 | ⚠ ${warnCount} 확인필요\n`
+    output += `법령 인용 ${allCitations.length}건 | ✓ ${okCount} 실존 | ✗ ${failCount} 오류 | ⌛ ${repealedCount} 폐지 | ⚠ ${warnCount} 확인필요${skipped > 0 ? ` | ⊘ ${skipped} 미검증` : ""}\n`
     output += `판례 인용 ${cases.total + cases.skipped}건 | ✓ ${cases.ok} 실존 | ✗ ${cases.fail} 실존불가 | ⚠ ${cases.unknown} 미확인${cases.skipped > 0 ? ` | ⊘ ${cases.skipped} 미검증` : ""}\n\n`
     if (results.length > 0) output += `▶ 법령 인용\n`
     for (const line of results) {
       output += `${line}\n`
+    }
+    if (skipped > 0) {
+      output += `⚠ 법령 인용 ${skipped}건은 확인 상한(${maxCitations}건)을 넘어 검증하지 않았습니다 — 미검증입니다.\n`
     }
     if (cases.lines.length > 0) {
       output += `${results.length > 0 ? "\n" : ""}▶ 판례 인용\n`
