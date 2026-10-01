@@ -28,9 +28,9 @@ const body = (efYd: string, articles: string[] = ["1"]) => JSON.stringify({
 const BASE: Row[] = [{ mst: "300", efYd: "20250101" }, { mst: "200", efYd: "20200101" }, { mst: "100", efYd: "20100101", rr: "제정" }]
 
 type P = { mst?: string, lawId?: string, jo?: string, efYd?: string, efYdMayMiss?: boolean }
-function stub(rows: Row[] = BASE, override?: (p: P) => string | undefined) {
+function stub(rows: Row[] = BASE, override?: (p: P) => string | undefined, history = "") {
   const calls: Array<P & { target?: string }> = []
-  const real = new Set(rows.map(r => `${r.mst}@${r.efYd}`))
+  const real = new Set([...rows.map(r => `${r.mst}@${r.efYd}`), ...[...history.matchAll(/MST=(\d+)&amp;[^"]*efYd=(\d+)/g)].map(m => `${m[1]}@${m[2]}`)])
   const api = {
     getLawText: async (p: P) => {
       calls.push({ ...p })
@@ -47,6 +47,7 @@ function stub(rows: Row[] = BASE, override?: (p: P) => string | undefined) {
     fetchApi: async (p: { target: string, extraParams?: Record<string, string> }) => {
       calls.push({ target: `${p.target}:${p.extraParams?.LID ?? ""}` })
       if (p.target === "eflaw" && p.extraParams?.LID) return lineageXml(rows)
+      if (p.target === "lsHistory") return history
       throw new Error(`unexpected ${p.target}`)
     },
   } as unknown as LawApiClient
@@ -147,5 +148,22 @@ describe("같은 기준일로 여러 조문을 볼 때 법령ID·계보를 다�
     await getLawText(api, { mst: "300", efYd: "20220101", jo: "제2조" })
     expect(headCalls(calls)).toBe(1)
     expect(lineageCalls(calls)).toBe(1)
+  })
+})
+
+// 폐지 후 같은 이름으로 재제정된 법령(근로기준법 1997.3.13.)은 계보(신법)가 기준일보다 늦게 시작한다 — 동명 구법 연혁으로 이어 간다
+describe("기준일이 계보 시작(재제정) 전이면 동명 구법 버전으로", () => {
+  it("lawId + 1995 기준일 → 법령ID가 다른 구법의 그날 시행 버전", async () => {
+    const tr = (mst: string, efYd: string, rr: string) =>
+      `<tr><td class="ce">1</td><td><a href="/DRF/lawService.do?OC=x&amp;target=lsHistory&amp;MST=${mst}&amp;type=HTML&amp;mobileYn=&amp;efYd=${efYd}" >테스트법</a></td>` +
+      `<td class="ce">부처</td><td class="ce">${rr}</td><td class="ce">법률</td><td class="ce">제 1호</td><td class="ce">${efYd.slice(0, 4)}.1.1</td><td class="ce">${efYd}</td><td class="ce">연혁</td></tr>`
+    const history = `<html><strong>2</strong> 건<table>${tr("50", "20000101", "일부개정")}${tr("40", "19900101", "제정")}</table></html>`
+    const { api } = stub(BASE, undefined, history)
+    const r = await getLawText(api, { lawId: "001638", efYd: "20050101", jo: "제1조" })
+    const t = text(r)
+    expect(r.isError).toBeFalsy()
+    expect(t).toContain("시행 2000.01.01")
+    expect(t).toContain("동명 구법")
+    expect(t).toContain("20000101 본문")
   })
 })

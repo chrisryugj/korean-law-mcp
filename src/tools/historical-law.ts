@@ -50,7 +50,9 @@ export async function searchHistoricalLaw(
     // 연혁 행 파싱을 historical-utils 단일 원본으로 돌린다. 로컬 사본은 무패딩 날짜("1961.12.8")를 못 읽어
     // 공포일이 비고, "폐지제정"을 "폐지"로 오표시했다 (2026-09-23 리뷰 B12, 실측 지방세법 제827호).
     // display는 원시 행 수가 아니라 표시할 버전 수 상한으로 쓴다.
-    const { versions, totalCount, fetchedPages, source, lawId } = await fetchLawVersions(apiClient, args.lawName, args.apiKey);
+    // 기준일 없는 전 연혁이라 가장 이른 날을 기준일로 준다 — 폐지 후 같은 이름으로 재제정된 법령(근로기준법 1997)의
+    // 계보(신법만) 앞 동명 구법 연혁까지 싣는다. 계보 첫 행이 제정일 때만 이름 연혁 1회가 더 든다
+    const { versions, totalCount, fetchedPages, source, lawId } = await fetchLawVersions(apiClient, args.lawName, args.apiKey, undefined, "00000000");
     const displayCap = args.display || 100;
     const histories = versions.slice(0, displayCap);
 
@@ -89,7 +91,12 @@ export async function searchHistoricalLaw(
     output += `본문: execute_tool(tool_name="get_historical_law", params={mst, efYd}) — 아래 MST와 시행일을 함께 넘긴다 (같은 MST가 시행일별로 나뉜 분리시행이 있다)\n\n`;
 
     let prevName = histories[0]?.lawNm || currentName;
+    let inPriorLaw = false;
     for (const h of histories) {
+      if (h.priorLaw && !inPriorLaw) {
+        output += `── 이하 법령ID가 다른 동명 구법 (폐지 후 같은 이름으로 재제정되기 전) ──\n\n`;
+        inPriorLaw = true;
+      }
       if (h.lawNm && !sameLawName(h.lawNm, prevName)) {
         output += `── 이하 법령명: ${h.lawNm} ──\n\n`;
         prevName = h.lawNm;

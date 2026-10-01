@@ -10,7 +10,7 @@ import { formatArticleUnit } from "../lib/article-parser.js"
 import { getStrategyWarning } from "../lib/article-warnings.js"
 import { formatToolError } from "../lib/errors.js"
 import { rethrowIfFatal } from "../lib/fatal-errors.js"
-import { fetchLineageVersions, isRepealRow, lawStateAt, todayKst, versionInForce } from "../lib/law-lineage.js"
+import { fetchLawVersions, fetchLineageVersions, isRepealRow, lawStateAt, todayKst, versionInForce } from "../lib/law-lineage.js"
 import type { HistoricalVersion } from "../lib/historical-utils.js"
 import { UpstreamRecordMissingError } from "../lib/upstream-miss.js"
 import { formatDateDot } from "../lib/schemas.js"
@@ -384,8 +384,16 @@ async function retryAtVersionInForce(apiClient: LawApiClient, input: GetLawTextI
   try {
     const lawId = input.lawId || (input.mst ? await lawIdOfMst(apiClient, input.mst, input.apiKey) : undefined)
     if (!lawId) return undefined
-    const versions = await lineageOf(apiClient, String(lawId), input.apiKey)
-    const { version: v, repeal } = lawStateAt(versions, ymd)
+    let versions = await lineageOf(apiClient, String(lawId), input.apiKey)
+    let state = lawStateAt(versions, ymd)
+    // 폐지 후 같은 이름으로 재제정된 법령(근로기준법 1997.3.13.)은 계보가 신법만이라 그 전 기준일이 비었다 — 동명 구법 연혁을 붙인다.
+    // 계보 시작보다 앞선 기준일에서만 드는 비용이다
+    const first = versions[versions.length - 1]
+    if (!state.version && !state.repeal && first && ymd < first.efYd) {
+      versions = (await fetchLawVersions(apiClient, first.lawNm, input.apiKey, String(lawId), ymd)).versions
+      state = lawStateAt(versions, ymd)
+    }
+    const { version: v, repeal } = state
     if (repeal) {
       const last = versions.find(x => x.efYd < repeal.efYd && !isRepealRow(x))
       const lastLine = last ? `\n→ 폐지 직전 버전: 시행 ${formatDateDot(last.efYd)}, MST ${last.mst} — get_law_text(mst="${last.mst}", efYd="${last.efYd}")` : ""
@@ -397,7 +405,8 @@ async function retryAtVersionInForce(apiClient: LawApiClient, input: GetLawTextI
     if (!v) return undefined
     const today = todayKst()
     const status: ResolvedStatus = v.efYd > today ? "scheduled" : versionInForce(versions, today) === v ? "current" : "past"
-    const where = `시행 ${formatDateDot(v.efYd)}, 공포 제${v.ancNo}호${v.rrCls ? ` ${v.rrCls}` : ""}, MST ${v.mst}${v.lawNm ? `, 당시 법령명 「${v.lawNm}」` : ""}`
+    const where = `시행 ${formatDateDot(v.efYd)}, 공포 제${v.ancNo}호${v.rrCls ? ` ${v.rrCls}` : ""}, MST ${v.mst}${v.lawNm ? `, 당시 법령명 「${v.lawNm}」` : ""}` +
+      (v.priorLaw ? ", 법령ID가 다른 동명 구법(폐지 후 같은 이름으로 재제정되기 전)" : "")
     // 입력이 이미 그 버전이면(확인 1회 미스는 순간 장애일 수 있다) 사다리로 한 번 더 받을 뿐 보정 안내는 없다.
     // 시행일은 맞는데 lawId 라서 안 나온 경우(과거본은 MST+시행일로만 닿는다), 다른 공포본의 시행일인 경우, 시행일이 아닌 경우를 가른다
     const note = v.efYd === input.efYd && v.mst === input.mst ? ""

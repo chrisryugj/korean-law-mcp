@@ -160,3 +160,31 @@ describe("searchHistoricalLaw: historical-utils 파서 공용 (B12)", () => {
     expect(t).toContain("MST: 52908")                // 시행일 내림차순 첫 버전
   })
 })
+
+// 폐지 후 같은 이름으로 재제정돼 법령ID가 바뀐 법령(근로기준법 1997.3.13.). 계보(LID)는 신법만 줘서 연혁 목록이
+// 1997년부터였다 — v4.14.2 는 이름 일치 연혁으로 1953년 제정본부터 보였다(2026-10-01 감사 실측 56 → 54).
+describe("search_historical_law — 동명 구법 연혁", () => {
+  const LSA = "근로기준법"
+  const lrow = (mst: string, efYd: string, rr: string) =>
+    `<law id="x"><법령일련번호>${mst}</법령일련번호><법령명한글><![CDATA[${LSA}]]></법령명한글><법령ID>001872</법령ID>` +
+    `<공포일자>${efYd}</공포일자><공포번호>1</공포번호><제개정구분명>${rr}</제개정구분명><시행일자>${efYd}</시행일자></law>`
+  const LINEAGE = `<LawSearch><totalCnt>2</totalCnt>${lrow("283457", "20260820", "타법개정")}${lrow("53681", "19970313", "제정")}</LawSearch>`
+  const tr = (mst: string, efYd: string, rr: string, ancYd: string) =>
+    `<tr><td class="ce">1</td><td><a href="/DRF/lawService.do?OC=x&amp;target=lsHistory&amp;MST=${mst}&amp;type=HTML&amp;mobileYn=&amp;efYd=${efYd}" >${LSA}</a></td>` +
+    `<td class="ce">고용노동부</td><td class="ce">${rr}</td><td class="ce">법률</td><td class="ce">제 1호</td><td class="ce">${ancYd}</td><td class="ce">${efYd}</td><td class="ce">연혁</td></tr>`
+  const HISTORY = `<html><strong>3</strong> 건<table>` +
+    tr("4974", "19970313", "폐지", "1997.3.13") + tr("4972", "19900714", "타법개정", "1990.1.13") + tr("4963", "19530809", "제정", "1953.5.10") +
+    `</table></html>`
+  const api = {
+    searchLaw: async () => `<LawSearch><totalCnt>1</totalCnt><law id="1"><법령일련번호>283457</법령일련번호><법령명한글><![CDATA[${LSA}]]></법령명한글><법령ID>001872</법령ID></law></LawSearch>`,
+    fetchApi: async (p: { target: string }) => (p.target === "lsHistory" ? HISTORY : LINEAGE),
+  } as unknown as LawApiClient
+
+  it("신법 제정 이전의 동명 구법 버전까지 싣고, 구법임을 구분해 밝힌다", async () => {
+    const text = (await searchHistoricalLaw(api, { lawName: LSA, display: 100 })).content[0].text
+    expect(text).toContain("MST: 4972")
+    expect(text).toContain("MST: 4963")
+    expect(text).toContain("동명 구법")
+    expect(text.indexOf("MST: 53681")).toBeLessThan(text.indexOf("MST: 4972"))
+  })
+})
