@@ -386,6 +386,46 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T)
   return results
 }
 
+/**
+ * 원문 그대로의 법령명(첫 후보) 현행 검색 한 번으로 특정되는가. 검증 순서만 정한다 — 판정은 resolveCitedLaw 가
+ * 같은 검색으로 다시 내리고, 요청 안에서는 findLaws 메모가 그 검색을 공유해 업스트림을 다시 치지 않는다.
+ * 그래서 실패(예산 소진 포함)도 여기서는 "특정 안 됨"으로만 두고, 실패 문구는 판정 단계가 붙인다.
+ */
+async function identifiedByFirstCandidate(apiClient: LawApiClient, lawName: string, apiKey?: string): Promise<boolean> {
+  const first = lawNameCandidates(lawName)[0]
+  if (!first) return false
+  try {
+    const results = await findLaws(apiClient, first, apiKey, 5, 100)
+    return results.length > 0 && looseMatchLawName(first, results[0].lawName)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 현행 검색 첫 후보로 바로 특정되는 법령의 인용부터 검증한다. 결과는 문서 순서 그대로 돌려준다.
+ * 지어낸 다어절 법령명은 후보 축약·연혁 탐색으로 법령명당 업스트림을 8회 안팎 쓴다. 문서 순서대로 돌리면 그 탐색이
+ * 요청 예산(48회)을 먼저 태워 뒤의 실재 인용이 "조문 조회 실패"로 남았다(2026-10-01 감사 재현: 지어낸 법령 8건 + 민법 2건 → ✓0).
+ * 후보 수 상한은 쓰지 않았다: 2개로 묶으면 실재 법령이 셋째 후보인 "이혼시 재산분할은 민법"이 ⚠로 떨어지고, 3개로는 감사 재현을 못 막는다.
+ */
+async function verifyInPriorityOrder(
+  apiClient: LawApiClient,
+  citations: ParsedCitation[],
+  memo: VerifyMemo,
+  apiKey?: string
+): Promise<string[]> {
+  const names = [...new Set(citations.flatMap((c) => (c.lawName ? [c.lawName] : [])))]
+  const hits = await mapWithConcurrency(names, VERIFY_CONCURRENCY, (name) => identifiedByFirstCandidate(apiClient, name, apiKey))
+  const identified = new Set(names.filter((_, i) => hits[i]))
+  const rank = (c: ParsedCitation) => (c.lawName && identified.has(c.lawName) ? 0 : 1)
+  const order = citations.map((_, i) => i).sort((a, b) => rank(citations[a]) - rank(citations[b]))
+  const results = new Array<string>(citations.length)
+  await mapWithConcurrency(order, VERIFY_CONCURRENCY, async (i) => {
+    results[i] = await verifyOne(apiClient, citations[i], memo, apiKey)
+  })
+  return results
+}
+
 async function verifyOne(
   apiClient: LawApiClient,
   cite: ParsedCitation,
@@ -520,7 +560,7 @@ export async function verifyCitations(
     // 같은 법령명은 한 번만 특정하고, 인용은 상한 동시 실행으로 검증한다 (2026-09-23 리뷰 B#3)
     const memo = createVerifyMemo(apiClient, input.apiKey)
     const [results, cases] = await Promise.all([
-      mapWithConcurrency(citations, VERIFY_CONCURRENCY, (c) => verifyOne(apiClient, c, memo, input.apiKey)),
+      verifyInPriorityOrder(apiClient, citations, memo, input.apiKey),
       verifyCaseCitations(apiClient, input.text, input.apiKey),
     ])
 

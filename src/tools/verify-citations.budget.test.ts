@@ -182,4 +182,20 @@ describe("verify_citations: 예산 소진은 그 인용만의 실패다 (2026-10
     expect(text).not.toContain("[HALLUCINATION_DETECTED]")
     expect(text).toMatch(/⚠ 가상토지 보전 및 관리에 관한 특별법 제3조 — .*budget exceeded/)
   })
+
+  it("지어낸 다어절 법령명이 여럿이어도 현행 검색에 바로 잡히는 법령의 인용을 먼저 검증한다", async () => {
+    installNamedFetch()
+    const fabricated = [
+      "가상토지 보전 및 관리에 관한 특별법", "미래도시 안전 진흥에 관한 법률", "디지털 자산 거래 보호에 관한 법률",
+      "우주항공 산업 육성에 관한 특별법", "청년 주거 안정 지원에 관한 법률", "해양 플라스틱 저감 촉진에 관한 법률",
+      "인공지능 윤리 기본에 관한 법률", "농촌 공간 재구조화 지원에 관한 법률",
+    ]
+    const input = fabricated.map((name, i) => `${name} 제${i + 3}조`).join(", ") + ", 민법 제750조, 민법 제751조"
+    const { text } = await runVerify(input, 15)
+    // 종전: 지어낸 법령명마다 후보 축약·연혁 탐색으로 업스트림 ~8회 → 예산 48회가 먼저 바닥나 민법 2건이 "조문 조회 실패"
+    expect(text).toContain("✓ 민법 제750조")
+    expect(text).toContain("✓ 민법 제751조")
+    expect(text).not.toContain("조문 조회 실패")
+    expect(text.indexOf("✓ 민법 제750조")).toBeGreaterThan(text.indexOf("농촌 공간 재구조화"))   // 출력은 문서 순서 그대로
+  })
 })
