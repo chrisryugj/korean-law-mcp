@@ -34,4 +34,19 @@ describe("external law links", () => {
     expect(response.content[0].text).not.toContain("lsStmdInfoP.do")
     expect(response.content[0].text).not.toContain("[자치법규 연혁]")
   })
+
+  it("uses the official interpretation detail endpoint and identifier", async () => {
+    const response = await getExternalLinks({ linkType: "interpretation", interpretationId: "342457&other=1" })
+    const link = response.content[0].text.match(/\[법제처 해석례 상세\]\(([^)]+)\)/)![1]
+    const parsed = new URL(link)
+    expect(parsed.pathname).toBe("/LSW/expcInfoP.do")
+    expect(parsed.searchParams.get("expcSeq")).toBe("342457&other=1")
+    expect(parsed.searchParams.has("other")).toBe(false)
+  })
+
+  it("uses the official ordinance search page", async () => {
+    const response = await getExternalLinks({ linkType: "ordinance", mst: "1234567" })
+    expect(response.content[0].text).toContain("[국가법령정보센터 자치법규](https://www.law.go.kr/LSW/ordinSc.do?menuId=3&subMenuId=27&tabMenuId=139)")
+    expect(response.content[0].text).not.toContain("lsRvsRqInfoListP.do")
+  })
 })

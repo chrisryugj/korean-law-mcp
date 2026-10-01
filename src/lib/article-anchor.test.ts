@@ -226,7 +226,7 @@ describe("classifyArticleRefs: 공백 덩어리 (리뷰 C7)", () => {
       ["민법 제1032조 위헌소원", "mismatch", "mismatch"],
       ["형법  제103조", "law-mismatch", "match"],
       ["구   민법 제103조", "match", "match"],
-      ["제100조부터\n\n제105조까지", "match", "match"],
+      ["제100조부터\n\n제105조까지", "hold", "match"],
       ["손해배상(기)", "silent", "silent"],
       ["민법  제 103 조", "match", "match"],
     ]

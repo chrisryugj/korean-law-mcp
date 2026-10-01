@@ -1,9 +1,9 @@
 /**
  * 법령-자치법규 연계(Linkage) 도구 4종
- * - get_linked_ordinances: 법령 기준 자치법규 연계 목록
+ * - get_linked_ordinances: 자치법규와 연계된 법령 식별 목록
  * - get_linked_ordinance_articles: 법령-자치법규 조문 연계
- * - get_delegated_laws: 위임법령 (소관부처별)
- * - get_linked_laws_from_ordinance: 자치법규 기준 상위법령 조회
+ * - get_delegated_laws: 위임 연계 자치법규 (조회 페이지 안에서 필터)
+ * - get_linked_laws_from_ordinance: 법령과 연계된 자치법규 식별 목록
  */
 
 import { z } from "zod"
@@ -29,8 +29,8 @@ export const LinkedOrdinanceArticlesSchema = baseLinkageSchema.extend({
 })
 export const DelegatedLawsSchema = baseLinkageSchema.extend({
   // 실측: lnkDep은 서버측 검색 필터가 없다(query 무시, 전체 덤프+페이징만).
-  // 조회 페이지 내 클라이언트 필터만 가능 — 법령 기준 연계는 get_linked_ordinances 권장.
-  query: z.string().describe("필터 키워드(법령명 등) — ⚠️ 법제처가 이 목록의 서버측 검색을 지원하지 않아 조회 페이지 내 부분 필터만 됩니다. 법령 기준 자치법규 연계는 get_linked_ordinances 사용 권장")
+  // 조회 페이지 내 클라이언트 필터만 가능 — 법령 기준 연계는 get_linked_ordinance_articles 권장.
+  query: z.string().describe("필터 키워드(법령명 등) — ⚠️ 법제처가 이 목록의 서버측 검색을 지원하지 않아 조회 페이지 내 부분 필터만 됩니다. 법령 기준 자치법규 연계는 get_linked_ordinance_articles 사용 권장")
 })
 export const LinkedLawsFromOrdinanceSchema = baseLinkageSchema.extend({
   query: z.string().describe("자치법규명 (예: '서울특별시 주차장 설치 및 관리 조례')")
@@ -82,6 +82,7 @@ interface LinkageConfig {
   fallbackRoot: string
   title: string
   emptyMsg: string
+  scopeNote?: string
   /** 서버가 query 필터를 지원하지 않는 전체 덤프 타깃 (실측: lnkDep 총 10만+건, query 무시) */
   serverFilterless?: boolean
 }
@@ -124,7 +125,7 @@ async function handleLinkage(apiClient: LawApiClient, input: LinkageInput, cfg: 
         : result.items
 
       const scopeNote = `⚠️ 법제처가 이 목록(서버 전체 ${result.totalCnt}건)의 검색 필터를 지원하지 않아, 조회한 ${result.page}페이지(${fetched}건) 안에서만 '${input.query}'를 필터했습니다 — 전수 결과가 아닙니다.\n` +
-        `💡 법령 기준 자치법규 연계는 서버 필터가 지원되는 execute_tool(tool_name="get_linked_ordinances", params={query:"법령명"})를 사용하세요.`
+        `💡 법령 기준 자치법규 연계는 서버 필터가 지원되는 execute_tool(tool_name="get_linked_ordinance_articles", params={query:"법령명"})를 사용하세요.`
 
       if (matched.length === 0) {
         return {
@@ -139,7 +140,9 @@ async function handleLinkage(apiClient: LawApiClient, input: LinkageInput, cfg: 
     }
 
     let output = `${cfg.title} (총 ${result.totalCnt}건, ${result.page}페이지)\n`
-    output += `검색어: ${input.query}\n\n`
+    output += `검색어: ${input.query}\n`
+    if (cfg.scopeNote) output += `${cfg.scopeNote}\n`
+    output += "\n"
     output += formatItems(result.items)
     return { content: [{ type: "text", text: truncateResponse(output) }] }
   } catch (error) {
@@ -152,7 +155,8 @@ async function handleLinkage(apiClient: LawApiClient, input: LinkageInput, cfg: 
 export const getLinkedOrdinances = (apiClient: LawApiClient, input: LinkageInput) =>
   handleLinkage(apiClient, input, {
     target: "lnkLs", primaryRoot: "LawSearch", fallbackRoot: "LnkLsSearch",
-    title: "법령-자치법규 연계", emptyMsg: "연계 자치법규가 없습니다."
+    title: "자치법규와 연계된 법령 목록", emptyMsg: "연계 법령 목록이 없습니다.",
+    scopeNote: "ℹ️ 이 목록은 연계된 법령의 식별정보입니다. 조례명·조문 대응은 execute_tool(tool_name=\"get_linked_ordinance_articles\", params={query:\"법령명\"})로 확인하세요."
   })
 
 export const getLinkedOrdinanceArticles = (apiClient: LawApiClient, input: LinkageInput) =>
@@ -174,5 +178,6 @@ export const getLinkedLawsFromOrdinance = (apiClient: LawApiClient, input: Linka
   handleLinkage(apiClient, input, {
     // 실측 루트는 OrdinSearch (LnkOrdSearch 아님)
     target: "lnkOrd", primaryRoot: "OrdinSearch", fallbackRoot: "LawSearch",
-    title: "자치법규 → 상위법령", emptyMsg: "상위법령이 없습니다."
+    title: "법령과 연계된 자치법규 목록", emptyMsg: "연계 자치법규 목록이 없습니다.",
+    scopeNote: "ℹ️ 이 목록은 연계된 자치법규의 식별정보입니다. 근거 법령은 execute_tool(tool_name=\"get_ordinance\", params={ordinSeq:\"자치법규일련번호\"}) 본문에서 확인하세요."
   })

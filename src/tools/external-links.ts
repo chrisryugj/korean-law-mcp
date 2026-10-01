@@ -195,7 +195,7 @@ function generatePrecedentLinks(precedentId: string): string {
 function generateInterpretationLinks(interpretationId: string): string {
   let links = "법령해석례 관련 링크:\n\n"
 
-  const detailUrl = `${LAW_BASE_URL}/LSW/lsExpcInfoP.do?${new URLSearchParams({ lsExpcSeq: interpretationId })}`
+  const detailUrl = `${LAW_BASE_URL}/LSW/expcInfoP.do?${new URLSearchParams({ expcSeq: interpretationId })}`
   links += `1. [법제처 해석례 상세](${detailUrl})\n\n`
 
   links += `2. [법제처 법령해석](https://www.moleg.go.kr/)\n\n`
@@ -229,7 +229,7 @@ function generateOrdinanceLinks(ordinanceId?: string, mst?: string, lawName?: st
   }
 
   // 4. 국가법령정보센터 자치법규
-  links += `${linkNum++}. [국가법령정보센터 자치법규](${LAW_BASE_URL}/LSW/lsRvsRqInfoListP.do)\n\n`
+  links += `${linkNum++}. [국가법령정보센터 자치법규](${LAW_BASE_URL}/LSW/ordinSc.do?menuId=3&subMenuId=27&tabMenuId=139)\n\n`
 
   // 5. 자치법규정보시스템 (ELIS)
   links += `${linkNum}. [자치법규정보시스템 (ELIS)](https://www.elis.go.kr/)\n\n`

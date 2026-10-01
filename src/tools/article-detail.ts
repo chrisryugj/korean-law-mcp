@@ -5,7 +5,8 @@
 import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 import { truncateResponse } from "../lib/schemas.js"
-import { buildJO, formatJO } from "../lib/law-parser.js"
+import { formatJO } from "../lib/law-parser.js"
+import { lawJoCode } from "../lib/law-jo.js"
 import { cleanHtml, flattenContent, groupMokByReset, parseHangNumber } from "../lib/article-parser.js"
 import { formatToolError } from "../lib/errors.js"
 import { toArray } from "../lib/xml-parser.js"
@@ -32,7 +33,7 @@ export async function getArticleDetail(
     // 조문 번호가 한글이면 JO 코드로 변환
     let joCode = input.jo
     if (!/^\d{6}$/.test(joCode)) {
-      joCode = buildJO(joCode)
+      joCode = lawJoCode(joCode)
     }
 
     // eflaw 를 직접 부르면 MST 경로가 #153 이후 매번 HTML 로 실패했다(재시도 4회 뒤 오류).

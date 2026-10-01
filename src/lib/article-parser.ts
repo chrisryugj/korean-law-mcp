@@ -201,6 +201,9 @@ export function cleanHtml(text: string): string {
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
+    .replace(/&middot;/g, '·')
+    .replace(/&lsquo;/g, '‘')
+    .replace(/&rsquo;/g, '’')
     .replace(/&amp;/g, '&')  // &amp; 반드시 마지막 (이중 인코딩 &amp;lt; → &lt; 방지)
     .trim()
 }

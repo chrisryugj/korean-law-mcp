@@ -3,7 +3,7 @@ import { hasLawNode, type LawApiClient } from "../lib/api-client.js";
 import { UpstreamRecordMissingError } from "../lib/upstream-miss.js";
 import { truncateResponse, formatDateDot } from "../lib/schemas.js";
 import { formatToolError } from "../lib/errors.js";
-import { buildJO } from "../lib/law-parser.js";
+import { lawJoCode } from "../lib/law-jo.js";
 import { flattenContent, formatArticleUnit } from "../lib/article-parser.js";
 import { normalizeDate } from "./applicable-law.js";
 import { fetchLawVersions, isRepealRow, nameTimeline, sameLawName, todayKst, versionInForce } from "../lib/law-lineage.js";
@@ -139,9 +139,10 @@ export async function getHistoricalLaw(
   args: GetHistoricalLawInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
+    const joCode = args.jo ? lawJoCode(args.jo) : undefined;
     // target=law&MST 는 공포본 단위라 분리시행이면 마지막 시행 슬라이스를 준다. 시행일이 오면 eflaw 로 그 슬라이스를 집는다.
     // 그 MST 의 시행일이 아닌 efYd 면 eflaw 는 HTML 안내로 답한다(감사 실측 MST 212383 + 20200101: 4회 재시도 3.7초 뒤
-    // EXTERNAL_API_ERROR). 사용자 efYd 미스 장치(efYdMayMiss)로 확인 1회에 끊고, time_travel 처럼 target=law&MST 로 물러선다.
+    // EXTERNAL_API_ERROR). 사용자 efYd 미스 장치(efYdMayMiss)로 확인 1회에 끊고, target=law&MST 로 물러선다.
     const efYd = args.efYd ? normalizeDate(args.efYd) || args.efYd : undefined
     let responseText: string | undefined;
     let efYdMissed = false;
@@ -209,9 +210,8 @@ export async function getHistoricalLaw(
         // Filter to specific article
         // parseJoNumber는 "75"/"75의2" 꼴을 돌려주고, 페이로드는 조문번호와 조문가지번호로
         // 나눠 온다 — 합쳐진 문자열끼리 비교하면 가지번호 조문이 늘 NOT_FOUND가 된다.
-        const joCode = /^\d{6}$/.test(args.jo) ? args.jo : buildJO(args.jo);
-        const wantNum = Number(joCode.slice(0, 4));
-        const wantBranch = Number(joCode.slice(4, 6));
+        const wantNum = Number(joCode!.slice(0, 4));
+        const wantBranch = Number(joCode!.slice(4, 6));
         const article = articles.find((a: any) => {
           const num = Number(a.조문번호 ?? a.조번호);
           const branch = Number(a.조문가지번호 || 0);

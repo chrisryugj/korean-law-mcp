@@ -245,22 +245,21 @@ const KNOWN_SECTION_HEADERS = [
   "조문내용",
 ]
 
+// These rendered fields end a body section, but must never be shortened with it.
+const PROTECTED_SECTION_HEADERS = [
+  "판시사항", "판결요지", "결정요지", "재결요지", "주문", "청구취지", "질의요지",
+  "참조조문", "참조판례", "관련법령", "관계법령", "따른결정", "참조결정", "판정사항",
+]
+
 export function compactLongSections(text: string): string {
   if (!text || text.length < 1500) return text
   // 이미 축약된 경우 skip
   if (text.includes("⋯ 중략 ") && text.includes("(full=true로 전문 조회)")) return text
 
-  const pattern = new RegExp(`\\n(${KNOWN_SECTION_HEADERS.join("|")}):\\n`, "g")
-  let lastMatch: RegExpExecArray | null = null
-  let m: RegExpExecArray | null
-  while ((m = pattern.exec(text)) !== null) {
-    lastMatch = m
-  }
-  if (!lastMatch) return text
-
-  const sectionStart = lastMatch.index + lastMatch[0].length
-  const body = text.slice(sectionStart)
-  const compacted = compactBody(body, { full: false })
-  if (compacted === body) return text
-  return text.slice(0, sectionStart) + compacted
+  const headers = [...KNOWN_SECTION_HEADERS, ...PROTECTED_SECTION_HEADERS].join("|")
+  const pattern = new RegExp(`\\n(${headers}):\\n([\\s\\S]*?)(?=\\n(?:${headers}):\\n|$)`, "g")
+  return text.replace(pattern, (section, header: string, body: string) => {
+    if (!KNOWN_SECTION_HEADERS.includes(header)) return section
+    return `\n${header}:\n${compactBody(body, { full: false })}`
+  })
 }

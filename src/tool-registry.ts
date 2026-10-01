@@ -9,7 +9,7 @@ import { z } from "zod"
 import type { LawApiClient } from "./lib/api-client.js"
 import type { McpTool } from "./lib/types.js"
 import { ErrorCodes, formatToolError, LawApiError } from "./lib/errors.js"
-import { maskKeysInText } from "./lib/fetch-with-retry.js"
+import { maskToolText } from "./lib/tool-output.js"
 import { RequestExecutionBudget, readExecutionLimits, type ExecutionLimits } from "./lib/execution-limits.js"
 import { truncateResponse } from "./lib/schemas.js"
 import { getRequestSignal, requestContext, runWithRequestContext, throwIfRequestCancelled } from "./lib/session-state.js"
@@ -173,7 +173,7 @@ export const allTools: McpTool[] = [
   // === 법령-자치법규 연계 ===
   {
     name: "get_linked_ordinances",
-    description: "[연계] 법령 기준 자치법규 연계 목록. 특정 법령과 관련된 전국 조례/규칙 조회.",
+    description: "[연계] 자치법규와 연계된 법령 목록. 법령-조례 조문 대응은 get_linked_ordinance_articles로 조회.",
     schema: LinkedOrdinancesSchema,
     handler: getLinkedOrdinances
   },
@@ -185,13 +185,13 @@ export const allTools: McpTool[] = [
   },
   {
     name: "get_delegated_laws",
-    description: "[연계] 위임법령 목록. 소관부처별 위임법령(시행령/시행규칙 미제정) 조회.",
+    description: "[연계] 소관부처별 위임 연계 자치법규 목록. 조회 페이지 최대 100건 내에서 부처 필터 적용.",
     schema: DelegatedLawsSchema,
     handler: getDelegatedLaws
   },
   {
     name: "get_linked_laws_from_ordinance",
-    description: "[연계] 자치법규 기준 상위법령 조회. 조례/규칙의 근거 법령 확인.",
+    description: "[연계] 법령과 연계된 자치법규 목록. 근거 상위법령은 해당 자치법규 본문에서 확인.",
     schema: LinkedLawsFromOrdinanceSchema,
     handler: getLinkedLawsFromOrdinance
   },
@@ -857,9 +857,8 @@ export function findOversizedArg(value: unknown, key = "", depth = 0): string | 
 }
 
 /** 출력 최종 게이트: 키 마스킹 → 길이 절단 (마스킹이 길이를 늘리지 않으므로 이 순서가 안전) */
-function finalizeText(text: string, maxChars: number): string {
-  const keys = [requestContext.getStore()?.apiKey, process.env.LAW_OC, process.env.KOREAN_LAW_API_KEY]
-  return truncateResponse(maskKeysInText(text, keys), maxChars)
+function finalizeText(text: string, maxChars: number, args?: Record<string, unknown>): string {
+  return truncateResponse(maskToolText(text, args), maxChars)
 }
 
 export function registerTools(
@@ -901,6 +900,7 @@ export function registerTools(
         const text = finalizeText(
           result.content.map(content => content.text).join("\n"),
           executionLimits.maxToolResponseChars,
+          args,
         )
         return {
           content: [{ type: "text" as const, text }],
@@ -918,6 +918,7 @@ export function registerTools(
             text: finalizeText(
               errResult.content.map(content => content.text).join("\n"),
               executionLimits.maxToolResponseChars,
+              args,
             ),
           }],
           isError: true,

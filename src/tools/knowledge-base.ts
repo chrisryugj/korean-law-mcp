@@ -3,6 +3,7 @@ import type { LawApiClient } from "../lib/api-client.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { extractTag, parseKBXML, fallbackTermSearch } from "./kb-utils.js"
 import { formatToolError, noResultHint } from "../lib/errors.js"
+import { parseLegalTermDetails } from "../lib/legal-term-detail.js"
 
 // ============================================================================
 // 법령정보 지식베이스 API
@@ -147,14 +148,9 @@ export async function getLegalTermDetail(
       apiKey: args.apiKey,
     });
 
-    // Parse the detail response
-    const termName = extractTag(xmlText, "법령용어명_한글") || extractTag(xmlText, "법령용어명");
-    const termHanja = extractTag(xmlText, "법령용어명_한자");
-    const definition = extractTag(xmlText, "법령용어정의");
-    const source = extractTag(xmlText, "출처");
-    const code = extractTag(xmlText, "법령용어코드명");
+    const records = parseLegalTermDetails(xmlText);
 
-    if (!termName && !definition) {
+    if (records.length === 0) {
       return {
         content: [{ type: "text", text: `[NOT_FOUND] '${args.query}' 용어를 찾을 수 없습니다.\n⚠️ LLM은 용어 정의를 추측/생성하지 마세요.` }],
         isError: true,
@@ -162,18 +158,15 @@ export async function getLegalTermDetail(
     }
 
     let output = `법령용어 상세\n\n`;
-    output += `${termName}`;
-    if (termHanja) output += ` (${termHanja})`;
-    output += `\n\n`;
+    for (const record of records) {
+      output += record.name;
+      if (record.hanja) output += ` (${record.hanja})`;
+      output += `\n\n`;
 
-    if (definition) {
-      output += `정의:\n${definition}\n\n`;
-    }
-    if (source) {
-      output += `출처: ${source}\n`;
-    }
-    if (code) {
-      output += `분류: ${code}\n`;
+      if (record.definition) output += `정의:\n${record.definition}\n\n`;
+      if (record.source) output += `출처: ${record.source}\n`;
+      if (record.code) output += `분류: ${record.code}\n`;
+      output += `\n`;
     }
 
     return { content: [{ type: "text", text: truncateResponse(output) }] };

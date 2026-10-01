@@ -105,6 +105,12 @@ export async function getLawTree(
     // Build tree visualization
     let output = `=== 법령 트리 구조 ===\n\n`
     output += `${lawName || "법률"}\n`
+    // 원본 3단비교는 처음 5개 법률 조문만 렌더한다. 파생 트리도 그 표본이며 전체 조문 수가 아니다.
+    const sourceLimit = text.match(/전체 \d+개 조문 중 처음 \d+개만 표시합니다\./)?.[0]
+    const sourceTruncated = text.includes("응답이 너무 길어")
+    if (sourceLimit || sourceTruncated) {
+      output += `⚠️ 위임조문 표본 트리 — ${sourceLimit || "원본 응답이 길어 일부만 받았습니다."} 하위법령 조문 수도 이 표본 안의 수입니다.\n`
+    }
 
     if (structure.law.length > 0) {
       output += `\n└─ 법률 (${structure.law.length}개 조항)\n`

@@ -6,7 +6,7 @@ import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 import { getPrecedentText } from "./precedents.js"
 import { truncateResponse } from "../lib/schemas.js"
-import { formatToolError } from "../lib/errors.js"
+import { ErrorCodes, LawApiError, formatToolError } from "../lib/errors.js"
 
 export const SummarizePrecedentSchema = z.object({
   id: z.string().describe("판례일련번호"),
@@ -99,6 +99,10 @@ function extractPrecedentSummary(fullText: string, maxLength: number): string {
     } else if (currentSection === "mainText" && trimmed.length > 0) {
       sections.mainText += trimmed + "\n"
     }
+  }
+
+  if (!sections.judgment && !sections.summary && !sections.mainText) {
+    throw new LawApiError("판시사항·판결요지·주문을 확인하지 못해 판례 요약을 만들 수 없습니다. 판결문 전문을 확인하세요.", ErrorCodes.UPSTREAM_NO_DATA)
   }
 
   // 요약 생성

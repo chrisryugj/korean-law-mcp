@@ -32,8 +32,9 @@ import { throwIfRequestCancelled } from "./session-state.js"
  * 여기(CASE_CODES) 한 곳에만 추가하면 두 경로가 같이 살아난다 — #125의 단일 원본이
  * 이 결정을 감당할 만큼 넓어졌기에 가능한 교환이다.
  *
- * 연도·부호·일련번호 사이 공백은 허용하지 않는다("2027 예산 500억원" 차단). 띄어 쓴
- * "2013 다 61381"을 포기하는 대신 오탐 한 부류를 통째로 없앤다.
+ * 연도·부호·일련번호 사이 공백도 받는다. 산문은 실재 부호 목록과 수량 후행 가드로
+ * 차단한다("2027 예산 500억원", "2030 도 3000명"). 띄어 쓴 판례가 법령과 섞여도
+ * 검증 대상에서 빠져 전체 [VERIFIED]로 잘못 인증되지 않게 한다.
  * 선행 `제`·숫자를 막는 것이 조문 인용과의 경계다 — "제999조의9"의 999는 사건연도가 아니다.
  */
 /**
@@ -90,8 +91,11 @@ const NON_CASE_SYLLABLES = "명개원건회차호년월일조항목억천"
 // 추출 규칙 (위 주석의 균형 참조). 부호는 CASE_CODES에 실재하는 것만 인정한다.
 // 후행 lookahead에 숫자를 함께 두는 것이 잘림 방어다 — 숫자를 빼면 "…61381명"에서
 // 백트래킹이 "…6138"로 물러나 잘린 사건번호를 만들어낸다.
+// 공백 수량도 차단한다("2030 도 3000 명이"). 공백 뒤는 단위+조사의 어절 경계까지 본다:
+// 단위 음절만 보면 진짜 인용 뒤 "원심"·"조문"까지 오탐으로 지우게 된다.
 const CASE_NO_RE = new RegExp(
-  `(?<![\\d제])(\\d{2,4})(${CASE_CODE_PATTERN})(\\d{1,7})(?![\\d${NON_CASE_SYLLABLES}])`,
+  `(?<![\\d제])(\\d{2,4}) ?(${CASE_CODE_PATTERN}) ?(\\d{1,7})` +
+  `(?![\\d${NON_CASE_SYLLABLES}]| [${NON_CASE_SYLLABLES}](?:으로|로|에서|까지|부터|[을를이가은는에의도만])?(?=$|[^가-힣]))`,
   "g"
 )
 
@@ -100,8 +104,9 @@ export function extractCaseNumbers(text: string): string[] {
   const out: string[] = []
   const seen = new Set<string>()
   let m: RegExpExecArray | null
+  const normalized = (text || "").replace(/\s+/g, " ")
   CASE_NO_RE.lastIndex = 0
-  while ((m = CASE_NO_RE.exec(text || "")) !== null) {
+  while ((m = CASE_NO_RE.exec(normalized)) !== null) {
     const cn = `${m[1]}${m[2]}${m[3]}`
     if (!seen.has(cn)) {
       seen.add(cn)

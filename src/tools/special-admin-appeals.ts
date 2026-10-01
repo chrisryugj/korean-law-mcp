@@ -112,7 +112,8 @@ async function getSpecialAppealText(
     if (decc.이유) output += `이유:\n${decc.이유}\n\n`;
     if (decc.따른결정) output += `따른결정:\n${decc.따른결정}\n\n`;
     if (decc.참조결정) output += `참조결정:\n${decc.참조결정}\n\n`;
-    if (decc.관련법령) output += `관련법령:\n${decc.관련법령}\n`;
+    const legalGrounds = decc.관련법령 || decc.관계법령;
+    if (legalGrounds) output += `관련법령:\n${legalGrounds}\n`;
 
     return { content: [{ type: "text", text: truncateResponse(output) }] };
   } catch (error) {

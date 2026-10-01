@@ -5,7 +5,8 @@
 
 import { z } from "zod"
 import { LawApiClient } from "./api-client.js"
-import { allTools } from "../tool-registry.js"
+import { allTools, findOversizedArg } from "../tool-registry.js"
+import { maskToolText } from "./tool-output.js"
 import { routeQuery, type RouteResult } from "./query-router.js"
 import { SEARCH_DETAIL_CHAINS } from "./tool-chain-config.js"
 import type { ToolResponse } from "./types.js"
@@ -44,15 +45,18 @@ export async function executeTool(
   }
 
   try {
+    const oversized = findOversizedArg(params)
+    if (oversized) throw new Error(`인자가 너무 깁니다: ${oversized}`)
     const parsed = tool.schema.parse(params)
-    return await tool.handler(apiClient, parsed) as ToolResponse
+    const result = await tool.handler(apiClient, parsed) as ToolResponse
+    return { ...result, content: result.content.map(c => ({ ...c, text: maskToolText(c.text, params) })) }
   } catch (error) {
     // Zod 검증 실패 등 모든 예외를 ToolResponse로 감싸서 반환
     const msg = error instanceof z.ZodError
       ? error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join("; ")
       : (error instanceof Error ? error.message : String(error))
     return {
-      content: [{ type: "text", text: `오류 [${toolName}]: ${msg}` }],
+      content: [{ type: "text", text: maskToolText(`오류 [${toolName}]: ${msg}`, params) }],
       isError: true,
     }
   }

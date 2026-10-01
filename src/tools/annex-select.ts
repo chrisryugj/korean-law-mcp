@@ -78,7 +78,8 @@ export function findMatchingAnnex(
     const sole = annexList[0]
     const unnumbered = sole && !String(sole.별표번호 || "").trim()
       && !String(sole.별표명 || "").match(ANNEX_NOTATION_RE)?.some(label => parseAnnexNumber(label))
-    if (annexList.length === 1 && unnumbered && parseAnnexNumber(annexSelector)?.sub == null) {
+    const requestedSub = fromAnnexCode(annexSelector.trim())?.sub ?? parseAnnexNumber(annexSelector)?.sub
+    if (annexList.length === 1 && unnumbered && !requestedSub) {
       return annexList[0]
     }
     return undefined
