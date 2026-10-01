@@ -87,7 +87,8 @@ export async function applicableAdminRule(
     lines.push(`  ↳ 당시 명칭은 「${version.name}」 — 현행 「${current.name}」과 같은 규칙(행정규칙ID ${version.ruleId})입니다.`)
   }
   if (note) lines.push(`  ⚠️ ${note}`)
-  const later = group.filter(v => (v.efYd || v.issuedYd) > (version.efYd || version.issuedYd) && (v.efYd || v.issuedYd) <= today)
+  // 기준일 다음부터 센다 — 기준일 버전보다 늦게 시행됐어도 먼저 발령돼 이미 그 본문에 든 개정(2013-18호)은 "그 뒤 개정"이 아니다
+  const later = group.filter(v => (v.efYd || v.issuedYd) > date && (v.efYd || v.issuedYd) <= today)
   const whole = later.filter(v => /전부개정|폐지제정/.test(v.rrCls))
   if (nowState.abolished) {
     lines.push(`  ⚠️ 이 행정규칙은 폐지됐습니다: ${label(nowState.abolished)} — 현행이 없습니다.`)

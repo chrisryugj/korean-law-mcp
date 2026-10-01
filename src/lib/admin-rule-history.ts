@@ -120,15 +120,33 @@ export function pickAdminRuleGroup(groups: Map<string, AdminRuleVersion[]>, quer
   return undefined
 }
 
+/** 발령번호 비교 — 숫자 마디별로("2013-5" < "2013-21"). 문자열 비교는 "2013-5"를 뒤로 친다 */
+function compareIssuedNo(a: string, b: string): number {
+  const pa = a.match(/\d+/g) ?? []
+  const pb = b.match(/\d+/g) ?? []
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = parseInt(pa[i] ?? "0", 10) - parseInt(pb[i] ?? "0", 10)
+    if (d) return d
+  }
+  return 0
+}
+
 /**
- * 기준일에 시행 중이던 버전. 시행일이 발령 순서와 엇갈리면(2013년 NFSC 103: 2013-18호 발령 6.10.·시행 8.11.,
- * 2013-21호 발령 6.11.·시행 7.12.) 뒤 발령본 본문에 아직 시행 전인 앞 개정이 섞여 있다 — 그 사실을 note 로 알린다.
+ * 기준일에 시행 중이던 버전 = 시행일이 기준일 이하인 버전 중 발령일이 가장 늦은 것(같은 날이면 발령번호가 큰 것).
+ * 행정규칙 본문은 발령 시점의 전문이라 뒤 발령본이 앞 개정을 이미 담는다. 시행일 최신으로 고르면 먼저 발령되고 늦게 시행된
+ * 개정본이 뒤 발령본을 덮는다: 2013년 NFSC 103 은 2013-18호(발령 6.10.·시행 8.11.) 뒤에 2013-21호(발령 6.11.·시행 7.12.)가
+ * 30층 이상 수원 기준 등을 삭제했는데, 2013.8.11.~2015.3.23. 기준일에 삭제 전 18호 본문을 냈다(감사 실측).
+ * 반대로 기준일에 뒤 발령본만 시행 중이면 그 본문에 아직 시행 전인 앞 개정이 섞여 있다 — 그 사실을 note 로 알린다.
  */
 export function adminVersionAt(
   group: AdminRuleVersion[],
   ymd: string,
 ): { version?: AdminRuleVersion, note?: string, abolished?: AdminRuleVersion } {
-  const version = group.find(v => (v.efYd || v.issuedYd) <= ymd)
+  const version = group
+    .filter(v => (v.efYd || v.issuedYd) <= ymd)
+    .reduce<AdminRuleVersion | undefined>((best, v) =>
+      !best || v.issuedYd > best.issuedYd || (v.issuedYd === best.issuedYd && compareIssuedNo(v.issuedNo, best.issuedNo) > 0) ? v : best,
+    undefined)
   if (!version) return {}
   // 폐지 행은 "시행 중 버전"이 아니다 — 그날 이미 폐지된 규칙이다
   if (/폐지$/.test(version.rrCls)) return { abolished: version }

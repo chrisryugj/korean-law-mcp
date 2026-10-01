@@ -66,4 +66,22 @@ describe("adminVersionAt — 기준일 시행 버전", () => {
   it("최초 시행 전이면 버전 없음", () => {
     expect(adminVersionAt(nfsc(), "20100101").version).toBeUndefined()
   })
+
+  // 2013-21호(발령 6.11.) 본문은 2013-18호(발령 6.10.) 개정을 이미 담고, 30층 이상 수원 기준 등만 "삭제＜2013.6.11＞"다.
+  // 시행일만 보면 18호 시행(8.11.)부터 2015-23호 시행 전날까지 삭제된 조항이 살아 있는 18호 본문을 냈다.
+  it("먼저 발령되고 늦게 시행된 개정본이 뒤 발령본을 덮지 않는다 (2013.8.11.~2015.3.23. → 2013-21호)", () => {
+    for (const d of ["20130811", "20140101", "20150323"]) {
+      const { version, note } = adminVersionAt(nfsc(), d)
+      expect(version?.issuedNo, d).toBe("2013-21")
+      expect(note, d).toBeUndefined()
+    }
+    expect(adminVersionAt(nfsc(), "20150324").version?.issuedNo).toBe("2015-23")
+  })
+
+  it("같은 날 발령이면 발령번호가 큰 것 (숫자 마디로 비교: 2020-12 > 2020-5)", () => {
+    const g = parseAdminRuleRows(`<AdmRulSearch>` +
+      row("A", "1", NFSC, "20200301", "20200301", "2020-5", "일부개정") +
+      row("B", "1", NFSC, "20200301", "20200301", "2020-12", "일부개정") + `</AdmRulSearch>`)
+    expect(adminVersionAt(g, "20200401").version?.serial).toBe("B")
+  })
 })

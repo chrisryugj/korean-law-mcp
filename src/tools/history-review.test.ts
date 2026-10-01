@@ -138,6 +138,19 @@ describe("applicableAdminRule: 현행 비교는 본문끼리 (종전: 이미지 
     expect(text).not.toContain("✅ 동일")
   })
 
+  it("발령·시행 순서가 엇갈리면 시행 중인 것 중 나중 발령본, 그 뒤 개정 수도 기준일 다음부터 (종전: 2013-18호·3차례)", async () => {
+    const staggered = `<AdmRulSearch><totalCnt>4</totalCnt>` +
+      admRow("NEW1", "35312", NFSC, "20160713", "20160713", "2016-87", "일부개정", "현행") +
+      admRow("OLD1", "35312", NFSC, "20150123", "20150324", "2015-23", "일부개정") +
+      admRow("S18", "35312", NFSC, "20130610", "20130811", "2013-18", "일부개정") +
+      admRow("S21", "35312", NFSC, "20130611", "20130712", "2013-21", "타법개정") + `</AdmRulSearch>`
+    const c = { searchAdminRule: async () => staggered } as unknown as LawApiClient
+    const text = (await applicableAdminRule(c, { lawName: NFSC, date: "20140101" }))!.content[0].text
+    expect(text).toContain("제2013-21호, 2013.06.11 발령")
+    expect(text).toContain("S21 ◀ 기준일 버전")
+    expect(text).toContain("기준일 이후 현재까지 2차례")
+  })
+
   it("본문 조회의 예산 소진은 '당시 미신설'로 삼키지 않고 올린다", async () => {
     const c = {
       searchAdminRule: async () => history,
