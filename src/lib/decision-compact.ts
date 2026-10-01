@@ -47,6 +47,10 @@ export function compactBody(text: string, opts: CompactOptions = {}): string {
 
   // HEAD — 앞에서 HEAD자까지 중 문장 끝에서 자르기
   const headRaw = text.slice(0, HEAD)
+  // 숫자 바로 뒤의 ". " 는 날짜·번호("2020. 12. 28.")라 문장 끝이 아니다. 경계로 치면 가장 뒤라서
+  // "다. " 를 이기고 머리가 "…소외 조합은 2020. 12. 28." 에서 끝났다(2026-10-01 감사 실측 616245)
+  let sentenceDot = headRaw.lastIndexOf(". ")
+  while (sentenceDot > 0 && /\d/.test(headRaw[sentenceDot - 1])) sentenceDot = headRaw.lastIndexOf(". ", sentenceDot - 1)
   const headBoundaries = [
     headRaw.lastIndexOf("다.\n"),
     headRaw.lastIndexOf("라.\n"),
@@ -54,7 +58,7 @@ export function compactBody(text: string, opts: CompactOptions = {}): string {
     headRaw.lastIndexOf("라. "),
     headRaw.lastIndexOf(".\n\n"),
     headRaw.lastIndexOf("\n\n"),
-    headRaw.lastIndexOf(". "),
+    sentenceDot,
   ]
   const headCutCandidate = Math.max(...headBoundaries)
   const headCut = headCutCandidate > HEAD * 0.5 ? headCutCandidate + 2 : HEAD
@@ -67,20 +71,16 @@ export function compactBody(text: string, opts: CompactOptions = {}): string {
   // 판례 한국어 특성상 "다." / "라." 종결어미가 지배적이라 이걸로 충분.
   const tailStart = text.length - TAIL
   const tailRaw = text.slice(tailStart)
-  const tailBoundaryIdx = [
-    tailRaw.indexOf("\n\n"),
-    tailRaw.indexOf("다.\n"),
-    tailRaw.indexOf("라.\n"),
-    tailRaw.indexOf("다. "),
-    tailRaw.indexOf("라. "),
-    tailRaw.indexOf("한다. "),
-  ]
-    .filter((i) => i >= 0)
-    .sort((a, b) => a - b)[0]
+  // 꼬리는 경계 패턴 **뒤**에서 시작한다. 길이와 무관하게 +2 하면 "한다. " 경계에서 꼬리가
+  // ". 그런데…" 로 시작했다(2026-10-01 감사 실측 616245·620409)
+  const tailBoundary = ["\n\n", "다.\n", "라.\n", "다. ", "라. ", "한다. "]
+    .map((b) => ({ idx: tailRaw.indexOf(b), len: b.length }))
+    .filter((b) => b.idx >= 0)
+    .sort((a, b) => a.idx - b.idx)[0]
 
   let tailFrom =
-    tailBoundaryIdx !== undefined && tailBoundaryIdx < TAIL * 0.5
-      ? tailStart + tailBoundaryIdx + 2
+    tailBoundary !== undefined && tailBoundary.idx < TAIL * 0.5
+      ? tailStart + tailBoundary.idx + tailBoundary.len
       : tailStart
   // 같은 이유로 꼬리 시작이 low surrogate 면 한 칸 당겨 온전한 글자로 시작한다 (리뷰 C10)
   const firstUnit = text.charCodeAt(tailFrom)
