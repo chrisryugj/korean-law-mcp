@@ -47,18 +47,14 @@ export function compactBody(text: string, opts: CompactOptions = {}): string {
 
   // HEAD — 앞에서 HEAD자까지 중 문장 끝에서 자르기
   const headRaw = text.slice(0, HEAD)
-  // 숫자 바로 뒤의 ". " 는 날짜·번호("2020. 12. 28.")라 문장 끝이 아니다. 경계로 치면 가장 뒤라서
-  // "다. " 를 이기고 머리가 "…소외 조합은 2020. 12. 28." 에서 끝났다(2026-10-01 감사 실측 616245)
-  let sentenceDot = headRaw.lastIndexOf(". ")
-  while (sentenceDot > 0 && /\d/.test(headRaw[sentenceDot - 1])) sentenceDot = headRaw.lastIndexOf(". ", sentenceDot - 1)
   const headBoundaries = [
     headRaw.lastIndexOf("다.\n"),
     headRaw.lastIndexOf("라.\n"),
-    headRaw.lastIndexOf("다. "),
-    headRaw.lastIndexOf("라. "),
+    lastSentenceEnd(headRaw, "다. "),
+    lastSentenceEnd(headRaw, "라. "),
     headRaw.lastIndexOf(".\n\n"),
     headRaw.lastIndexOf("\n\n"),
-    sentenceDot,
+    lastSentenceEnd(headRaw, ". "),
   ]
   const headCutCandidate = Math.max(...headBoundaries)
   const headCut = headCutCandidate > HEAD * 0.5 ? headCutCandidate + 2 : HEAD
@@ -91,6 +87,18 @@ export function compactBody(text: string, opts: CompactOptions = {}): string {
   if (omitted < MIN_SAVE) return text // 실질 절감 미달 시 원본
 
   return `${head}\n\n⋯ 중략 ${omitted.toLocaleString()}자 (full=true로 전문 조회) ⋯\n\n${tail}`
+}
+
+/**
+ * 마침표 경계 pattern 의 마지막 위치. 번호 뒤의 마침표는 문장 끝이 아니라 건너뛴다(2026-10-01 감사 실측 616245):
+ * 숫자 뒤(날짜 "2020. 12. 28."·번호 "1.")와 줄 머리 항목 기호("\n라. 소외 조합은").
+ * 경계로 치면 가장 뒤라서 "다. " 를 이기고 머리가 "…소외 조합은 2020. 12. 28." 이나 "…제출하였다.\n라." 에서 끝났다.
+ */
+function lastSentenceEnd(s: string, pattern: string): number {
+  const dot = pattern.indexOf(".")
+  let i = s.lastIndexOf(pattern)
+  while (i > 0 && (/\d/.test(s[i + dot - 1]) || s[i + dot - 2] === "\n")) i = s.lastIndexOf(pattern, i - 1)
+  return i
 }
 
 /**
