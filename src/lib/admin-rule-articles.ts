@@ -11,6 +11,8 @@
  * jo·chapter 입력 정규화와 조문 찾기는 admin-rule-jo.ts.
  */
 import { toKey, structKey } from "./admin-rule-jo.js"
+// 공개 경로(./lib/admin-rule-articles) 하위호환 — 입력 정규화·조문 찾기가 admin-rule-jo.ts 로 옮겨 갔다
+export { normalizeAdminJo, normalizeChapter, findArticle } from "./admin-rule-jo.js"
 
 export interface AdminRuleArticle {
   /** 정규화 키: "9-5" | "9-5의2" | "10" | "10의2" */
