@@ -133,8 +133,9 @@ describe("get_admin_rule — 이미지-only 별표 경고 (#159)", () => {
 
 // ─── 부분 조회 (jo·chapter·keyword·page) + 캐시 + 제·개정이유 폴백 ───
 // 외국환거래규정 실측 형상 축약: 조문내용이 "통짜 1개"로 오는 하이픈형 규칙
-import { adminRuleXmlCache } from "../lib/admin-rule-views.js"
-import { beforeEach } from "vitest"
+import { adminRuleXmlCache, adminRuleCacheKey, ADMIN_RULE_CACHE_TTL_MS } from "../lib/admin-rule-views.js"
+import { beforeEach, vi } from "vitest"
+import { DOMParser } from "@xmldom/xmldom"
 
 const HYPHEN_BLOB = [
   "제1장 총칙",
@@ -270,6 +271,31 @@ describe("get_admin_rule — 부분 조회 (T1)", () => {
       bodies.push(text.slice(text.indexOf(`[페이지 ${p}/${total}]\n\n`) + `[페이지 ${p}/${total}]\n\n`.length).replace(/\n\n▶ 다음: page:\d+$/u, ""))
     }
     expect(bodies.join("")).toBe(`${big}\n`)
+  })
+
+  it("캐시에는 파싱 결과를 두어 적중 시 XML 을 다시 파싱하지 않는다", async () => {
+    // 감사 실측: 캐시가 XML 원문이라 보험업감독업무시행세칙(XML 313만 자)은 캐시 적중이어도 jo 한 번에 1.1초
+    const spy = vi.spyOn(DOMParser.prototype, "parseFromString")
+    try {
+      await getAdminRule(detailStub(FX_RULE_XML), { id: "2100000285140", jo: "제9-5조" })
+      await getAdminRule(detailStub(FX_RULE_XML), { id: "2100000285140", keyword: "해외직접투자" })
+      await getAdminRule(detailStub(FX_RULE_XML), { id: "2100000285140", page: 1 })
+      expect(spy).toHaveBeenCalledTimes(1)
+    } finally {
+      spy.mockRestore()
+    }
+    expect(typeof adminRuleXmlCache.get(adminRuleCacheKey("2100000285140"))).toBe("object")
+  })
+
+  it("applicable_law 가 선적재한 XML 문자열도 받아 파싱 결과로 바꿔 넣는다", async () => {
+    adminRuleXmlCache.set(adminRuleCacheKey("2100000285140"), FX_RULE_WITH_REASON_XML, ADMIN_RULE_CACHE_TTL_MS)
+    const noFetch = { getAdminRule: async () => { throw new Error("재조회하면 안 된다") } } as unknown as LawApiClient
+    const r = await getAdminRule(noFetch, { id: "2100000285140", jo: "제9-5조" })
+    expect(r.content[0].text).toContain("제9-5조(해외직접투자의 신고 등)")
+    expect(typeof adminRuleXmlCache.get(adminRuleCacheKey("2100000285140"))).toBe("object")
+    // 신구대조 폴백도 같은 캐시를 쓴다
+    const stub = { fetchApi: async () => OLDNEW_EMPTY_XML, getAdminRule: noFetch.getAdminRule } as unknown as LawApiClient
+    expect((await compareAdminRuleOldNew(stub, { id: "2100000285140" })).content[0].text).toContain("원화 국제화 로드맵")
   })
 
   it("파라미터 없는 전문 조회는 종전 동작 그대로다 (AC#9 회귀)", async () => {

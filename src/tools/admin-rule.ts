@@ -11,12 +11,9 @@ import { rethrowIfFatal } from "../lib/fatal-errors.js"
 import { maskSensitiveUrl } from "../lib/fetch-with-retry.js"
 import { detectAbolishedAdminRule } from "../lib/abolished-laws.js"
 import { fetchAdminRuleHistory, pickAdminRuleGroup } from "../lib/admin-rule-history.js"
-import { adminRuleSourceUrl, analyzeImageOnlyBody, buildImageOnlyWarning, markInlineImages } from "../lib/image-only-body.js"
-import {
-  adminRuleXmlCache, adminRuleCacheKey, ADMIN_RULE_CACHE_TTL_MS,
-  buildPartialBody, pickPartialMode, PARTIAL_HINT,
-} from "../lib/admin-rule-views.js"
-import type { ExtraBlock } from "../lib/admin-rule-keyword.js"
+import { adminRuleSourceUrl, buildImageOnlyWarning } from "../lib/image-only-body.js"
+import { buildPartialBody, pickPartialMode, PARTIAL_HINT } from "../lib/admin-rule-views.js"
+import { loadAdminRuleDoc, adminRuleExtrasText, adminRuleExtraBlocks, adminRuleParsed } from "../lib/admin-rule-doc.js"
 
 // search_admin_rule 스키마
 export const SearchAdminRuleSchema = z.object({
@@ -134,33 +131,6 @@ export const GetAdminRuleSchema = z.object({
 
 export type GetAdminRuleInput = z.infer<typeof GetAdminRuleSchema>
 
-/** xmldom 파싱 결과 타입 — 이 프로젝트는 DOM lib를 켜지 않는다 */
-type XmlDoc = ReturnType<InstanceType<typeof DOMParser>["parseFromString"]>
-
-/** 태그별 텍스트를 순서대로 모은다 (xmldom NodeList는 iterable이 아니다) */
-function collectText(doc: XmlDoc, tag: string): string {
-  const nodes = doc.getElementsByTagName(tag)
-  const out: string[] = []
-  for (let i = 0; i < nodes.length; i++) {
-    const t = nodes[i].textContent?.trim() || ""
-    if (t) out.push(t)
-  }
-  return out.join("\n")
-}
-
-/** 첨부파일명 ↔ 링크 짝 (#159 경고에서 원문 파일을 함께 안내하기 위한 것) */
-function collectAttachments(doc: XmlDoc): Array<{ name: string; link: string }> {
-  const links = doc.getElementsByTagName("첨부파일링크")
-  const names = doc.getElementsByTagName("첨부파일명")
-  const out: Array<{ name: string; link: string }> = []
-  for (let i = 0; i < links.length; i++) {
-    const link = links[i].textContent?.trim() || ""
-    if (!link) continue
-    out.push({ name: names[i]?.textContent?.trim() || `첨부 ${i + 1}`, link })
-  }
-  return out
-}
-
 /**
  * 전문이 비어 있을 때 원인별 안내 (#72)
  * 식별자 오류를 "법제처 API 제한"으로 뭉뚱그리면 원인 추적이 막힌다.
@@ -187,35 +157,10 @@ export async function getAdminRule(
   input: GetAdminRuleInput
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
-    // 전문 응답 캐시 — jo → keyword → page 연속 조회 시 Open API 재호출 방지
-    const cacheKey = adminRuleCacheKey(input.id)
-    let xmlText = adminRuleXmlCache.get<string>(cacheKey)
-    const fromCache = xmlText !== null
-    if (!xmlText) {
-      xmlText = await apiClient.getAdminRule(input.id, input.apiKey)
-    }
-
-    const parser = new DOMParser()
-    const doc = parser.parseFromString(xmlText, "text/xml")
-
-    // 행정규칙 정보 추출
-    const ruleNameRaw = doc.getElementsByTagName("행정규칙명")[0]?.textContent?.trim() || ""
+    // 전문 문서 캐시 — jo → keyword → page 연속 조회 시 Open API 재호출·XML 재파싱 방지
+    const doc = await loadAdminRuleDoc(apiClient, input.id, input.apiKey)
+    const { ruleName: ruleNameRaw, promDate, promNo, orgName, ruleType, joForm, efDate, revision, isCurrent } = doc
     const ruleName = ruleNameRaw || "알 수 없음"
-    // 상세 응답의 실제 태그는 발령일자/발령번호 (공포일자는 없는 경우가 많다 — 실측)
-    const promDate = doc.getElementsByTagName("공포일자")[0]?.textContent
-      || doc.getElementsByTagName("발령일자")[0]?.textContent || ""
-    const promNo = doc.getElementsByTagName("발령번호")[0]?.textContent || ""
-    const orgName = doc.getElementsByTagName("소관부처")[0]?.textContent
-      || doc.getElementsByTagName("소관부처명")[0]?.textContent || ""
-    const ruleType = doc.getElementsByTagName("행정규칙종류")[0]?.textContent || ""
-    const joForm = doc.getElementsByTagName("조문형식여부")[0]?.textContent?.trim() || ""
-    const efDate = doc.getElementsByTagName("시행일자")[0]?.textContent?.trim() || ""
-    const revision = doc.getElementsByTagName("제개정구분명")[0]?.textContent?.trim() || ""
-    const isCurrent = doc.getElementsByTagName("현행여부")[0]?.textContent?.trim() || ""
-
-    if (ruleNameRaw && !fromCache) {
-      adminRuleXmlCache.set(cacheKey, xmlText, ADMIN_RULE_CACHE_TTL_MS)
-    }
 
     let resultText = `행정규칙명: ${ruleName}\n`
     if (promDate) resultText += `공포일: ${formatDateDot(promDate)}${promNo ? ` (제${promNo}호)` : ""}${revision ? ` ${revision}` : ""}\n`
@@ -227,16 +172,14 @@ export async function getAdminRule(
     resultText += `\n---\n\n`
 
     // 조문 추출 - <조문내용> 태그 사용
-    const joContents = doc.getElementsByTagName("조문내용")
-
-    if (joContents.length === 0) {
+    if (doc.joTagCount === 0) {
       // 첨부파일 확인
-      const attachments = doc.getElementsByTagName("첨부파일링크")
+      const attachments = doc.attachmentLinks
       if (attachments.length > 0) {
         resultText += "[주의] 이 행정규칙은 조문 형식이 아닌 첨부파일로 제공됩니다.\n\n"
         resultText += "첨부파일:\n"
         for (let i = 0; i < attachments.length; i++) {
-          const link = attachments[i].textContent || ""
+          const link = attachments[i]
           if (link) {
             resultText += `   ${i + 1}. ${link}\n`
           }
@@ -256,23 +199,14 @@ export async function getAdminRule(
     }
 
     // 조문내용이 비어있는지 확인
-    let hasContent = false
-    for (let i = 0; i < joContents.length; i++) {
-      const content = joContents[i].textContent?.trim() || ""
-      if (content.length > 0) {
-        hasContent = true
-        break
-      }
-    }
-
-    if (!hasContent) {
+    if (!doc.hasContent) {
       // 첨부파일 확인
-      const attachments = doc.getElementsByTagName("첨부파일링크")
+      const attachments = doc.attachmentLinks
       if (attachments.length > 0) {
         resultText += "[주의] 이 행정규칙은 조문 형식이 아닌 첨부파일로 제공됩니다.\n\n"
         resultText += "첨부파일:\n"
         for (let i = 0; i < attachments.length; i++) {
-          const link = attachments[i].textContent || ""
+          const link = attachments[i]
           if (link) {
             resultText += `   ${i + 1}. ${link}\n`
           }
@@ -290,64 +224,23 @@ export async function getAdminRule(
 
     // 이미지-only 경고 (#159) — 본문 앞에 둔다. 뒤에 붙이면 truncateResponse가
     // 경고부터 잘라내고 무의미한 <img> 태그만 남아 LLM이 수치를 지어내기 쉬워진다.
-    const bodyText = `${collectText(doc, "조문내용")}\n${collectText(doc, "별표내용")}`
-    const imgInfo = analyzeImageOnlyBody(bodyText)
+    const imgInfo = doc.imgInfo
     if (imgInfo.imageOnly) {
-      resultText += buildImageOnlyWarning(input.id, imgInfo, collectAttachments(doc)) + "\n"
+      resultText += buildImageOnlyWarning(input.id, imgInfo, doc.attachments) + "\n"
     } else if (imgInfo.imageCount > 0) {
       resultText += `ℹ️ 본문에 이미지(표·그림) ${imgInfo.imageCount}개 — 텍스트가 없어 표식으로 남겼습니다. 그 안의 수치는 원문에서 확인: ${adminRuleSourceUrl(input.id)}\n\n`
     }
 
-    // 조문 본문 (부칙·별표 제외 — 부분 조회의 파싱 대상).
-    // 종전 출력과 동일하게 조문내용 태그 사이는 빈 줄로 구분한다.
-    const articleParts: string[] = []
-    for (let i = 0; i < joContents.length; i++) {
-      const joContent = joContents[i].textContent?.trim() || ""
-      if (joContent.length > 0) articleParts.push(markInlineImages(joContent))
-    }
-    const articlesText = articleParts.join("\n\n")
-
-    // 부칙 (extras: keyword 가 조문에서 못 찾으면 이어 찾는 블록)
-    let extrasText = ""
-    const extras: ExtraBlock[] = []
-    const firstLine = (s: string) => s.split("\n", 1)[0].trim().slice(0, 60)
-    const addendums = doc.getElementsByTagName("부칙내용")
-    if (addendums.length > 0) {
-      extrasText += `\n---\n부칙\n---\n\n`
-      for (let i = 0; i < addendums.length; i++) {
-        const content = addendums[i].textContent?.trim() || ""
-        if (content.length > 0) {
-          extrasText += `${content}\n\n`
-          extras.push({ label: firstLine(content), text: content })
-        }
-      }
-    }
-
-    // 별표
-    const annexes = doc.getElementsByTagName("별표내용")
-    if (annexes.length > 0) {
-      extrasText += `\n---\n별표\n---\n\n`
-      for (let i = 0; i < annexes.length; i++) {
-        const title = doc.getElementsByTagName("별표제목")[i]?.textContent?.trim() || ""
-        const content = annexes[i].textContent?.trim() || ""
-
-        if (title) {
-          extrasText += `[${title}]\n`
-        }
-        if (content.length > 0) {
-          const marked = markInlineImages(content)
-          extrasText += `${marked}\n\n`
-          extras.push(title ? { label: `[${title}]`, text: `[${title}]\n${marked}` } : { label: firstLine(marked), text: marked })
-        }
-      }
-    }
-
-    const fullBody = `${articlesText}\n\n${extrasText}`.trim() + "\n"
+    // 조문 본문 (부칙·별표 제외 — 부분 조회의 파싱 대상). 조문내용 태그 사이는 빈 줄로 구분돼 있다.
+    const articlesText = doc.articlesText
+    const fullBody = `${articlesText}\n\n${adminRuleExtrasText(doc)}`.trim() + "\n"
 
     // 부분 조회 (jo > chapter > keyword > page) — 기존 전문 조회 동작은 그대로 유지
     const { mode } = pickPartialMode(input)
     if (mode) {
-      const view = buildPartialBody(articlesText, fullBody, input, { extras, headerChars: resultText.length })
+      const view = buildPartialBody(articlesText, fullBody, input, {
+        extras: adminRuleExtraBlocks(doc), headerChars: resultText.length, parsed: adminRuleParsed(doc),
+      })
       let out = resultText + `[${view.label}]\n`
       if (view.note) out += `${view.note}\n`
       out += `\n${view.text}`
@@ -408,18 +301,13 @@ async function fetchRevisionFallback(
   id: string,
   apiKey?: string
 ): Promise<string | null> {
-  const cacheKey = adminRuleCacheKey(id)
-  let xmlText = adminRuleXmlCache.get<string>(cacheKey)
-  if (!xmlText) {
-    xmlText = await apiClient.getAdminRule(id, apiKey)
-  }
-  const doc = new DOMParser().parseFromString(xmlText, "text/xml")
-  const reason = collectText(doc, "제개정이유내용").trim()
+  const doc = await loadAdminRuleDoc(apiClient, id, apiKey)
+  const reason = doc.revisionReason
   if (!reason) return null
-  const name = doc.getElementsByTagName("행정규칙명")[0]?.textContent?.trim() || ""
-  const date = doc.getElementsByTagName("발령일자")[0]?.textContent?.trim() || ""
-  const no = doc.getElementsByTagName("발령번호")[0]?.textContent?.trim() || ""
-  const kind = doc.getElementsByTagName("제개정구분명")[0]?.textContent?.trim() || ""
+  const name = doc.ruleName
+  const date = doc.issuedDate
+  const no = doc.promNo.trim()
+  const kind = doc.revision
   let head = ""
   if (name) head += `행정규칙명: ${name}\n`
   if (no || date) head += `발령: 제${no || "?"}호${date ? ` (${formatDateDot(date)})` : ""}${kind ? ` · ${kind}` : ""}\n`

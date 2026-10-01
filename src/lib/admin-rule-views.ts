@@ -3,7 +3,7 @@
  *
  * 우선순위: jo > chapter > keyword > page. 복수 지정 시 상위 하나만 적용하고 응답에 명시.
  * 같은 규칙을 jo → keyword → page 순으로 연속 조회하는 패턴이 일반적이므로
- * 전문 API 응답(XML)을 id 기준 캐시(TTL 6h, LRU 20건)에 보관해 재호출을 막는다.
+ * 전문 API 응답을 파싱한 문서(admin-rule-doc.ts)를 id 기준 캐시(TTL 6h, LRU 20건)에 보관해 재호출·재파싱을 막는다.
  */
 
 import { SimpleCache } from "./cache.js"
@@ -13,7 +13,11 @@ import { parseAdminRuleArticles, type ParsedAdminRule, type AdminRuleArticle } f
 import { findArticle, normalizeChapter, structLabel } from "./admin-rule-jo.js"
 import { keywordView, splitSections, type ExtraBlock } from "./admin-rule-keyword.js"
 
-/** 전문 XML 캐시 — 외국환거래규정 기준 응답 ~750KB이므로 상한을 작게 잡는다 */
+/**
+ * 행정규칙 문서 캐시 (값: AdminRuleDoc — admin-rule-doc.ts). 큰 규칙은 한 건이 본문 수백만 자라 상한을 작게 잡는다.
+ * applicable_law 행정규칙 갈래만 XML 문자열을 먼저 넣고, get_admin_rule 이 첫 조회 때 문서로 바꿔 넣는다.
+ * (이름의 xml 은 그 선적재 경로와 키 접두어 때문에 남겼다)
+ */
 export const adminRuleXmlCache = new SimpleCache(20)
 export const ADMIN_RULE_CACHE_TTL_MS = 6 * 60 * 60 * 1000
 
@@ -146,14 +150,16 @@ export function paginateFullText(fullText: string, page: number, chunkSize = 450
 
 /**
  * 부분 조회 본문 생성 — 호출부는 규칙명·공포일 헤더를 앞에 붙인다.
- * extras: 부칙·별표 블록 (keyword 가 조문에서 못 찾으면 이어 찾는다) / headerChars: 호출부 머리말 길이 (page 크기 산정)
+ * extras: 부칙·별표 블록 (keyword 가 조문에서 못 찾으면 이어 찾는다) / headerChars: 호출부 머리말 길이 (page 크기 산정) /
+ * parsed: 캐시해 둔 body 파싱 결과 (없으면 여기서 파싱)
  */
 export function buildPartialBody(
-  body: string, fullText: string, params: PartialParams, opts: { extras?: ExtraBlock[], headerChars?: number } = {},
+  body: string, fullText: string, params: PartialParams,
+  opts: { extras?: ExtraBlock[], headerChars?: number, parsed?: ParsedAdminRule } = {},
 ): { label: string, text: string, note?: string } {
   const { mode, ignored } = pickPartialMode(params)
   const note = ignored.length ? `※ 복수 파라미터 중 우선순위에 따라 '${mode}'만 적용했습니다 (무시: ${ignored.join(", ")}).` : undefined
-  const parsed = parseAdminRuleArticles(body)
+  const parsed = opts.parsed ?? parseAdminRuleArticles(body)
   switch (mode) {
     case "jo":
       return { label: `조문 조회: ${params.jo}`, text: joView(parsed, params.jo!, params.context || 0, body), note }
