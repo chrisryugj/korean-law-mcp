@@ -14,6 +14,7 @@ import {
   adminRuleXmlCache, adminRuleCacheKey, ADMIN_RULE_CACHE_TTL_MS,
   buildPartialBody, pickPartialMode, PARTIAL_HINT,
 } from "../lib/admin-rule-views.js"
+import type { ExtraBlock } from "../lib/admin-rule-keyword.js"
 
 // search_admin_rule 스키마
 export const SearchAdminRuleSchema = z.object({
@@ -304,8 +305,10 @@ export async function getAdminRule(
     }
     const articlesText = articleParts.join("\n\n")
 
-    // 부칙
+    // 부칙 (extras: keyword 가 조문에서 못 찾으면 이어 찾는 블록)
     let extrasText = ""
+    const extras: ExtraBlock[] = []
+    const firstLine = (s: string) => s.split("\n", 1)[0].trim().slice(0, 60)
     const addendums = doc.getElementsByTagName("부칙내용")
     if (addendums.length > 0) {
       extrasText += `\n---\n부칙\n---\n\n`
@@ -313,6 +316,7 @@ export async function getAdminRule(
         const content = addendums[i].textContent?.trim() || ""
         if (content.length > 0) {
           extrasText += `${content}\n\n`
+          extras.push({ label: firstLine(content), text: content })
         }
       }
     }
@@ -329,7 +333,9 @@ export async function getAdminRule(
           extrasText += `[${title}]\n`
         }
         if (content.length > 0) {
-          extrasText += `${markInlineImages(content)}\n\n`
+          const marked = markInlineImages(content)
+          extrasText += `${marked}\n\n`
+          extras.push(title ? { label: `[${title}]`, text: `[${title}]\n${marked}` } : { label: firstLine(marked), text: marked })
         }
       }
     }
@@ -339,7 +345,7 @@ export async function getAdminRule(
     // 부분 조회 (jo > chapter > keyword > page) — 기존 전문 조회 동작은 그대로 유지
     const { mode } = pickPartialMode(input)
     if (mode) {
-      const view = buildPartialBody(articlesText, fullBody, input)
+      const view = buildPartialBody(articlesText, fullBody, input, { extras })
       let out = resultText + `[${view.label}]\n`
       if (view.note) out += `${view.note}\n`
       out += `\n${view.text}`

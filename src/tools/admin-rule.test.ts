@@ -239,6 +239,18 @@ describe("get_admin_rule — 부분 조회 (T1)", () => {
     expect(calls).toBe(1)
   })
 
+  it("keyword 가 조문에 없고 부칙·별표에 있으면 그 블록을 보여 준다 (NOT_FOUND 단정 금지)", async () => {
+    const withAnnex = FX_RULE_XML.replace("</AdmRulService>",
+      `<별표><별표단위 별표키="000201"><별표번호>0002</별표번호><별표제목><![CDATA[외국환업무등록신청서]]></별표제목><별표내용><![CDATA[┃⑧인 력 현 황 │임  원 │외국환전문요원  명 ┃]]></별표내용></별표단위></별표></AdmRulService>`)
+    const a = await getAdminRule(detailStub(withAnnex), { id: "2100000285140", keyword: "고시한 날" })
+    expect(a.isError).toBeFalsy()
+    expect(a.content[0].text).toContain("부칙 <제2026-103호, 2026. 9. 16.>")
+    adminRuleXmlCache.clear()
+    const b = await getAdminRule(detailStub(withAnnex), { id: "2100000285140", keyword: "외국환전문요원" })
+    expect(b.isError).toBeFalsy()
+    expect(b.content[0].text).toContain("[외국환업무등록신청서]")
+  })
+
   it("파라미터 없는 전문 조회는 종전 동작 그대로다 (AC#9 회귀)", async () => {
     const r = await getAdminRule(detailStub(DETAIL_XML), { id: "2100000271110" })
     expect(r.isError).toBeFalsy()

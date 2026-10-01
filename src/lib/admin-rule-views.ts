@@ -10,7 +10,7 @@ import { SimpleCache } from "./cache.js"
 import { MAX_RESPONSE_SIZE } from "./schemas.js"
 import { parseAdminRuleArticles, type ParsedAdminRule, type AdminRuleArticle } from "./admin-rule-articles.js"
 import { findArticle, normalizeChapter, structLabel } from "./admin-rule-jo.js"
-import { keywordView, splitSections } from "./admin-rule-keyword.js"
+import { keywordView, splitSections, type ExtraBlock } from "./admin-rule-keyword.js"
 
 /** 전문 XML 캐시 — 외국환거래규정 기준 응답 ~750KB이므로 상한을 작게 잡는다 */
 export const adminRuleXmlCache = new SimpleCache(20)
@@ -135,8 +135,13 @@ export function paginateFullText(fullText: string, page: number, chunkSize = 450
   return { text, page: p, totalPages }
 }
 
-/** 부분 조회 본문 생성 — 호출부는 규칙명·공포일 헤더를 앞에 붙인다 */
-export function buildPartialBody(body: string, fullText: string, params: PartialParams): { label: string, text: string, note?: string } {
+/**
+ * 부분 조회 본문 생성 — 호출부는 규칙명·공포일 헤더를 앞에 붙인다.
+ * extras: 부칙·별표 블록 (keyword 가 조문에서 못 찾으면 이어 찾는다)
+ */
+export function buildPartialBody(
+  body: string, fullText: string, params: PartialParams, opts: { extras?: ExtraBlock[] } = {},
+): { label: string, text: string, note?: string } {
   const { mode, ignored } = pickPartialMode(params)
   const note = ignored.length ? `※ 복수 파라미터 중 우선순위에 따라 '${mode}'만 적용했습니다 (무시: ${ignored.join(", ")}).` : undefined
   const parsed = parseAdminRuleArticles(body)
@@ -146,7 +151,7 @@ export function buildPartialBody(body: string, fullText: string, params: Partial
     case "chapter":
       return { label: `장 조회: ${params.chapter}`, text: chapterView(parsed, params.chapter!), note }
     case "keyword":
-      return { label: `본문 검색: ${params.keyword}`, text: keywordView(parsed, params.keyword!, params.max_results || 10, body), note }
+      return { label: `본문 검색: ${params.keyword}`, text: keywordView(parsed, params.keyword!, params.max_results || 10, body, opts.extras), note }
     case "page": {
       const r = paginateFullText(fullText, params.page || 1)
       const tail = r.page < r.totalPages ? `\n\n▶ 다음: page:${r.page + 1}` : ""

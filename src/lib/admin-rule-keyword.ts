@@ -41,25 +41,52 @@ function excerptAround(text: string, kw: string, max: number): string {
   return head + text.slice(start, end)
 }
 
-function sectionKeywordView(body: string, kw: string, maxResults: number): string {
+/** 부칙·별표 한 덩어리 — text 는 label 줄(부칙 <…> · [별표 제목])로 시작한다 */
+export interface ExtraBlock { label: string, text: string }
+
+function sectionKeywordView(body: string, kw: string, cap: number): string | null {
   const hits = splitSections(body).filter(s => s.text.includes(kw))
-  if (hits.length === 0) return `[NOT_FOUND] 본문에 '${kw}'을(를) 포함한 절이 없습니다.\n⚠️ LLM은 기준 내용을 추측/생성하지 마세요.`
-  const cap = Math.max(1, Math.min(maxResults || 10, 30))
+  if (hits.length === 0) return null
   const labels = hits.map(s => s.num).filter(Boolean)
   let text = `'${kw}' 포함 ${hits.length}곳${labels.length ? `: ${labels.join(", ")}` : ""}\n`
   text += hits.length > cap ? `(아래 본문은 상위 ${cap}곳 — 절 번호는 jo:"2.7.3"처럼 조회)\n\n` : "\n"
   return text + hits.slice(0, cap).map(s => s.text.length > 2500 ? `${excerptAround(s.text, kw, 2500)}\n   …` : s.text).join("\n\n---\n\n")
 }
 
-export function keywordView(parsed: ParsedAdminRule, keyword: string, maxResults: number, body = ""): string {
+function extrasKeywordView(hits: ExtraBlock[], kw: string, cap: number): string {
+  let text = `'${kw}' — 조문에는 없고 부칙·별표에 ${hits.length}곳: ${hits.map(b => b.label).join(", ")}\n`
+  text += hits.length > cap ? `(아래 본문은 상위 ${cap}곳 — 나머지는 page 로 전문 뒷부분, max_results로 조정 가능)\n\n` : "\n"
+  return text + hits.slice(0, cap).map(b => b.text.length > 2500 ? `${excerptAround(b.text, kw, 2500)}\n   …` : b.text).join("\n\n---\n\n")
+}
+
+/**
+ * keyword 검색: 조문(조문 체계가 없으면 절) → 없으면 부칙·별표. 종전엔 조문만 보고 NOT_FOUND 로 단정해
+ * 외국환거래규정 "경과조치"(부칙 10곳)·"외국환전문요원"(별지 서식 2곳)이 "없다"고 나갔다.
+ */
+export function keywordView(parsed: ParsedAdminRule, keyword: string, maxResults: number, body = "", extras: ExtraBlock[] = []): string {
   const kw = keyword.trim()
   if (!kw) return "[NOT_FOUND] keyword 가 비어 있습니다 — 검색어를 지정하세요."
-  if (parsed.articles.length === 0) return sectionKeywordView(body, kw, maxResults)
-  const hits = parsed.articles.filter((a) => a.lines.some((l) => l.includes(kw)))
-  if (hits.length === 0) {
-    return `[NOT_FOUND] 본문에 '${kw}'을(를) 포함한 조문이 없습니다. (총 ${parsed.articles.length}개조 검색)\n⚠️ LLM은 조문 내용을 추측/생성하지 마세요.`
-  }
   const cap = Math.max(1, Math.min(maxResults || 10, 30))
+  const noArticles = parsed.articles.length === 0
+  const main = noArticles ? sectionKeywordView(body, kw, cap) : articleKeywordView(parsed, kw, cap)
+  const extraHits = extras.filter(b => b.text.includes(kw))
+  if (main) {
+    if (extraHits.length === 0) return main
+    const more = extraHits.length > 10 ? ` 외 ${extraHits.length - 10}곳` : ""
+    const note = `※ 부칙·별표에도 ${extraHits.length}곳: ${extraHits.slice(0, 10).map(b => b.label).join(", ")}${more} — 본문은 page 로 전문 뒷부분을 보세요.`
+    const nl = main.indexOf("\n")
+    return `${main.slice(0, nl + 1)}${note}\n${main.slice(nl + 1)}`
+  }
+  if (extraHits.length) return extrasKeywordView(extraHits, kw, cap)
+  const alsoExtras = extras.length ? `, 부칙·별표 ${extras.length}건도` : ""
+  return noArticles
+    ? `[NOT_FOUND] 본문에 '${kw}'을(를) 포함한 절이 없습니다.${alsoExtras ? ` (${alsoExtras.slice(2)} 검색)` : ""}\n⚠️ LLM은 기준 내용을 추측/생성하지 마세요.`
+    : `[NOT_FOUND] 본문에 '${kw}'을(를) 포함한 조문이 없습니다. (총 ${parsed.articles.length}개조${alsoExtras} 검색)\n⚠️ LLM은 조문 내용을 추측/생성하지 마세요.`
+}
+
+function articleKeywordView(parsed: ParsedAdminRule, kw: string, cap: number): string | null {
+  const hits = parsed.articles.filter((a) => a.lines.some((l) => l.includes(kw)))
+  if (hits.length === 0) return null
   const shown = hits.slice(0, cap)
   const PER = 2500
   // 본문은 상위 cap개만 싣더라도, 매칭 조문 "목록"은 전부 보여준다 —
