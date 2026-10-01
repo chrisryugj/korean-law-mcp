@@ -27,6 +27,7 @@ import { matchCitationContent } from "../lib/citation-content-matcher.js"
 import { verifyCaseCitations } from "../lib/case-citation.js"
 import { fetchLineageVersions, sameLawName, todayKst, versionInForce } from "../lib/law-lineage.js"
 import { rethrowIfFatal } from "../lib/fatal-errors.js"
+import { getRequestSignal } from "../lib/session-state.js"
 import type { HistoricalVersion } from "../lib/historical-utils.js"
 
 export const VerifyCitationsSchema = z.object({
@@ -501,8 +502,10 @@ async function verifyRenamed(
       : `옛 이름 시절 마지막 버전(시행 ${when})에 ${cite.displayArticle} 없음 — 그보다 이전 버전의 조문일 수 있음`
     return `${head}. ${status}. 조문 번호는 그 뒤 개정으로 바뀌었을 수 있어 현행 인용은 「${r.current.lawNm}」 기준으로 다시 확인`
   } catch (error) {
-    rethrowIfFatal(error)
-    return `${head}. 옛 이름 시절(시행 ${when}) 조문 조회 실패`
+    // 취소만 올린다. 예산 소진은 이 인용만의 실패다 — 올리면 이미 검증한 인용까지 응답 전체가 예산 오류 하나로 바뀌었다
+    // (2026-10-01 감사 재현). 일반 인용의 "조문 조회 실패"와 같은 취급
+    if (getRequestSignal()?.aborted) throw error
+    return `${head}. 옛 이름 시절(시행 ${when}) 조문 조회 실패: ${error instanceof Error ? error.message : String(error)}`
   }
 }
 

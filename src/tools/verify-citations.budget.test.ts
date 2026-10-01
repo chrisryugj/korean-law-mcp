@@ -58,11 +58,11 @@ function installFetch(missing = new Set<number>()): FetchLog {
   return log
 }
 
-async function runVerify(text: string, maxCitations: number) {
-  const budget = new RequestExecutionBudget(DEFAULT_EXECUTION_LIMITS)
+async function runVerify(text: string, maxCitations: number, maxUpstreamRequests = DEFAULT_EXECUTION_LIMITS.maxUpstreamRequests) {
+  const budget = new RequestExecutionBudget({ ...DEFAULT_EXECUTION_LIMITS, maxUpstreamRequests })
   const res = await requestContext.run({ budget }, () =>
     verifyCitations(new LawApiClient({ apiKey: "test" }), { text, maxCitations }))
-  return { text: res.content[0].text, attempts: budget.snapshot().upstreamRequests }
+  return { text: res.content[0].text, attempts: budget.snapshot().upstreamRequests, isError: res.isError }
 }
 
 const citeText = (count: number) =>
@@ -103,5 +103,68 @@ describe("verify_citations 요청 예산 (B#3)", () => {
     expect(log.fullFetches).toBe(1)
     expect(text.match(/\[NOT_FOUND\] 해당 조문 없음 \(존재 범위: 제1조~제1118조\)/g)).toHaveLength(2)
     expect(text).toContain("[HALLUCINATION_DETECTED]")
+  })
+})
+
+// ── 예산 소진은 그 인용만의 실패다 (2026-10-01 감사 재현) ──────────────────────
+const OLD = "소방시설 설치ㆍ유지 및 안전관리에 관한 법률"
+const NEW = "소방시설 설치 및 관리에 관한 법률"
+const lawRow = (mst: string, efYd: string, name: string, id: string, rr: string, st = "연혁") =>
+  `<law id="x"><법령일련번호>${mst}</법령일련번호><현행연혁코드>${st}</현행연혁코드><법령명한글><![CDATA[${name}]]></법령명한글>` +
+  `<법령ID>${id}</법령ID><공포일자>${efYd}</공포일자><공포번호>1</공포번호><제개정구분명>${rr}</제개정구분명><시행일자>${efYd}</시행일자></law>`
+const lawList = (rows: string[]) => `<LawSearch><totalCnt>${rows.length}</totalCnt>${rows.join("")}</LawSearch>`
+
+/** 현행 검색은 민법만, 연혁 검색은 옛 법령명(제명 변경)만 잡힌다. 나머지 법령명은 전부 0건 = 지어낸 법령 */
+function installNamedFetch(): void {
+  vi.stubGlobal("fetch", async (input: string | URL) => {
+    const url = new URL(String(input))
+    const target = url.searchParams.get("target")
+    const query = url.searchParams.get("query")
+    await new Promise(resolve => setImmediate(resolve))
+    if (url.pathname.endsWith("lawSearch.do") && target === "law") {
+      return new Response(query === "민법" ? CIVIL_LAW_XML : lawList([]))
+    }
+    if (url.pathname.endsWith("lawSearch.do") && target === "eflaw") {
+      if (url.searchParams.get("LID") === "009503") {
+        return new Response(lawList([lawRow("236977", "20241201", NEW, "009503", "전부개정", "현행"), lawRow("166244", "20150701", OLD, "009503", "일부개정")]))
+      }
+      return new Response(lawList(query === OLD ? [lawRow("166244", "20150701", OLD, "009503", "일부개정")] : []))
+    }
+    if (url.pathname.endsWith("lawService.do")) {
+      return new Response(url.searchParams.get("efYd")
+        ? JSON.stringify({ 법령: { 조문: { 조문단위: [{ 조문여부: "조문", 조문번호: "9", 조문제목: "소방시설의 유지·관리" }] } } })
+        : lawJson(url.searchParams.get("JO"), new Set()))
+    }
+    return new Response(EMPTY_PREC)
+  })
+}
+
+describe("verify_citations: 예산 소진은 그 인용만의 실패다 (2026-10-01 감사 재현)", () => {
+  beforeEach(() => lawCache.clear())
+  afterEach(() => vi.unstubAllGlobals())
+
+  it("옛 법령명 인용의 조문 조회가 예산에 걸려도 이미 검증한 인용은 남고 그 항목만 실패로 적는다", async () => {
+    installNamedFetch()
+    // 예산 10: 민법 검색·조회 3회 + 옛 법령명 특정(후보 검색 3·연혁 3·계보 1) 7회 → 옛 이름 시절 조문 조회가 11번째
+    const { text, isError } = await runVerify(`민법 제750조와 민법 제751조, 「화재예방, ${OLD}」 제9조에 따라`, 15, 10)
+    expect(text).not.toContain("[EXTERNAL_API_ERROR]")   // 종전: 응답 전체가 이 오류 하나(✓2 소실)
+    expect(isError).toBeFalsy()
+    expect(text).toContain("✓ 2 실존")
+    expect(text).toMatch(/\[RENAMED\].*조문 조회 실패.*budget exceeded/)
+  })
+
+  it("요청 취소는 항목 실패로 덮지 않고 올린다", async () => {
+    const client = {
+      searchLaw: async (_q: string, _k?: string, _d?: number, target?: string) =>
+        lawList(target === "eflaw" ? [lawRow("166244", "20150701", OLD, "009503", "일부개정")] : []),
+      fetchApi: async (p: { extraParams?: Record<string, string> }) => p.extraParams?.LID === "009503"
+        ? lawList([lawRow("236977", "20241201", NEW, "009503", "전부개정", "현행"), lawRow("166244", "20150701", OLD, "009503", "일부개정")])
+        : EMPTY_PREC,
+      getLawText: async () => { throw new Error("The operation was aborted") },
+    } as unknown as LawApiClient
+    const res = await requestContext.run({ signal: AbortSignal.abort() }, () =>
+      verifyCitations(client, { text: `${OLD} 제9조에 따라`, maxCitations: 5 }))
+    expect(res.isError).toBe(true)
+    expect(res.content[0].text).not.toContain("[RENAMED]")
   })
 })
