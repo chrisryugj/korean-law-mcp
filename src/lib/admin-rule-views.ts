@@ -8,6 +8,7 @@
 
 import { SimpleCache } from "./cache.js"
 import { MAX_RESPONSE_SIZE } from "./schemas.js"
+import { requestContext } from "./session-state.js"
 import { parseAdminRuleArticles, type ParsedAdminRule, type AdminRuleArticle } from "./admin-rule-articles.js"
 import { findArticle, normalizeChapter, structLabel } from "./admin-rule-jo.js"
 import { keywordView, splitSections, type ExtraBlock } from "./admin-rule-keyword.js"
@@ -114,6 +115,14 @@ function chapterView(parsed: ParsedAdminRule, chapter: string): string {
   return text
 }
 
+/**
+ * 이 요청의 응답 문자 한도: tool-registry 최종 게이트가 자르는 값(MCP_MAX_TOOL_RESPONSE_CHARS — 요청 예산에 같은
+ * 값이 실린다)과 도구 안 절단 상한(MAX_RESPONSE_SIZE) 중 작은 쪽
+ */
+function responseCharLimit(): number {
+  return Math.min(MAX_RESPONSE_SIZE, requestContext.getStore()?.budget?.limits.maxToolResponseChars ?? MAX_RESPONSE_SIZE)
+}
+
 export interface PageResult { text: string, page: number, totalPages: number }
 
 /** 전문을 라인 경계에서 자른 비중첩 청크로 페이징 */
@@ -137,10 +146,10 @@ export function paginateFullText(fullText: string, page: number, chunkSize = 450
 
 /**
  * 부분 조회 본문 생성 — 호출부는 규칙명·공포일 헤더를 앞에 붙인다.
- * extras: 부칙·별표 블록 (keyword 가 조문에서 못 찾으면 이어 찾는다)
+ * extras: 부칙·별표 블록 (keyword 가 조문에서 못 찾으면 이어 찾는다) / headerChars: 호출부 머리말 길이 (page 크기 산정)
  */
 export function buildPartialBody(
-  body: string, fullText: string, params: PartialParams, opts: { extras?: ExtraBlock[] } = {},
+  body: string, fullText: string, params: PartialParams, opts: { extras?: ExtraBlock[], headerChars?: number } = {},
 ): { label: string, text: string, note?: string } {
   const { mode, ignored } = pickPartialMode(params)
   const note = ignored.length ? `※ 복수 파라미터 중 우선순위에 따라 '${mode}'만 적용했습니다 (무시: ${ignored.join(", ")}).` : undefined
@@ -153,7 +162,10 @@ export function buildPartialBody(
     case "keyword":
       return { label: `본문 검색: ${params.keyword}`, text: keywordView(parsed, params.keyword!, params.max_results || 10, body, opts.extras), note }
     case "page": {
-      const r = paginateFullText(fullText, params.page || 1)
+      // 페이지 크기 = 실제 응답 한도 − 머리말 − 라벨·다음 안내 몫(200). 4.5만 고정이면 한도를 3만으로 낮춘 배포에서
+      // page 1 이 잘리고 page 2 는 4.5만 자부터라 그 사이를 읽을 길이 없었다. page 는 최하위 우선순위라 무시 안내가 붙지 않는다
+      const size = Math.max(500, responseCharLimit() - (opts.headerChars ?? 0) - 200)
+      const r = paginateFullText(fullText, params.page || 1, size)
       const tail = r.page < r.totalPages ? `\n\n▶ 다음: page:${r.page + 1}` : ""
       return { label: `페이지 ${r.page}/${r.totalPages}`, text: r.text + tail, note }
     }

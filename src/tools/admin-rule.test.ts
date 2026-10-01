@@ -3,7 +3,8 @@ import { searchAdminRule, getAdminRule, compareAdminRuleOldNew } from "./admin-r
 import { extractDetailIds } from "./search-detail-chain.js"
 import type { LawApiClient } from "../lib/api-client.js"
 import { INLINE_IMAGE_MARK } from "../lib/image-only-body.js"
-import { ExecutionLimitError } from "../lib/execution-limits.js"
+import { ExecutionLimitError, RequestExecutionBudget, DEFAULT_EXECUTION_LIMITS } from "../lib/execution-limits.js"
+import { requestContext } from "../lib/session-state.js"
 
 // 실측 응답 축약 (#72).
 // lawService.do?target=admrul&ID= 가 받는 값은 '행정규칙일련번호'(13자리)다.
@@ -250,6 +251,25 @@ describe("get_admin_rule — 부분 조회 (T1)", () => {
     const b = await getAdminRule(detailStub(withAnnex), { id: "2100000285140", keyword: "외국환전문요원" })
     expect(b.isError).toBeFalsy()
     expect(b.content[0].text).toContain("[외국환업무등록신청서]")
+  })
+
+  it("응답 한도(MCP_MAX_TOOL_RESPONSE_CHARS)를 낮춰도 페이지가 잘리지 않고 사이에 빠지는 구간이 없다", async () => {
+    // 감사 실측: 한도 3만이면 page 1 이 29,983자에서 잘리고 page 2 는 4.5만 자부터라 약 1.5만 자를 읽을 길이 없었다
+    const big = Array.from({ length: 600 }, (_, i) => `제${i + 1}조(조문${i + 1}) ${"외국환 거래의 신고 절차는 다음과 같다.".repeat(3)}`).join("\n")
+    const xml = FX_RULE_XML.replace(HYPHEN_BLOB, big).replace(/<부칙공포일자>.*<\/부칙내용>/su, "")
+    const limit = 8000
+    const budget = new RequestExecutionBudget({ ...DEFAULT_EXECUTION_LIMITS, maxToolResponseChars: limit })
+    const read = (page: number) => requestContext.run({ budget }, () => getAdminRule(detailStub(xml), { id: "2100000285140", page }))
+    const first = (await read(1)).content[0].text
+    const total = Number(/페이지 1\/(\d+)/u.exec(first)![1])
+    const bodies: string[] = []
+    for (let p = 1; p <= total; p++) {
+      const text = (await read(p)).content[0].text
+      expect(text.length).toBeLessThanOrEqual(limit)
+      expect(text).not.toContain("잘렸습니다")
+      bodies.push(text.slice(text.indexOf(`[페이지 ${p}/${total}]\n\n`) + `[페이지 ${p}/${total}]\n\n`.length).replace(/\n\n▶ 다음: page:\d+$/u, ""))
+    }
+    expect(bodies.join("")).toBe(`${big}\n`)
   })
 
   it("파라미터 없는 전문 조회는 종전 동작 그대로다 (AC#9 회귀)", async () => {

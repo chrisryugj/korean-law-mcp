@@ -347,7 +347,7 @@ export async function getAdminRule(
     // 부분 조회 (jo > chapter > keyword > page) — 기존 전문 조회 동작은 그대로 유지
     const { mode } = pickPartialMode(input)
     if (mode) {
-      const view = buildPartialBody(articlesText, fullBody, input, { extras })
+      const view = buildPartialBody(articlesText, fullBody, input, { extras, headerChars: resultText.length })
       let out = resultText + `[${view.label}]\n`
       if (view.note) out += `${view.note}\n`
       out += `\n${view.text}`
