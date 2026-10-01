@@ -1,6 +1,7 @@
 /** Bounded, cancellable readers for upstream Fetch responses. */
 
 import { getRequestSignal, requestCancelledError, requestContext, throwIfRequestCancelled } from "./session-state.js"
+import { withResponseContext } from "./response-body-context.js"
 
 function contentLength(response: Response): number | undefined {
   const raw = response.headers.get("content-length")
@@ -84,7 +85,16 @@ async function readChunk(
  * using a reader is what lets cancellation and limits stop work in flight.
  */
 export async function readResponseBytes(response: Response): Promise<Uint8Array> {
-  throwIfRequestCancelled()
+  return withResponseContext(response, () => readBoundedResponseBytes(response))
+}
+
+async function readBoundedResponseBytes(response: Response): Promise<Uint8Array> {
+  try {
+    throwIfRequestCancelled()
+  } catch (error) {
+    abandonBody(response)
+    throw error
+  }
   const budget = requestContext.getStore()?.budget
   const declaredSize = contentLength(response)
   if (budget && declaredSize !== undefined) {

@@ -19,6 +19,7 @@ import { extractCaseNumbers, fieldHasExactCase } from "../lib/case-citation.js"
 import { extractHolding, scanTreatment, fieldText } from "../lib/precedent-body.js"
 import { rethrowIfFatal } from "../lib/fatal-errors.js"
 import type { ToolResponse } from "../lib/types.js"
+import { getPrecedentRecord } from "./precedents.js"
 
 export const CiteCheckSchema = z.object({
   caseNumber: z.string().describe("사건번호 (예: '2013다61381', '대법원 2018.10.30. 선고 2013다61381'처럼 문장 포함 가능)"),
@@ -43,15 +44,7 @@ function isEnBancItem(item: PrecedentItem): boolean {
 
 async function fetchPrecedentDetail(apiClient: LawApiClient, id: string, apiKey?: string): Promise<Record<string, unknown> | null> {
   try {
-    const text = await apiClient.fetchApi({
-      endpoint: "lawService.do",
-      target: "prec",
-      type: "JSON",
-      extraParams: { ID: id },
-      apiKey,
-    })
-    const json = JSON.parse(text)
-    return json?.PrecService || json || null
+    return await getPrecedentRecord(apiClient, { id, apiKey })
   } catch (error) {
     // 예산 소진·요청 취소는 "본문 없음"이 아니다 (2026-09-23 리뷰 B#11). 그 밖의 실패(null)는
     // 호출부가 "스캔 못 함"으로 밝힌다: 조용히 빠지면 판정이 ✅ "계속 인용 추정"으로 나간다.
@@ -92,7 +85,7 @@ export async function citeCheck(
     })
     const targetParsed = parsePrecedentXML(targetXml)
     // 동일 사건번호 정확 매칭 우선, 대법원 우선
-    const exact = targetParsed.items.filter(i => (i.사건번호 || "").replace(/\s/g, "").includes(caseNo))
+    const exact = targetParsed.items.filter(i => fieldHasExactCase(i.사건번호 || "", caseNo))
     const pool = exact.length > 0 ? exact : targetParsed.items
     const target = pool.find(i => /대법원/.test(i.법원명 || "")) || pool[0]
 
@@ -103,16 +96,28 @@ export async function citeCheck(
       ])
     }
 
+    const resolvedCaseNo = fieldHasExactCase(target.사건번호 || "", caseNo)
+      ? caseNo
+      : extractCaseNumbers(target.사건번호 || "").find(c => c.startsWith(caseNo)) ||
+        extractCaseNumbers(target.사건번호 || "")[0] || caseNo
+    const resolvedCitingP = resolvedCaseNo === caseNo ? citingP : apiClient.fetchApi({
+      endpoint: "lawSearch.do",
+      target: "prec",
+      extraParams: { search: "2", query: resolvedCaseNo, display: "50" },
+      apiKey: input.apiKey,
+    })
+
     // 2~3단계 병렬: 대상 상세(참조판례) + 후속 인용 역추적(위에서 출발)
     const [targetDetail, citingXml] = await Promise.all([
       fetchPrecedentDetail(apiClient, target.판례일련번호, input.apiKey),
-      citingP,
+      resolvedCitingP,
     ])
 
     const citingParsed = parsePrecedentXML(citingXml)
     const citing: CitingCase[] = citingParsed.items
       .filter(i => i.판례일련번호 !== target.판례일련번호)
-      .filter(i => (i.사건번호 || "").replace(/\s/g, "") !== caseNo)
+      .filter(i => !fieldHasExactCase(i.사건번호 || "", resolvedCaseNo))
+      .filter(i => !toYmd(target.선고일자) || !toYmd(i.선고일자) || toYmd(i.선고일자) >= toYmd(target.선고일자))
       .map(i => ({ ...i, isEnBanc: isEnBancItem(i) }))
       .sort((a, b) => toYmd(b.선고일자).localeCompare(toYmd(a.선고일자)))
 
@@ -140,7 +145,7 @@ export async function citeCheck(
           scanFailed.push(prioritized[idx])
           return
         }
-        const { changeSignals, context } = scanTreatment(body, caseNo)
+        const { changeSignals, context } = scanTreatment(body, resolvedCaseNo)
         scanResults.push({ item: prioritized[idx], signals: changeSignals, context })
       })
     }
@@ -153,12 +158,16 @@ export async function citeCheck(
     let verdict: string
     if (changed.length > 0) {
       verdict = `❌ 변경·폐기 신호 감지 — ${changed.map(r => `${r.item.사건번호}(${r.signals.join(", ")})`).join("; ")}\n   ⚠️ 이 판례를 현재 법리로 인용하기 전에 반드시 해당 후속 판결 전문을 확인하세요.`
+    } else if (citing.length > 0 && !input.deepScan) {
+      verdict = `⚠️ 후속 인용 ${citing.length}건, 정밀 스캔 미실행 — 변경·폐기 여부 미확정. get_decision_text 로 후속 판결 전문을 확인하세요.`
     } else if (enBancUnscanned.length > 0) {
       // 스캔 안 된 전합 후속이 남아있을 때만 경고 (판례 변경은 전원합의체에서만 가능, 법원조직법 제7조)
       verdict = `⚠️ 미스캔 전원합의체 후속 판결 ${enBancUnscanned.length}건 존재 — 법리 변경 여부 본문 확인 권장 (${enBancUnscanned.slice(0, 3).map(c => c.사건번호).join(", ")})`
     } else if (citing.length > 0 && scanFailed.length > 0) {
       // 스캔을 못 한 건이 남았는데 ✅ 를 주면 조회 실패가 "변경 신호 없음"으로 둔갑한다 (B#11)
       verdict = `⚠️ 후속 인용 ${citing.length}건, 정밀 스캔 대상 ${scanResults.length + scanFailed.length}건 중 ${scanFailed.length}건 본문 확인 불가: 변경·폐기 여부 미확정 (${scanFailed.map(c => c.사건번호).join(", ")}). get_decision_text 로 해당 판결 전문을 확인하세요.`
+    } else if (scanResults.some(r => !r.context)) {
+      verdict = `⚠️ 후속 검색 결과 중 대상 사건번호 인용 확인 불가 — 변경·폐기 여부 미확정. get_decision_text 로 해당 판결 전문을 확인하세요.`
     } else if (citing.length > 0) {
       const enBancNote = enBancCiting.length > 0 ? ` (전원합의체 ${enBancCiting.length}건 포함 정밀 스캔 완료)` : ""
       verdict = `✅ 후속 인용 ${citing.length}건, 변경·폐기 신호 미감지 — 계속 인용되는 것으로 추정${enBancNote}`
@@ -167,7 +176,7 @@ export async function citeCheck(
     }
 
     // 출력 조립
-    const refCases = extractCaseNumbers(fieldText(targetDetail?.참조판례)).filter(c => c !== caseNo)
+    const refCases = extractCaseNumbers(fieldText(targetDetail?.참조판례)).filter(c => c !== resolvedCaseNo)
     const lines: string[] = []
     lines.push(`═══ 판례 인용 추적 (Citator): ${caseNo} ═══`)
     lines.push(`대상: ${target.법원명 || ""} ${target.선고일자 || ""} 선고 ${target.사건번호 || caseNo} ${isEnBancItem(target) ? "전원합의체 " : ""}판결`)
@@ -202,7 +211,8 @@ export async function citeCheck(
         ? `▶ 본문 정밀 스캔 (${scanResults.length + scanFailed.length}건, 본문 확인 불가 ${scanFailed.length}건)`
         : `▶ 본문 정밀 스캔 (${scanResults.length}건)`)
       for (const r of scanResults) {
-        const mark = r.signals.length > 0 ? `🚨 ${r.signals.join(", ")}` : "인용 확인 (변경 문구 없음)"
+        const mark = r.signals.length > 0 ? `🚨 ${r.signals.join(", ")}` : r.context
+          ? "인용 확인 (변경 문구 없음)" : "대상 사건번호 인용 확인 불가 (본문 일치 미확인)"
         lines.push(`  - ${r.item.사건번호}: ${mark}`)
         if (r.context) lines.push(`    맥락: "…${r.context}…"`)
       }

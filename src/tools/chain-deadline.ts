@@ -73,9 +73,11 @@ export async function raceDeadline<T>(
   deadline: ChainDeadline,
   work: Promise<T>
 ): Promise<LegOutcome<T>> {
+  let onAbort: () => void = () => {}
   const timedOut = new Promise<LegOutcome<T>>(resolve => {
     if (deadline.signal.aborted) return resolve({ ok: false })
-    deadline.signal.addEventListener("abort", () => resolve({ ok: false }), { once: true })
+    onAbort = () => resolve({ ok: false })
+    deadline.signal.addEventListener("abort", onAbort, { once: true })
   })
   const settled = work.then(
     (value): LegOutcome<T> => ({ ok: true, value }),
@@ -84,7 +86,11 @@ export async function raceDeadline<T>(
       throw error
     }
   )
-  return Promise.race([settled, timedOut])
+  try {
+    return await Promise.race([settled, timedOut])
+  } finally {
+    deadline.signal.removeEventListener("abort", onAbort)
+  }
 }
 
 /** 시간 안에 못 받은 섹션 자리에 남기는 표시 — 무엇이 비었고 어떻게 받는지 밝힌다 */

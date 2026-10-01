@@ -3,6 +3,7 @@ import type { LawApiClient } from "../lib/api-client.js";
 import { truncateResponse } from "../lib/schemas.js";
 import { parseSearchXML, extractTag } from "../lib/xml-parser.js";
 import { formatToolError, noResultHint } from "../lib/errors.js";
+import { decisionFields } from "../lib/decision-fields.js";
 
 // Common schema for committee decision search (query optional)
 const baseSearchSchemaOptionalQuery = {
@@ -242,7 +243,7 @@ async function getCommitteeDecisionText(
       throw new Error(`${committeeName}을(를) 찾을 수 없거나 응답 형식이 올바르지 않습니다.`);
     }
 
-    const decision = data[serviceKey];
+    const decision = decisionFields(data[serviceKey]);
 
     let output = `=== ${decision.사건명 || committeeName} ===\n\n`;
 
@@ -305,4 +306,3 @@ function getServiceKey(target: string): string {
   };
   return mapping[target] || `${target.charAt(0).toUpperCase() + target.slice(1)}Service`;
 }
-

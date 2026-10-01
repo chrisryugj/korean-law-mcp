@@ -72,7 +72,7 @@ export function scanTreatment(body: string, targetCaseNo: string, window = 250):
 } {
   const clean = cleanHtml(body).replace(/\s+/g, " ")
   // 사건번호는 본문에서 "2013다61381" 또는 "2013 다 61381" 형태
-  const targetSrc = targetCaseNo.replace(/(\d)([가-힣]+)(\d)/, "$1\\s*$2\\s*$3")
+  const targetSrc = `(?<!\\d)${escapeRegex(targetCaseNo).replace(/(\d)([가-힣]+)(\d)/, "$1\\s*$2\\s*$3")}(?!\\d)`
   const refIndices: number[] = []
   let m: RegExpExecArray | null
 

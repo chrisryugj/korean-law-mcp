@@ -51,7 +51,7 @@ async function renderLawText(apiClient: LawApiClient, input: GetLawTextInput, re
   {
     // 조문 번호가 한글이면 JO 코드로 변환
     let joCode = input.jo
-    if (joCode && /제\d+조/.test(joCode)) {
+    if (joCode && !/^\d{6}$/.test(joCode)) {
       try {
         joCode = buildJO(joCode)
       } catch (e) {
@@ -195,6 +195,15 @@ async function renderLawText(apiClient: LawApiClient, input: GetLawTextInput, re
       articleUnits = rawUnits
     } else if (rawUnits && typeof rawUnits === 'object') {
       articleUnits = [rawUnits]  // 단일 객체를 배열로 변환
+    }
+
+    // JO may be ignored upstream. Never render an unrelated article as the requested one.
+    if (joCode) {
+      const number = parseInt(joCode.slice(0, 4), 10)
+      const branch = parseInt(joCode.slice(4, 6), 10)
+      articleUnits = articleUnits.filter(unit => unit?.조문여부 === "조문"
+        && parseInt(String(unit.조문번호 ?? ""), 10) === number
+        && (parseInt(String(unit.조문가지번호 ?? "0"), 10) || 0) === branch)
     }
 
     if (articleUnits.length === 0) {

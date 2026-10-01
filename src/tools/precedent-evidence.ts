@@ -1,6 +1,7 @@
 import type { LawApiClient } from "../lib/api-client.js"
 import { MAX_RESPONSE_SIZE, truncateResponse } from "../lib/schemas.js"
 import { getPrecedentText } from "./precedents.js"
+import { rethrowIfFatal } from "../lib/fatal-errors.js"
 import type {
   PrecedentHit,
   PrecedentSearchValidationInput,
@@ -108,6 +109,7 @@ async function fetchOnePrecedentDetail(
       isError: false,
     }
   } catch (error) {
+    rethrowIfFatal(error)
     const message = error instanceof Error ? error.message : String(error)
     return {
       hit,
@@ -147,10 +149,9 @@ export async function validatePrecedentSearchResult(
   const terms = validationTerms(input)
   if (groups.length === 0 && terms.length === 0) return true
 
-  const listText = input.hits
+  const listTexts = input.hits
     .map(hit => [hit.title, hit.caseNumber, hit.court, hit.date, hit.decisionType].filter(Boolean).join(" "))
-    .join("\n")
-  if (groups.length > 0 && containsEveryTermGroup(listText, groups)) return true
+  if (groups.length > 0 && listTexts.some(text => containsEveryTermGroup(text, groups))) return true
   if (groups.length > 0) {
     const evidence = await fetchPrecedentEvidence(
       apiClient,
@@ -166,7 +167,7 @@ export async function validatePrecedentSearchResult(
 
     return evidence.items.some(item => !item.isError && containsEveryTermGroup(item.text, groups))
   }
-  if (containsAnyTerm(listText, terms)) return true
+  if (listTexts.some(text => containsAnyTerm(text, terms))) return true
 
   const evidence = await fetchPrecedentEvidence(
     apiClient,

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import { getArticleHistory, ArticleHistorySchema } from "./article-history.js"
 import type { LawApiClient } from "../lib/api-client.js"
 
@@ -28,6 +28,33 @@ function recordingClient() {
 
 const run = (client: LawApiClient, jo: string) =>
   getArticleHistory(client, ArticleHistorySchema.parse({ lawId: "001556", jo }))
+
+describe("article history law identity", () => {
+  const item = (id: string, name: string) => `<law><법령ID>${id}</법령ID><법령명한글>${name}</법령명한글></law>`
+
+  it("does not fetch another law's history when only partial title matches exist", async () => {
+    const getHistory = vi.fn(async () => JO_CODE_XML)
+    const client = {
+      searchLaw: async () => `<LawSearch>${item("1", "관세법 시행령")}${item("2", "관세법 시행규칙")}</LawSearch>`,
+      getArticleHistory: getHistory,
+    } as unknown as LawApiClient
+    const response = await getArticleHistory(client, ArticleHistorySchema.parse({ lawName: "관세법", jo: "제38조" }))
+    expect(response.isError).toBe(true)
+    expect(response.content[0].text).toContain("정확히 일치")
+    expect(getHistory).not.toHaveBeenCalled()
+  })
+
+  it("selects the exact title even when a lower statute sorts first", async () => {
+    const getHistory = vi.fn(async () => JO_CODE_XML)
+    const client = {
+      searchLaw: async () => `<LawSearch>${item("1", "관세법 시행령")}${item("001556", "관세법")}</LawSearch>`,
+      getArticleHistory: getHistory,
+    } as unknown as LawApiClient
+    const response = await getArticleHistory(client, ArticleHistorySchema.parse({ lawName: "관세법", jo: "제38조" }))
+    expect(response.isError).toBeFalsy()
+    expect(getHistory.mock.calls[0][0]).toMatchObject({ lawId: "001556" })
+  })
+})
 
 describe("getArticleHistory: jo는 6자리 JO 코드로 보낸다 (D5)", () => {
   it("스키마 예시 형식 '제38조'를 003800으로 바꿔 보내고 실제 이력을 싣는다", async () => {

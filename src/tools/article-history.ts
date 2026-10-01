@@ -60,12 +60,10 @@ export async function getArticleHistory(
       const nodes = doc.getElementsByTagName("law")
       const queryKey = normalizeAliasKey(input.lawName)
       const canonicalKey = normalizeAliasKey(resolveLawAlias(input.lawName).canonical)
-      let firstId = ""
       let exactId = ""
       for (let i = 0; i < nodes.length; i++) {
         const id = nodes[i].getElementsByTagName("법령ID")[0]?.textContent || ""
         if (!id) continue
-        if (!firstId) firstId = id
         const nameKey = normalizeAliasKey(nodes[i].getElementsByTagName("법령명한글")[0]?.textContent || "")
         const abbrKey = normalizeAliasKey(nodes[i].getElementsByTagName("법령약칭명")[0]?.textContent || "")
         if (nameKey === queryKey || nameKey === canonicalKey || (abbrKey && (abbrKey === queryKey || abbrKey === canonicalKey))) {
@@ -73,12 +71,12 @@ export async function getArticleHistory(
           break
         }
       }
-      lawId = exactId || firstId
+      lawId = exactId
       if (!lawId) {
         return {
           content: [{
             type: "text",
-            text: `[NOT_FOUND] 법령 '${input.lawName}'을(를) 찾을 수 없습니다.\n⚠️ LLM은 개정 이력을 추측하지 마세요. 법령명을 확인하거나 search_law로 먼저 검색하세요.`
+            text: `[NOT_FOUND] 법령 '${input.lawName}'과(와) 정확히 일치하는 법령을 찾을 수 없습니다.\n⚠️ LLM은 개정 이력을 추측하지 마세요. search_law로 법령을 확인하고 법령ID(lawId)로 다시 조회하세요.`
           }],
           isError: true
         }

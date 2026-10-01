@@ -8,7 +8,8 @@ import { followLawAntibot } from "./law-antibot.js"
 import { ExecutionLimitError } from "./execution-limits.js"
 import { classifyOkBody, MISS_CONFIRM_DELAY_MS, UpstreamRecordMissingError } from "./upstream-miss.js"
 import { BODY_IDLE_TIMEOUT_MS, UpstreamBodyStallError } from "./response-body.js"
-import { combineAbortSignals, getRequestSignal, requestCancelledError, requestContext, throwIfRequestCancelled } from "./session-state.js"
+import { combineAbortSignals, getRequestSignal, requestCancelledError, requestContext, runWithRequestContext, throwIfRequestCancelled } from "./session-state.js"
+import { bindResponseContext } from "./response-body-context.js"
 
 /**
  * URL에서 민감 정보(API 키) 마스킹 — 에러 메시지/로그 노출 방지.
@@ -182,22 +183,20 @@ export async function fetchWithRetry(
         signal,
       })
 
-      clearTimeout(timeoutId)
-
       // Success or non-retryable error
       if (response.ok || !retryOn.includes(response.status)) {
         // law.go.kr JS 안티봇 페이지(클라우드 IP에서 location.assign 리다이렉트) 우회.
         // 로컬/등록 IP에서는 no-op. Fly 등 클라우드 배포에서 UA/Referer로 안 뚫릴 때의 방어층.
         if (response.ok && isLawGoKrHost(url)) {
           try {
-            const bypassed = await followLawAntibot(response, url, headers, attemptTimeout)
+            const bypassed = await runWithRequestContext({ signal }, () => followLawAntibot(response, url, headers, attemptTimeout))
             if (bypassed) response = bypassed
           } catch (error) {
             // Cancellation and budget exhaustion must stop the request rather
             // than silently falling through to more work.
             // 본문 정지도 원본으로 진행하지 않는다: 같은 본문이라 판정 프로브에서 다시 20초를 멈춘다
-            if (error instanceof ExecutionLimitError || error instanceof UpstreamBodyStallError || getRequestSignal()?.aborted || externalSignal?.aborted) {
-              await response.body?.cancel().catch(() => {})
+            if (error instanceof ExecutionLimitError || error instanceof UpstreamBodyStallError || signal?.aborted) {
+              void response.body?.cancel().catch(() => {})
               throw error
             }
             // 우회 실패 시 원본 응답으로 진행
@@ -207,7 +206,7 @@ export async function fetchWithRetry(
         // 터지기 때문이다. 검색 계열에선 점검·과부하로 보고 재시도하고, 단건 조회에선
         // 아래 `singleRecordLookup` 분기가 확인 1회 뒤 미스로 확정한다.
         if (response.ok && attempt < retries) {
-          const bad = await classifyOkBody(response, externalSignal)
+          const bad = await runWithRequestContext({ signal }, () => classifyOkBody(response, externalSignal))
           if (bad === "empty" || (bad === "html" && !allowHtmlBody)) {
             // 단건 조회에서 이 본문은 대개 "그 레코드 없음"이다. 본문만으로는 미스와
             // 일시 장애를 가를 수 없으므로 짧게 한 번 더 확인하고, 같은 답이면 사다리를
@@ -215,7 +214,7 @@ export async function fetchWithRetry(
             // 판정 기준은 시도 순번이 아니라 "비정상 본문을 이미 봤는가"다 — 503·네트워크
             // 오류 뒤의 첫 빈 본문(관측 1회)이 미스로 확정되면 안 된다.
             if (singleRecordLookup && sawBadBody) {
-              await response.body?.cancel().catch(() => {})
+              void response.body?.cancel().catch(() => {})
               throw new UpstreamRecordMissingError(maskSensitiveUrl(url), bad)
             }
             sawBadBody = true
@@ -225,29 +224,29 @@ export async function fetchWithRetry(
             const delay = singleRecordLookup ? MISS_CONFIRM_DELAY_MS : getRetryDelay(response, retryDelay, attempt)
             // 다시 물을 시간이 없으면 이 응답으로 끝낸다. 호출부의 빈 본문/HTML 가드가 표면화한다.
             // classifyOkBody 는 복제본만 읽으므로 원본 본문은 그대로 남아 있다.
-            if (!hasTimeFor(delay)) return response
-            await response.body?.cancel().catch(() => {})
+            if (!hasTimeFor(delay)) return bindResponseContext(response, externalSignal, deadlineAt)
+            void response.body?.cancel().catch(() => {})
             await sleep(delay, combineAbortSignals(externalSignal, getRequestSignal()))
             continue
           }
         }
-        return response
+        return bindResponseContext(response, externalSignal, deadlineAt)
       }
 
       // Retryable error - check if we have retries left
       if (attempt < retries) {
         const delay = getRetryDelay(response, retryDelay, attempt)
-        if (!hasTimeFor(delay)) return response
+        if (!hasTimeFor(delay)) return bindResponseContext(response, externalSignal, deadlineAt)
         // This response will never be returned to a caller. Dispose its body
         // before backoff so the connection can be reused, and let either MCP
         // item cancellation or HTTP disconnect interrupt the wait.
-        await response.body?.cancel().catch(() => {})
+        void response.body?.cancel().catch(() => {})
         await sleep(delay, combineAbortSignals(externalSignal, getRequestSignal()))
         continue
       }
 
       // No retries left
-      return response
+      return bindResponseContext(response, externalSignal, deadlineAt)
     } catch (error) {
       clearTimeout(timeoutId)
 
@@ -286,6 +285,8 @@ export async function fetchWithRetry(
         }
         continue
       }
+    } finally {
+      clearTimeout(timeoutId)
     }
   }
 

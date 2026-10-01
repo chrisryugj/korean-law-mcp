@@ -3,6 +3,7 @@ import type { LawApiClient } from "../lib/api-client.js"
 import { parseInterpretationXML } from "../lib/xml-parser.js"
 import { truncateResponse, optionalDateSchema } from "../lib/schemas.js"
 import { formatToolError, noResultHint, LawApiError, ErrorCodes } from "../lib/errors.js"
+import { decisionFields } from "../lib/decision-fields.js"
 
 export const searchInterpretationsSchema = z.object({
   query: z.string().describe("Search keyword (e.g., '자동차', '근로기준법')"),
@@ -125,7 +126,7 @@ export async function getInterpretationText(
       throw new Error("Legal interpretation not found or invalid response format");
     }
 
-    const expc = data.ExpcService;
+    const expc = decisionFields(data.ExpcService);
     // API returns fields directly in ExpcService, not nested
     // 해석례번호는 검색 목록과 같은 안건번호(예: 23-0984)를 싣는다. 종전엔 일련번호(338575)를 같은 라벨로 찍어
     // 인용 번호가 갈렸고, ExpcService에 없는 관계법령 자리에 이유 본문을 넣었다 (2026-09-23 리뷰 D11, 실측 키).
@@ -174,4 +175,3 @@ export async function getInterpretationText(
     return formatToolError(error, "get_interpretation_text");
   }
 }
-

@@ -65,8 +65,8 @@ interface FetchResult {
 /** 법령 API JSON 응답의 조문단위 구조 */
 interface ArticleUnit {
   조문여부?: string
-  조문번호?: string
-  조문가지번호?: string
+  조문번호?: string | number
+  조문가지번호?: string | number
   조문제목?: string
   조문내용?: unknown
   항?: unknown[]
@@ -96,6 +96,7 @@ const batchLawCache = new SimpleCache(12)
 async function fetchArticlesForLaw(
   apiClient: LawApiClient,
   lawReq: LawEntry,
+  documents: Map<string, Promise<LawResponse>>,
   efYd?: string,
   apiKey?: string
 ): Promise<FetchResult> {
@@ -108,15 +109,18 @@ async function fetchArticlesForLaw(
   if (cached) {
     fullLawData = cached
   } else {
-    const jsonText = await apiClient.getLawText({
-      mst: lawReq.mst,
-      lawId: lawReq.lawId,
-      efYd: efYd,
-      apiKey: apiKey,
-    })
-    fullLawData = JSON.parse(jsonText) as LawResponse
-    // lawId 만 준 현행 조회는 시행일을 넘기면 낡으므로 1시간(law-text 와 같은 기준)
-    batchLawCache.set(cacheKey, fullLawData, lawReq.mst || efYd ? 24 * 60 * 60 * 1000 : 60 * 60 * 1000)
+    let pending = documents.get(cacheKey)
+    if (!pending) {
+      pending = apiClient.getLawText({ mst: lawReq.mst, lawId: lawReq.lawId, efYd, apiKey }).then(jsonText => {
+        const data = JSON.parse(jsonText) as LawResponse
+        throwIfRequestCancelled()
+        // lawId 만 준 현행 조회는 시행일을 넘기면 낡으므로 1시간(law-text 와 같은 기준)
+        batchLawCache.set(cacheKey, data, lawReq.mst || efYd ? 24 * 60 * 60 * 1000 : 60 * 60 * 1000)
+        return data
+      }).finally(() => documents.delete(cacheKey))
+      documents.set(cacheKey, pending)
+    }
+    fullLawData = await pending
   }
 
   const lawData = fullLawData?.법령
@@ -160,15 +164,15 @@ async function fetchArticlesForLaw(
     throwIfRequestCancelled()
     if (unit.조문여부 !== "조문") continue
 
-    const joNum = unit.조문번호 || ""
-    const joBranch = unit.조문가지번호 || ""
+    const joNum = String(unit.조문번호 ?? "")
+    const joBranch = String(unit.조문가지번호 ?? "")
     const unitJoCode = joNum.padStart(4, '0') + (joBranch || '00').padStart(2, '0')
 
     if (!joCodes.has(unitJoCode)) continue
 
     foundCount++
 
-    const formatted = formatArticleUnit(unit)
+    const formatted = formatArticleUnit({ ...unit, 조문번호: joNum, 조문가지번호: joBranch })
     if (formatted) {
       if (formatted.header) resultText += `${formatted.header}\n`
       if (formatted.body) resultText += `${formatted.body}\n\n`
@@ -224,6 +228,8 @@ export async function getBatchArticles(
 
     // 동시성 제한 병렬 처리 (최대 4개씩)
     const CONCURRENCY = 4
+    // Whole-law reads for repeated entries share work only within this invocation.
+    const documents = new Map<string, Promise<LawResponse>>()
     const fetchResults: { index: number; result?: FetchResult; error?: string }[] = []
 
     for (let i = 0; i < validRequests.length; i += CONCURRENCY) {
@@ -231,10 +237,11 @@ export async function getBatchArticles(
       const chunk = validRequests.slice(i, i + CONCURRENCY)
       const settled = await Promise.allSettled(
         chunk.map(async ({ index, lawReq }) => {
-          const result = await fetchArticlesForLaw(apiClient, lawReq, input.efYd, input.apiKey)
+          const result = await fetchArticlesForLaw(apiClient, lawReq, documents, input.efYd, input.apiKey)
           return { index, result }
         })
       )
+      throwIfRequestCancelled()
       for (let j = 0; j < settled.length; j++) {
         const s = settled[j]
         if (s.status === 'fulfilled') {
