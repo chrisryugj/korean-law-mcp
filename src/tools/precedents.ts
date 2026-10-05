@@ -22,12 +22,12 @@ import {
   densifyPrecedentRefs,
   stripRepeatedSummary,
 } from "../lib/decision-compact.js"
-import { searchPrecedentsStructured, type StructuredPrecedentSearchResult } from "./precedent-search-core.js"
+import { precedentSearchScope, searchPrecedentsStructured, type StructuredPrecedentSearchResult } from "./precedent-search-core.js"
 
 export const searchPrecedentsSchema = z.object({
   query: z.string().optional().describe("검색 키워드 (예: '자동차', '담보권')"),
-  search: z.number().int().min(1).max(2).optional()
-    .describe("검색범위: 1=판례명 검색(기본), 2=본문검색"),
+  search: z.union([z.number().int().min(1).max(2), z.literal("both")]).optional()
+    .describe("검색범위: 1=판례명 검색(기본), 2=본문검색, \"both\"=판례명+본문 합침(법리·사실관계·유사판례 탐색용, 판례ID 중복 제거)"),
   court: z.string().optional().describe("법원명 필터 (예: '대법원', '서울고등법원')"),
   caseNumber: z.string().optional().describe("사건번호 (예: '2009느합133')"),
   display: z.number().min(1).max(100).default(20).describe("결과 수 (기본:20, 최대:100)"),
@@ -69,7 +69,12 @@ export function renderPrecedentSearchResult(result: StructuredPrecedentSearchRes
   const args = result.originalArgs
   if (result.hits.length === 0) return renderNoPrecedentResult(result)
 
-  let output = `판례 검색 결과 (총 ${result.totalCount}건, ${result.page}페이지)`
+  // both 로 두 검색이 다 돈 경우: attempts[0]=제목, [1]=본문 (fallback 으로 넘어갔으면 일반 렌더)
+  const both = precedentSearchScope(args) === "both" && !result.fallbackUsed && result.attempts.length === 2
+  const scopeCount = (i: number) => (args.fromDate || args.toDate) ? result.attempts[i].hitCount : result.attempts[i].totalCount
+  let output = both
+    ? `판례 검색 결과 (제목검색 ${scopeCount(0)}건 · 본문검색 ${scopeCount(1)}건, 중복 제외 ${result.hits.length}건 표시, ${result.page}페이지)`
+    : `판례 검색 결과 (총 ${result.totalCount}건, ${result.page}페이지)`
   if (args.fromDate || args.toDate) {
     output += ` [기간: ${args.fromDate || "시작"} ~ ${args.toDate || "종료"}]`
   }
@@ -83,6 +88,9 @@ export function renderPrecedentSearchResult(result: StructuredPrecedentSearchRes
     output += `  판결유형: ${hit.decisionType || "N/A"}\n`
     if (hit.outOfRequestedDateRange) {
       output += `  범위: 요청 기간 밖 fallback 결과\n`
+    }
+    if (both) {
+      output += `  적중: ${hit.searchMode === 2 ? "본문검색" : "제목검색"}\n`
     }
     output += `\n`
   }
@@ -99,6 +107,13 @@ export function renderPrecedentSearchResult(result: StructuredPrecedentSearchRes
   // 목록에 없어서 이름 그대로 부르면 클라이언트가 막는다.
   if (result.hits[0]?.id) {
     output += `💡 다음: get_decision_text(domain="precedent", id="${result.hits[0].id}") 로 판결문 전문. full=true 로 축약 해제. 유사판례 원하면 execute_tool(tool_name="find_similar_precedents", params={query:"…"}) 사용.\n`
+  }
+
+  // 제목에 우연히 맞은 몇 건으로 끝났을 수 있다 (#167). 법리 탐색이면 본문검색 쪽이 훨씬 넓다.
+  const attempt = result.successfulAttempt
+  if (args.query && !result.fallbackUsed && attempt?.reason === "original_query" && attempt.search === 1 &&
+      precedentSearchScope(args) === 1 && result.totalCount <= 3) {
+    output += `💡 제목검색 적중이 ${result.totalCount}건뿐입니다. 법리·사실관계·유사판례 탐색이면 본문검색도 보세요: search_decisions(domain="precedent", query="${args.query}", options={search:"both"}) (본문만은 search:2).\n`
   }
 
   return output

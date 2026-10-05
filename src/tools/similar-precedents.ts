@@ -110,7 +110,7 @@ function rankByKeywordSimilarity(searchResultText: string, keywords: string[], m
 
   for (const line of lines) {
     // 검색 보정·후속 호출 안내는 판례 메타데이터가 아니다. 마지막 항목의 점수를 부풀리지 않는다.
-    if (/^(?:검색 보정:|💡 다음:)/.test(line)) break
+    if (/^(?:검색 보정:|💡)/.test(line)) break
     // searchPrecedents 출력 형식: "[일련번호] 판례명" 또는 "N. " 형식
     if (line.match(/^\[\d+\]\s/) || line.match(/^\d+\.\s/)) {
       if (currentPrecedent) {

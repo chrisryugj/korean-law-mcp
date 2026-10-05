@@ -139,7 +139,7 @@ export const SearchDecisionsSchema = z.object({
   page: z.number().min(1).default(1).optional().describe("페이지 (기본1)"),
   sort: z.string().optional().describe("정렬: lasc/ldes/dasc/ddes/nasc/ndes"),
   options: z.record(z.string(), z.unknown()).optional().describe(
-    "도메인별 옵션. prec:{court,caseNumber,fromDate,toDate} tax_tribunal:{cls,gana,dpaYd,rslYd} customs:{inq,rpl,gana,explYd} constitutional:{caseNumber} interpretation:{fromDate,toDate} treaty:{cls,natCd,eftYd,concYd}"
+    "도메인별 옵션. prec:{court,caseNumber,fromDate,toDate,search(1=판례명 기본·2=본문·\"both\"=판례명+본문)} tax_tribunal:{cls,gana,dpaYd,rslYd} customs:{inq,rpl,gana,explYd} constitutional:{caseNumber} interpretation:{fromDate,toDate} treaty:{cls,natCd,eftYd,concYd}"
   ),
   apiKey: z.string().optional(),
 })

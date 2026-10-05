@@ -31,6 +31,14 @@
 
 ---
 
+## v4.15.6: Precedent body-search option
+
+- Added `search="both"` for precedent search: runs title and full-text search together, dedupes by precedent ID, and labels which search matched each hit. `search_decisions(domain="precedent", options={search:"both"})`
+- When a title search ends with 3 or fewer hits, the output suggests a full-text re-search (measured: "학원강사 근로자" 1 title hit vs 70 full-text hits)
+- Fixed string `search:"2"` passed via options being treated as a title search. Default behavior unchanged. [Changelog](CHANGELOG.md), issue #167
+
+---
+
 ## v4.15.5: Retrieval and verification boundaries
 
 - Fixed missing precedent bodies, cancelled cache reads, and statute/branch boundaries in article ranges

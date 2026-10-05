@@ -110,6 +110,9 @@
 - `options.includeText`가 `true` 또는 `"true"`이면 `searchPrecedentDecisionsWithText()` 경로로 들어간다.
 - `includeText` 경로는 구조화 판례 검색 결과 뒤에 `fetchPrecedentEvidence()` 상세 증거를 붙인다.
 - `options.detailLimit`은 숫자 또는 숫자 문자열을 받을 수 있고, 실제 상세조회 개수는 `precedent-evidence`의 상한을 따른다.
+- `options.search`는 검색범위다: `1`=판례명(기본), `2`=본문, `"both"`=판례명+본문(#167). options 는 스키마 검증 없이 넘어오므로 core 의 `precedentSearchScope()`가 `"2"` 같은 문자열까지 정규화한다.
+- `"both"`는 제목검색과 본문검색을 각각 한 번씩(각 `display`건) 돌려 판례ID로 중복을 빼고 제목 적중을 앞에 둔다. 렌더는 범위별 건수와 건마다 `적중: 제목검색|본문검색`을 보인다. 사건번호만 넣은 exact 조회는 `"both"`여도 한 번으로 끝난다.
+- 기본(제목검색)이 보정 없이 3건 이하로 끝나면 렌더 끝에 `options={search:"both"}` 재검색 안내를 붙인다. 제목에 우연히 맞은 몇 건으로 법리 탐색이 끝나는 것을 막는 신호다.
 - `get_decision_text`는 여전히 `domain="precedent"`와 검색 결과 ID를 받아 `getPrecedentText()`로 상세 본문을 조회한다.
 
 ### 조문 기반 보조 도구
