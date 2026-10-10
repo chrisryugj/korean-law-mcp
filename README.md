@@ -18,6 +18,8 @@
 
 [English](./README-EN.md)
 
+**바로 쓰기:** Claude.ai 커넥터에 `https://mcp.gomdori.app/law?oc=본인키` 한 줄, Claude Code는 플러그인 두 줄 → [설치 및 사용법](#설치-및-사용법)
+
 [![국가법령정보 MCP 활용하기 — 영상 보기](./docs/video-intro.jpg)](https://youtu.be/gmkuOqIV3dc)
 
 <sub>▶ 클릭하면 유튜브에서 재생됩니다.</sub>
@@ -1108,6 +1110,20 @@ v4.4.0에서 노출 도구를 통폐합했습니다 (컨텍스트 52% 감축). �
 - [docs/API.md](docs/API.md) — 도구 레퍼런스
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 시스템 설계
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — 개발 가이드
+
+## 자주 묻는 질문
+
+**Q. Claude·ChatGPT에서 한국 법령·판례를 검색하려면?**
+이 MCP 서버를 연결합니다. Claude.ai는 커넥터 주소 `https://mcp.gomdori.app/law?oc=본인키` 하나면 되고, Claude Desktop·Cursor·Windsurf·Zed는 [설치 및 사용법](#설치-및-사용법), ChatGPT는 [연결 영상](https://youtu.be/KCFIzervxtE)을 따르세요.
+
+**Q. 무료인가요?**
+MIT 라이선스 오픈소스입니다. 필요한 법제처 Open API 인증키도 무료로 발급됩니다([0단계](#0단계-api-키-발급-무료-1분)).
+
+**Q. AI가 지어낸 조문·판례를 걸러낼 수 있나요?**
+`legal_analysis(mode="verify_citations")`가 답변 속 법령 조문과 판례 번호를 법제처 원문과 대조해 실존 여부와 내용 일치를 확인합니다. 판례가 아직 유효한지는 `mode="cite_check"`로 봅니다.
+
+**Q. 어디까지 조회되나요?**
+법령, 판례, 행정규칙, 자치법규(조례·규칙), 조약, 법령해석례(국세청 포함)와 별표·서식입니다. 과거 시점 법령과 폐지 법령의 후속 규정도 찾습니다.
 
 ## Star History
 

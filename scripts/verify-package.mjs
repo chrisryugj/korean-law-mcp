@@ -87,6 +87,11 @@ export function verifyPackageArtifacts() {
   }
   verifyExportTargets(packageJson.exports)
 
+  // MCP 레지스트리 메타(server.json)가 게시 버전·mcpName 과 어긋나면 레지스트리 등록이 거부된다
+  const serverJson = JSON.parse(readFileSync(resolve(root, "server.json"), "utf8"))
+  assert(serverJson.version === packageJson.version, `server.json version ${serverJson.version} ≠ package.json ${packageJson.version}`)
+  assert(serverJson.name === packageJson.mcpName, `server.json name ${serverJson.name} ≠ package.json mcpName ${packageJson.mcpName}`)
+
   const allowedTopLevel = new Set(["README.md", "LICENSE", "NOTICE", "package.json"])
   const files = packedFiles()
   for (const file of files) {

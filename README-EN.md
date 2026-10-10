@@ -19,6 +19,8 @@
 
 [한국어](./README.md)
 
+**Start in one line:** add `https://mcp.gomdori.app/law?oc=YOUR_KEY` as a custom connector in Claude.ai, or run `npx --ignore-scripts --omit=optional korean-law-mcp setup` → [Quick Start](#quick-start)
+
 [![Korean Law MCP — watch the demo](./docs/video-intro.jpg)](https://youtu.be/gmkuOqIV3dc)
 
 <sub>▶ Click to play on YouTube. Narration is in Korean.</sub>
@@ -587,6 +589,20 @@ MCP_HTTP_HOST=0.0.0.0 TRUST_PROXY=1 MCP_AUTH_TOKEN=replace-with-a-secret \
 ### Dependency and install boundary
 
 `kordoc` remains because annex parsing is a reachable server feature. Its known-good pure-JS `pdfjs-dist@4.10.38` runtime is pinned as a normal dependency; optional OCR/ML/native helpers are not needed by this server. Plugin, documented, and Docker installs use `--omit=optional --ignore-scripts`. CI and publishing retain optional development-tool bindings with scripts disabled during validation, then prune to the production graph and run the PDF annex smoke test. Scanner reports for transitive HTTP-framework packages should be evaluated against the reachable server path rather than treated as proof that the server exposes the affected middleware.
+
+## FAQ
+
+**How do I search Korean statutes and court precedents from Claude or ChatGPT?**
+Connect this MCP server. In Claude.ai, add `https://mcp.gomdori.app/law?oc=YOUR_KEY` as a custom connector. For Claude Desktop, Cursor, Windsurf and Zed see [Quick Start](#quick-start); for ChatGPT see the [connection video](https://youtu.be/KCFIzervxtE) (Korean narration).
+
+**Is it free?**
+Yes. The code is MIT-licensed, and the 법제처 Open API key it needs is free ([open.law.go.kr](https://open.law.go.kr/LSO/openApi/guideResult.do)).
+
+**Can it catch legal citations an LLM made up?**
+`legal_analysis(mode="verify_citations")` checks the statute articles and case numbers cited in a text against the official 법제처 source, for existence and for content. `mode="cite_check"` tells whether a precedent is still good law.
+
+**What does it cover?**
+Statutes, precedents, administrative rules, local ordinances, treaties and legal interpretations (including the National Tax Service), plus annexes and forms. It also resolves past versions of a law and points repealed statutes to their successors.
 
 ## Documentation
 

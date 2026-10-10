@@ -5,6 +5,7 @@
 > 프로덕션은 이 레포가 아니라 **[gomdori-mcp](https://github.com/chrisryugj/gomdori-mcp) 통합 호스트**(fly 앱 `korean-law-mcp` 1대, MCP 5종 동거)가 서빙한다.
 > - 공식 주소: `https://mcp.gomdori.app/law` (구 `korean-law-mcp.fly.dev/mcp`는 하위호환으로 유지)
 > - **반영 절차**: 이 레포 커밋·푸시 → `npm publish` → **npm 전파 대기**(`npm view korean-law-mcp version`이 새 버전을 반환할 때까지 — 보통 30초 안쪽. 전파 전에 배포하면 이미지가 옛 버전을 설치한다) → `~/workspace/gomdori-mcp/Dockerfile`의 `korean-law-mcp@X.Y.Z` 핀 갱신 → `cd ~/workspace/gomdori-mcp && fly deploy -c fly.production.toml` → **GitHub Release 생성**(`gh release create vX.Y.Z`) → `gomdori-mcp/scripts/verify-deploy.sh` 로 사용자 경로 반영 확인
+>   - **MCP 레지스트리**: 릴리스 뒤 `mcp-publisher publish` (registry.modelcontextprotocol.io, `io.github.chrisryugj/korean-law-mcp`). `server.json` version 은 package.json 과 같아야 하며 `verify:package` 가 막는다
 >   - **릴리스는 배포와 항상 같이 간다** — npm 게시만 하고 Release 를 빠뜨리면 이 레포의 릴리스 이력에 구멍이 남는다(v4.10.0·v4.11.0 이 그렇게 비었다가 2026-08-17 에 소급 생성됐다). 노트 본문은 CHANGELOG 의 해당 절을 옮긴다.
 >   - `.github/workflows/publish.yml`(GitHub Release → OIDC trusted publishing + provenance)은 **npm 쪽 trusted publisher 등록이 아직 안 됐다**. 그래서 게시는 위 로컬 `npm publish` 가 정규 경로이고, Release 는 그 뒤에 만든다 — 워크플로는 같은 버전이 이미 레지스트리에 있으면 게시를 건너뛰고 검증(typecheck·test·build·verify:package·audit)만 릴리스 시점에 재확인한다.
 > - **🚫 이 레포에서 `fly deploy` 직접 실행 절대 금지** — 통합 이미지를 law 단독 이미지로 덮어써 stats·patent·archhub·school까지 전부 죽는다. 자세한 배경: [docs/FLY-COST.md](docs/FLY-COST.md)

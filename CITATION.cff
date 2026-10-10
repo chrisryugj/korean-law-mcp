@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "Korean Law MCP"
+abstract: "MCP server and CLI for Korean law via the Korea Ministry of Government Legislation (법제처) Open API: statutes, precedents, administrative rules, local ordinances, treaties and interpretations, with citation verification against hallucinated legal citations."
+type: software
+authors:
+  - given-names: Chris
+    alias: chrisryugj
+repository-code: "https://github.com/chrisryugj/korean-law-mcp"
+url: "https://www.npmjs.com/package/korean-law-mcp"
+license: MIT
+keywords:
+  - korean-law
+  - legal-ai
+  - mcp
+  - model-context-protocol
+  - citation-verification
