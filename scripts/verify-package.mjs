@@ -92,6 +92,14 @@ export function verifyPackageArtifacts() {
   assert(serverJson.version === packageJson.version, `server.json version ${serverJson.version} ≠ package.json ${packageJson.version}`)
   assert(serverJson.name === packageJson.mcpName, `server.json name ${serverJson.name} ≠ package.json mcpName ${packageJson.mcpName}`)
 
+  // Claude 플러그인 매니페스트 버전도 게시 버전과 맞춘다(디렉터리·마켓플레이스에 그대로 노출된다)
+  const pluginJson = JSON.parse(readFileSync(resolve(root, ".claude-plugin/plugin.json"), "utf8"))
+  const marketplaceJson = JSON.parse(readFileSync(resolve(root, ".claude-plugin/marketplace.json"), "utf8"))
+  assert(pluginJson.version === packageJson.version, `.claude-plugin/plugin.json version ${pluginJson.version} ≠ package.json ${packageJson.version}`)
+  for (const plugin of marketplaceJson.plugins) {
+    assert(plugin.version === packageJson.version, `.claude-plugin/marketplace.json ${plugin.name} version ${plugin.version} ≠ package.json ${packageJson.version}`)
+  }
+
   const allowedTopLevel = new Set(["README.md", "LICENSE", "NOTICE", "package.json"])
   const files = packedFiles()
   for (const file of files) {
