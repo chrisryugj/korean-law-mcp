@@ -751,7 +751,7 @@ MCP 도구 설계에서 **도구 수 ≠ 기능 수**입니다.
 /plugin marketplace update korean-law-marketplace
 ```
 
-> 내부적으로 `npx --ignore-scripts --omit=optional korean-law-mcp@latest`를 실행하므로 npm에 배포된 최신 버전을 사용하되, 선택적 OCR·ML·네이티브 의존성은 설치하지 않고 설치 스크립트도 실행하지 않습니다.
+> 내부적으로 `npx --ignore-scripts --omit=optional korean-law-mcp@<플러그인 버전>`을 실행합니다. 플러그인 버전에 고정된 npm 배포본을 쓰므로 새 버전은 위 업데이트 명령으로 받고, 선택적 OCR·ML·네이티브 의존성은 설치하지 않으며 설치 스크립트도 실행하지 않습니다.
 
 #### Troubleshooting: `Permission denied (publickey)` 에러
 

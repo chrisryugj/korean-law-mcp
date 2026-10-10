@@ -31,7 +31,7 @@
         "-y",
         "--ignore-scripts",
         "--omit=optional",
-        "korean-law-mcp@latest"
+        "korean-law-mcp@4.15.6"
       ],
       "env": {
         "LAW_OC": "${user_config.api_key}"

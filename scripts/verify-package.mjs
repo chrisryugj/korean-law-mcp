@@ -96,6 +96,9 @@ export function verifyPackageArtifacts() {
   const pluginJson = JSON.parse(readFileSync(resolve(root, ".claude-plugin/plugin.json"), "utf8"))
   const marketplaceJson = JSON.parse(readFileSync(resolve(root, ".claude-plugin/marketplace.json"), "utf8"))
   assert(pluginJson.version === packageJson.version, `.claude-plugin/plugin.json version ${pluginJson.version} ≠ package.json ${packageJson.version}`)
+  // 디렉터리는 npx 실행 패키지가 정확한 버전으로 고정돼야 받는다(@latest 는 차단)
+  const launchArgs = pluginJson.mcpServers["korean-law"].args
+  assert(launchArgs.includes(`korean-law-mcp@${packageJson.version}`), `.claude-plugin/plugin.json mcpServers args must pin korean-law-mcp@${packageJson.version}`)
   for (const plugin of marketplaceJson.plugins) {
     assert(plugin.version === packageJson.version, `.claude-plugin/marketplace.json ${plugin.name} version ${plugin.version} ≠ package.json ${packageJson.version}`)
   }
