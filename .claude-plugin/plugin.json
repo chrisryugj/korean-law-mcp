@@ -1,5 +1,6 @@
 {
   "name": "korean-law",
+  "displayName": "Korean Law",
   "version": "4.15.6",
   "description": "Korean law for Claude via the official 법제처 Open API: statutes, precedents, administrative rules, local ordinances, treaties and interpretations, with citation verification. 법제처 42개 API → 10개 통합 도구. 법령·판례·행정규칙·자치법규·조약·해석례 + LLM 환각 방지 인용 검증 + 조문 영향 그래프 + 시점 비교 자동 diff + 판례 생사 확인(Citator) + 행위시법 판단 + 이럴 땐 이렇게 5단계 안내",
   "author": {
@@ -10,18 +11,28 @@
   "homepage": "https://github.com/chrisryugj/korean-law-mcp",
   "repository": "https://github.com/chrisryugj/korean-law-mcp",
   "license": "MIT",
+  "documentationUrl": "https://github.com/chrisryugj/korean-law-mcp/blob/main/README-EN.md",
+  "supportUrl": "https://github.com/chrisryugj/korean-law-mcp/issues",
   "keywords": [
     "korean-law",
     "법령",
     "판례",
     "법제처",
     "legal-ai",
-    "mcp"
+    "mcp",
+    "statutes",
+    "case-law",
+    "citation-verification"
   ],
   "mcpServers": {
     "korean-law": {
       "command": "npx",
-      "args": ["-y", "--ignore-scripts", "--omit=optional", "korean-law-mcp@latest"],
+      "args": [
+        "-y",
+        "--ignore-scripts",
+        "--omit=optional",
+        "korean-law-mcp@latest"
+      ],
       "env": {
         "LAW_OC": "${user_config.api_key}"
       }
