@@ -20,6 +20,8 @@
 
 **바로 쓰기:** Claude.ai 커넥터에 `https://mcp.gomdori.app/law?oc=본인키` 한 줄, Claude Code는 플러그인 두 줄 → [설치 및 사용법](#설치-및-사용법)
 
+쓸모 있었다면 GitHub ⭐ 하나 눌러주세요. 다른 사람이 이 도구를 찾는 데 도움이 됩니다.
+
 [![국가법령정보 MCP 활용하기 — 영상 보기](./docs/video-intro.jpg)](https://youtu.be/gmkuOqIV3dc)
 
 <sub>▶ 클릭하면 유튜브에서 재생됩니다.</sub>

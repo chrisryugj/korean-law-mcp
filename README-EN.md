@@ -21,6 +21,8 @@
 
 **Start in one line:** add `https://mcp.gomdori.app/law?oc=YOUR_KEY` as a custom connector in Claude.ai, or run `npx --ignore-scripts --omit=optional korean-law-mcp setup` → [Quick Start](#quick-start)
 
+If this saves you time, a GitHub ⭐ helps others find it.
+
 [![Korean Law MCP — watch the demo](./docs/video-intro.jpg)](https://youtu.be/gmkuOqIV3dc)
 
 <sub>▶ Click to play on YouTube. Narration is in Korean.</sub>
