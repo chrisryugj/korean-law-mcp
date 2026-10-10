@@ -383,7 +383,7 @@ v2 structured 41 legal APIs into 89 MCP tools. v3 re-compresses them into **14 t
 
 South Korea has **1,600+ active laws**, **10,000+ administrative rules**, and a precedent system spanning Supreme Court, Constitutional Court, tax tribunals, and customs rulings. All of this lives behind a clunky government API with zero developer experience.
 
-This project wraps that entire legal system into **14 structured tools** that any AI assistant or script can call. Built by a Korean civil servant who got tired of manually searching [법제처](https://www.law.go.kr) for the hundredth time.
+This project wraps that entire legal system into **10 tools** that any AI assistant or script can call. Built by a Korean civil servant who got tired of manually searching [법제처](https://www.law.go.kr) for the hundredth time.
 
 ---
 
@@ -445,7 +445,7 @@ Get your free API key at [법제처 Open API](https://open.law.go.kr/LSO/openApi
       "args": [
         "-y",
         "mcp-remote",
-        "https://korean-law-mcp.fly.dev/mcp?oc=your-api-key"
+        "https://mcp.gomdori.app/law?oc=your-api-key"
       ]
     }
   }
@@ -458,7 +458,7 @@ Get your free API key at [법제처 Open API](https://open.law.go.kr/LSO/openApi
 {
   "mcpServers": {
     "korean-law": {
-      "url": "https://korean-law-mcp.fly.dev/mcp?oc=your-api-key"
+      "url": "https://mcp.gomdori.app/law?oc=your-api-key"
     }
   }
 }
@@ -548,7 +548,7 @@ User: "산업안전보건법 별표1 내용"
 - **Annex Extraction** — Downloads HWPX/HWP/PDF/XLSX/DOCX annexes and converts to Markdown ([kordoc](https://github.com/chrisryugj/kordoc) engine)
 - **8 Chain Tools** — Composite research workflows in a single call (e.g. `chain_full_research`: AI search → statutes → precedents → interpretations)
 - **Caching** — 1-hour search cache, 24-hour article cache
-- **Remote Endpoint** — Use without installation via `https://korean-law-mcp.fly.dev/mcp`
+- **Remote Endpoint** — Use without installation via `https://mcp.gomdori.app/law` (the legacy `korean-law-mcp.fly.dev/mcp` stays backward compatible)
 
 ---
 
