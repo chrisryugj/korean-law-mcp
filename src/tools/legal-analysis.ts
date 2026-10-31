@@ -45,7 +45,7 @@ export const LegalAnalysisSchema = z.object({
     text: z.string().describe("개정 후 조문 — 조 머리부터, 한 줄에 항·호·목 하나. 안 바뀌는 항·호는 '② ∼ ⑤ (현행과 같음)'·'1.·2. (현행과 같음)'으로 줄여 쓴다(적지 않은 현행 항·호는 삭제로 본다). 지우는 항은 '③ 삭제', 조 전체 삭제는 '제5조 삭제'"),
     currentText: z.string().optional().describe("현행 조문 원문 직접 입력(조례·행정규칙·미공포안). 신설 조는 빈 문자열"),
   })).max(MAX_AMENDED_ARTICLES).optional()
-    .describe("[amendment_table 필수] 개정하는 조문 목록"),
+    .describe("[amendment_table 필수] 신구조문대비표를 만들 개정 조문 목록"),
   title: z.string().optional()
     .describe("[amendment_table] 대비표 제목 (예: '건축법 일부개정법률안'). 생략 시 법령명으로 만든다"),
   outputPath: z.string().optional()

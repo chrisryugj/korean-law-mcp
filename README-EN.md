@@ -42,10 +42,11 @@ If this saves you time, a GitHub ⭐ helps others find it.
 
 ## Recent updates
 
-Current version **v4.15.17**. All numbers come from the measurements recorded in the [CHANGELOG](CHANGELOG.md).
+Current version **v4.15.18**. All numbers come from the measurements recorded in the [CHANGELOG](CHANGELOG.md).
 
 | Version | Main change | Measured change |
 |---------|-------------|-----------------|
+| 4.15.18 | `legal_analysis` description and title now carry the word users type, 「신구조문대비표」 (claude.ai tool search found nothing before) | Search-word gate test |
 | 4.15.17 | The comparison table is now `legal_analysis(mode="amendment_table")` on an exposed tool (the demo showed Claude never looked for the hidden one); chat tables mark changes in bold | Still 10 exposed tools |
 | 4.15.16 | Amendment comparison table (신·구조문대비표) `amendment_table` (via execute_tool): proposed article text → current text fetched and compared, underlines, `----`, `(생  략)`, `<신  설>`; local runs save a Hangul (.hwpx) file | 433 articles from 100 unseen laws: **67.7%** identical to the official tables (3.9% structural mismatch) |
 | 4.15.15 | Annex parser kordoc 4.24.25 (PDF table row and unit-line fixes, among others), `@hono/node-server` 2.1.5 | `npm audit` 1 → **0**, 3 real annexes unchanged |

@@ -170,6 +170,14 @@ describe("amendment_table", () => {
     expect(ctrl.isError).toBeFalsy()
     expect((await parse(await readFile(outputPath))).success).toBe(true)
 
+    // "~/…" 경로는 홈 디렉터리로 푼다(Claude 가 "바탕화면에 저장해 줘"를 ~/Desktop/… 로 넘긴다)
+    const home = process.env.HOME
+    process.env.HOME = dir
+    try {
+      const tilde = await amendmentTable(stub(), { ...input, outputPath: "~/sub/대비표2.hwpx" })
+      expect(tilde.content[0].text).toContain(`HWPX 저장: ${path.join(dir, "sub", "대비표2.hwpx")}`)
+    } finally { process.env.HOME = home }
+
     const bad = await amendmentTable(stub(), { ...input, outputPath: path.join(dir, "대비표.docx") })
     expect(bad.isError).toBe(true)
   })

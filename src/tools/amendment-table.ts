@@ -8,6 +8,7 @@
 import { z } from "zod"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { homedir } from "node:os"
 import type { LawApiClient } from "../lib/api-client.js"
 import { buildJO } from "../lib/law-parser.js"
 import { parseArticle } from "../lib/amendment-units.js"
@@ -90,7 +91,8 @@ async function buildArticle(
 }
 
 async function saveHwpx(outputPath: string, title: string, articles: Row[][]): Promise<string> {
-  const target = path.resolve(outputPath)
+  // "~/Desktop/…" 은 셸이 아니면 풀리지 않는다 — 홈 디렉터리로 푼다
+  const target = path.resolve(outputPath.replace(/^~(?=$|[\\/])/, homedir()))
   if (path.extname(target).toLowerCase() !== ".hwpx") {
     throw new LawApiError("outputPath 는 .hwpx 로 끝나야 합니다.", ErrorCodes.INVALID_PARAM)
   }

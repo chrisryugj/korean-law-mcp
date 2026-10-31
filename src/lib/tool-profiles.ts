@@ -37,7 +37,7 @@ export const SERVER_INSTRUCTIONS = [
   "한국 법령 조회 서버. 도구 사용 순서:",
   "- 법령·조례·행정규칙 본문: search_law 로 lawId·mst 를 얻은 뒤 get_law_text. 시행예정본은 search_law 가 안내한 efYd 를 그대로 넣는다.",
   "- 여러 법령의 개정 여부를 한 번에 확인(준법 등록부 감시): execute_tool(tool_name=\"search_law_bulk\").",
-  "- 개정안의 신·구조문대비표(신구대비표) 작성: legal_analysis(mode=\"amendment_table\") — 개정 후 조문만 넣으면 현행을 가져와 줄표·묶음·밑줄을 규칙대로 계산한다. 이미 공포된 개정의 대조표 조회는 execute_tool(tool_name=\"compare_old_new\").",
+  "- 개정안의 신구조문대비표(신·구조문대비표·신구대비표) 작성: legal_analysis(mode=\"amendment_table\") — 개정 후 조문만 넣으면 현행을 가져와 줄표·묶음·밑줄을 규칙대로 계산한다. 이미 공포된 개정의 대조표 조회는 execute_tool(tool_name=\"compare_old_new\").",
   "- 사건·처분 시점에 적용되던 법령과 경과조치: legal_analysis(mode=\"applicable_law\").",
   "- 단일 조회로 답이 되면 search_law·get_law_text 를 쓰고, 여러 API 를 엮는 복합 질문만 legal_research.",
   "- 조례 정비 대조: ordinance_radar 에 조례명(ordinanceName)을 주거나, execute_tool(tool_name=\"search_ordinance\") 결과의 일련번호(ordinSeq)를 넣는다.",
@@ -50,7 +50,7 @@ export const SERVER_INSTRUCTIONS = [
  */
 export const TOOL_TITLES: Record<string, string> = {
   legal_research: "법령 종합 리서치",
-  legal_analysis: "인용 검증·법령 분석·대비표",
+  legal_analysis: "인용 검증·법령 분석·신구조문대비표",
   search_law: "법령 검색",
   get_law_text: "법령 조문 조회",
   get_annexes: "별표·서식 조회",

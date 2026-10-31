@@ -133,6 +133,14 @@ describe("도구 설명에 다른 도구 안내 없음 (커넥터 디렉터리 �
     }
   })
 
+  it("claude.ai 도구 검색 낱말: 사용자가 쓰는 '신구조문대비표'가 노출 설명에 그대로 있다(4.15.17 시연에서 검색 0건)", async () => {
+    const client = await connect({})
+    const { tools } = await client.listTools()
+    const la = tools.find(t => t.name === "legal_analysis")!
+    expect(la.description).toContain("신구조문대비표")
+    expect(la.title).toContain("신구조문대비표")
+  })
+
   it("도구 사이 안내는 서버 안내문(instructions)에 있다", () => {
     for (const hint of ["search_law_bulk", "applicable_law", "discover_tools", "execute_tool", "get_law_text"]) {
       expect(SERVER_INSTRUCTIONS).toContain(hint)
