@@ -1,5 +1,5 @@
 /**
- * legal_analysis — 정밀 분석/검증 4종 통합 진입점 (v4.4.0)
+ * legal_analysis — 정밀 분석/검증 4종 + 신·구조문대비표 통합 진입점 (v4.4.0, amendment_table v4.15.17)
  *
  * verify_citations·cite_check·applicable_law·impact_map을 mode 파라미터로
  * 통합해 MCP 노출 도구 수를 줄인다. 원본 도구는 allTools에 그대로 남아
@@ -15,16 +15,17 @@ import { verifyCitations } from "./verify-citations.js"
 import { citeCheck } from "./cite-check.js"
 import { applicableLaw } from "./applicable-law.js"
 import { impactMap } from "./impact-map.js"
+import { amendmentTable, AmendmentTableSchema, MAX_AMENDED_ARTICLES } from "./amendment-table.js"
 
 export const LegalAnalysisSchema = z.object({
-  mode: z.enum(["verify_citations", "cite_check", "applicable_law", "impact_map"])
+  mode: z.enum(["verify_citations", "cite_check", "applicable_law", "impact_map", "amendment_table"])
     .describe("분석 유형 (도구 설명의 mode 표 참조)"),
   text: z.string().optional()
     .describe("[verify_citations 필수] 검증할 법률 텍스트 (LLM 답변/계약서 등 조문 인용 포함 문자열)"),
   caseNumber: z.string().optional()
     .describe("[cite_check 필수] 사건번호 (예: '2013다61381', 문장 포함 가능)"),
   lawName: z.string().optional()
-    .describe("[applicable_law·impact_map 필수] 법령명 (예: '민법', '도로교통법'). applicable_law는 약칭·옛 법령명과 행정규칙명(고시 — 예: '스프링클러설비의 화재안전기준', 'NFTC 103')도 받는다"),
+    .describe("[applicable_law·impact_map·amendment_table 필수] 법령명 (예: '민법', '도로교통법'). applicable_law는 약칭·옛 법령명과 행정규칙명(고시 — 예: '스프링클러설비의 화재안전기준', 'NFTC 103')도 받는다. amendment_table은 조례·행정규칙이면 amendments[].currentText 로 현행 원문을 같이 준다"),
   jo: z.string().optional()
     .describe("[impact_map 필수, applicable_law 선택] 조문 번호 — 자연어 표기('제103조', '제10조의2')와 6자리 JO 코드('010300', '001002') 모두 수용"),
   date: z.string().optional()
@@ -39,6 +40,16 @@ export const LegalAnalysisSchema = z.object({
     .describe("[impact_map] 자치법규 인용 검색 포함 (기본 true, false면 전국 조례 팬아웃 생략)"),
   includeMermaid: z.boolean().optional()
     .describe("[impact_map] mermaid 그래프 코드 출력 (기본 true)"),
+  amendments: z.array(z.object({
+    jo: z.string().optional().describe("조문 번호 (예: '제22조'). 생략 시 text 첫머리의 조 번호"),
+    text: z.string().describe("개정 후 조문 — 조 머리부터, 한 줄에 항·호·목 하나. 안 바뀌는 항·호는 '② ∼ ⑤ (현행과 같음)'·'1.·2. (현행과 같음)'으로 줄여 쓴다(적지 않은 현행 항·호는 삭제로 본다). 지우는 항은 '③ 삭제', 조 전체 삭제는 '제5조 삭제'"),
+    currentText: z.string().optional().describe("현행 조문 원문 직접 입력(조례·행정규칙·미공포안). 신설 조는 빈 문자열"),
+  })).max(MAX_AMENDED_ARTICLES).optional()
+    .describe("[amendment_table 필수] 개정하는 조문 목록"),
+  title: z.string().optional()
+    .describe("[amendment_table] 대비표 제목 (예: '건축법 일부개정법률안'). 생략 시 법령명으로 만든다"),
+  outputPath: z.string().optional()
+    .describe("[amendment_table] 한글(.hwpx) 저장 경로 — 로컬 실행(STDIO·CLI)에서만"),
   apiKey: z.string().optional(),
 })
 
@@ -81,5 +92,14 @@ export async function legalAnalysis(
         includeMermaid: input.includeMermaid ?? true,
         apiKey,
       })
+    case "amendment_table": {
+      const parsed = AmendmentTableSchema.safeParse({
+        lawName: input.lawName, amendments: input.amendments, title: input.title, outputPath: input.outputPath, apiKey,
+      })
+      if (!parsed.success) {
+        return inputError("mode=amendment_table에는 amendments(개정 후 조문)와 lawName(또는 조문마다 currentText)이 필요합니다.")
+      }
+      return amendmentTable(apiClient, parsed.data)
+    }
   }
 }

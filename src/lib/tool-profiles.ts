@@ -37,7 +37,7 @@ export const SERVER_INSTRUCTIONS = [
   "한국 법령 조회 서버. 도구 사용 순서:",
   "- 법령·조례·행정규칙 본문: search_law 로 lawId·mst 를 얻은 뒤 get_law_text. 시행예정본은 search_law 가 안내한 efYd 를 그대로 넣는다.",
   "- 여러 법령의 개정 여부를 한 번에 확인(준법 등록부 감시): execute_tool(tool_name=\"search_law_bulk\").",
-  "- 개정안의 신·구조문대비표 작성(개정 조문 전문 → 현행 자동 대조): execute_tool(tool_name=\"amendment_table\").",
+  "- 개정안의 신·구조문대비표(신구대비표) 작성: legal_analysis(mode=\"amendment_table\") — 개정 후 조문만 넣으면 현행을 가져와 줄표·묶음·밑줄을 규칙대로 계산한다. 이미 공포된 개정의 대조표 조회는 execute_tool(tool_name=\"compare_old_new\").",
   "- 사건·처분 시점에 적용되던 법령과 경과조치: legal_analysis(mode=\"applicable_law\").",
   "- 단일 조회로 답이 되면 search_law·get_law_text 를 쓰고, 여러 API 를 엮는 복합 질문만 legal_research.",
   "- 조례 정비 대조: ordinance_radar 에 조례명(ordinanceName)을 주거나, execute_tool(tool_name=\"search_ordinance\") 결과의 일련번호(ordinSeq)를 넣는다.",
@@ -50,7 +50,7 @@ export const SERVER_INSTRUCTIONS = [
  */
 export const TOOL_TITLES: Record<string, string> = {
   legal_research: "법령 종합 리서치",
-  legal_analysis: "인용 검증·법령 분석",
+  legal_analysis: "인용 검증·법령 분석·대비표",
   search_law: "법령 검색",
   get_law_text: "법령 조문 조회",
   get_annexes: "별표·서식 조회",
@@ -127,7 +127,7 @@ export const TOOL_CATEGORIES: Record<string, string[]> = {
   "자치법규": ["search_ordinance", "get_ordinance", "ordinance_radar", "chain_ordinance_compare"],
   "법령연계": ["get_linked_ordinances", "get_linked_ordinance_articles", "get_delegated_laws", "get_linked_laws_from_ordinance"],
   "비교분석": ["compare_old_new", "get_three_tier", "compare_articles"],
-  "개정입안": ["amendment_table"],
+  "개정입안": ["legal_analysis", "amendment_table"],
   "별표서식": ["get_annexes"],
   "법체계": ["get_law_tree", "get_law_system_tree", "chain_law_system"],
   "통계링크": ["get_law_statistics", "get_external_links", "parse_article_links"],

@@ -9,6 +9,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { parse } from "kordoc"
 import { amendmentTable, enableAmendmentFileOutput, draftTitle, AmendmentTableSchema } from "./amendment-table.js"
+import { legalAnalysis, LegalAnalysisSchema } from "./legal-analysis.js"
 import type { LawApiClient } from "../lib/api-client.js"
 
 const ARTICLE_22 = JSON.stringify({
@@ -60,15 +61,15 @@ describe("amendment_table", () => {
     expect(r.isError).toBeFalsy()
     expect(api.calls).toEqual(["search:건축법", "law:273437:002200"])
     expect(text).toContain("### 건축법 일부개정법률안 신･구조문대비표")
-    expect(text).toContain("| 제22조(건축물의 사용승인) ① 건축주는 <u>공사완료도서</u>를 첨부하여 신청하여야 한다. | 제22조(건축물의 사용승인) ① ---- <u>서류</u>---------------. |")
+    expect(text).toContain("| 제22조(건축물의 사용승인) ① 건축주는 **공사완료도서**를 첨부하여 신청하여야 한다. | 제22조(건축물의 사용승인) ① ---- **서류**---------------. |")
     expect(text).toContain("| ② (생  략) | ② (현행과 같음) |")
-    expect(text).toContain("| <u><신  설></u> | <u>③ 숙박시설은 알려야 한다.</u> |")
+    expect(text).toContain("| **<신  설>** | **③ 숙박시설은 알려야 한다.** |")
     expect(text).not.toContain("개정 2013")
   })
 
   it("현행에 없는 조는 신설로 처리하고 번호 확인을 알린다", async () => {
     const r = await amendmentTable(stub(), AmendmentTableSchema.parse({ mst: "273437", lawName: "건축법", amendments: [{ text: "제22조의2(숙박시설 안내) 허가권자는 안내하여야 한다." }] }))
-    expect(r.content[0].text).toContain("| <u><신  설></u> | <u>제22조의2(숙박시설 안내) 허가권자는 안내하여야 한다.</u> |")
+    expect(r.content[0].text).toContain("| **<신  설>** | **제22조의2(숙박시설 안내) 허가권자는 안내하여야 한다.** |")
     expect(r.content[0].text).toContain("현행에 없는 조라 신설로 처리했습니다")
   })
 
@@ -79,8 +80,8 @@ describe("amendment_table", () => {
       amendments: [{ currentText: "제3조(근무시간) 근무시간은 9시부터 18시까지로 한다.", text: "제3조(근무시간) 근무시간은 8시부터 17시까지로 한다." }],
     }))
     expect(api.calls).toEqual([])
-    expect(r.content[0].text).toContain("<u>9시부터 18시까지</u>로")
-    expect(r.content[0].text).toContain("제3조(근무시간) ----- <u>8시부터 17시까지</u>----.")
+    expect(r.content[0].text).toContain("**9시부터 18시까지**로")
+    expect(r.content[0].text).toContain("제3조(근무시간) ----- **8시부터 17시까지**----.")
   })
 
   it("조문 순서대로 정렬하고, 현행과 같은 조는 빼며 알린다", async () => {
@@ -98,7 +99,7 @@ describe("amendment_table", () => {
 
   it("바뀐 항만 적으면 빠진 항을 <삭  제>로 적되 알리고, '(현행과 같음)' 자리표시는 현행으로 채운다", async () => {
     const partial = await amendmentTable(stub(), AmendmentTableSchema.parse({ mst: "273437", lawName: "건축법", amendments: [{ text: "제22조(건축물의 사용승인) ① 건축주는 서류를 첨부하여 신청하여야 한다." }] }))
-    expect(partial.content[0].text).toContain("| <u>② 허가권자는 검사한다.</u> | <u><삭  제></u> |")
+    expect(partial.content[0].text).toContain("| **② 허가권자는 검사한다.** | **<삭  제>** |")
     expect(partial.content[0].text).toContain("제22조: 개정안에 없는 ②을(를) <삭  제>로 적었습니다")
 
     const marked = await amendmentTable(stub(), AmendmentTableSchema.parse({ mst: "273437", lawName: "건축법", amendments: [{ text: "제22조(건축물의 사용승인) ① 건축주는 서류를 첨부하여 신청하여야 한다.\n② (현행과 같음)\n③ 숙박시설은 알려야 한다." }] }))
@@ -110,7 +111,7 @@ describe("amendment_table", () => {
   it("C: 업스트림이 다른 조를 주면 그 조와 대조하지 않는다", async () => {
     const r = await amendmentTable(stub(), AmendmentTableSchema.parse({ mst: "273437", lawName: "건축법", amendments: [{ text: "제99조(새 조) 새로 정한다." }] }))
     expect(r.content[0].text).not.toContain("제1조")
-    expect(r.content[0].text).toContain("| <u><신  설></u> |")
+    expect(r.content[0].text).toContain("| **<신  설>** |")
   })
 
   it("H: 빈 jo 는 머리 번호로, jo 와 머리 번호가 다르면 알리고, 같은 조를 두 번 주면 막는다", async () => {
@@ -120,6 +121,18 @@ describe("amendment_table", () => {
     expect(differ.content[0].text).toContain("jo(제22조)와 개정안 머리(제23조)가 다릅니다")
     const dup = await amendmentTable(stub(), AmendmentTableSchema.parse({ mst: "273437", lawName: "건축법", amendments: [{ text: NEW_22 }, { jo: "제22조", text: NEW_22 }] }))
     expect(dup.isError).toBe(true)
+  })
+
+  it("legal_analysis(mode=amendment_table)로도 같은 표를 만들고, 인자가 빠지면 알린다", async () => {
+    const r = await legalAnalysis(stub(), LegalAnalysisSchema.parse({ mode: "amendment_table", lawName: "건축법", amendments: [{ text: NEW_22 }] }))
+    expect(r.content[0].text).toContain("| ② (생  략) | ② (현행과 같음) |")
+    const bad = await legalAnalysis(stub(), LegalAnalysisSchema.parse({ mode: "amendment_table", lawName: "건축법" }))
+    expect(bad.isError).toBe(true)
+  })
+
+  it("굵은 글씨 경계에 붙은 괄호는 밖으로 빼서 채팅 화면에서 깨지지 않는다", async () => {
+    const r = await amendmentTable(stub(), AmendmentTableSchema.parse({ amendments: [{ currentText: "제65조(승무정원) 정원을 정한다.", text: "제65조(최소승무정원) 정원을 정한다." }] }))
+    expect(r.content[0].text).toContain("| 제65조(**승무정원**) (생  략) | 제65조(**최소승무정원**) (현행과 같음) |")
   })
 
   it("lawName·mst·lawId 도 currentText 도 없으면 스키마에서 막는다", () => {

@@ -117,7 +117,7 @@ export async function amendmentTable(apiClient: LawApiClient, input: AmendmentTa
     const lines: string[] = []
     if (articles.length) {
       lines.push(rowsToMarkdown(`${title} 신･구조문대비표`, articles.flat()), "")
-      lines.push("밑줄(<u>…</u>)은 개정되는 부분, '----'는 현행과 같은 부분입니다.")
+      lines.push("굵은 글씨는 개정되는 부분(한글 문서에서는 밑줄), '----'는 현행과 같은 부분입니다.")
     } else {
       lines.push("[NO_CHANGE] 입력한 개정안이 모두 현행과 같습니다.")
     }

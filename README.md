@@ -41,10 +41,11 @@ VS Code·Cursor는 버튼 한 번으로 연결됩니다(키 없이 공용 한도
 
 ## 최근 업데이트
 
-현재 버전 **v4.15.16**. 수치는 모두 [CHANGELOG](CHANGELOG.md)의 실측 기록에서 옮김.
+현재 버전 **v4.15.17**. 수치는 모두 [CHANGELOG](CHANGELOG.md)의 실측 기록에서 옮김.
 
 | 버전 | 주요 변경 | 변화 |
 |------|-----------|------|
+| 4.15.17 | 대비표를 노출 도구 `legal_analysis(mode="amendment_table")`로(시연에서 숨은 도구를 안 찾음), 채팅 표 밑줄은 굵은 글씨 | 노출 도구 10개 유지 |
 | 4.15.16 | 신·구조문대비표 작성 `amendment_table`(execute_tool): 개정 조문 → 현행 자동 대조, 밑줄·`----`·`(생  략)`·`<신  설>`, 로컬 실행은 한글(.hwpx) 저장 | 처음 보는 100개 법령 433조문, 공식 대비표와 완전 일치 **67.7%**(구조 불일치 3.9%) |
 | 4.15.15 | 별표 파서 kordoc 4.24.25(PDF 표 행·단위 표기 줄 수정 등), `@hono/node-server` 2.1.5 | `npm audit` 1건 → **0건**, 실제 별표 3건 출력 동일 |
 | 4.15.14 | 보안: 의존성 취약점 정리 — 하위 kordoc 4.24.8(zod 4), zod 4.6.7, 개발 도구·하위 의존성 수정판 | `npm audit` 10건 → **0건** |
@@ -373,7 +374,7 @@ reg delete "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /
 | 판례명·본문검색 병행 | `search_decisions(domain="precedent", options={search:"both"})` |
 | 긴 행정규칙의 일부만 | `get_admin_rule`의 `jo:"제9-5조"`·`chapter:"제9장"`·`keyword:"해외직접투자"`·`page:2` |
 | 법령 여러 건 변경 감시 | `execute_tool(tool_name="search_law_bulk")`: 법령명 배열 + `previous={법령ID: 직전 MST}`이면 MST가 바뀐 법령만 반환 |
-| 개정안 신·구조문대비표 | `execute_tool(tool_name="amendment_table")`: 법령명 + 개정 조문 전문 → 현행 자동 대조(바뀐 곳 밑줄, 같은 부분 `----`, `(생  략)`·`<신  설>`). 조례는 `currentText`, 로컬 실행은 `outputPath`로 한글(.hwpx) 저장 |
+| 개정안 신·구조문대비표 | `legal_analysis(mode="amendment_table")`: 법령명 + 개정 조문 전문 → 현행 자동 대조(바뀐 곳 밑줄, 같은 부분 `----`, `(생  략)`·`<신  설>`). 조례는 `currentText`, 로컬 실행은 `outputPath`로 한글(.hwpx) 저장 |
 | 판례 전문(축약 해제) | `get_decision_text(..., full=true)` |
 
 ---
