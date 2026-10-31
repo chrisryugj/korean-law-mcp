@@ -70,6 +70,7 @@ import { applicableLaw, ApplicableLawSchema } from "./tools/applicable-law.js"
 // 통합 진입점 (v4.4.0 — 노출 도구 수 축소용)
 import { legalResearch, LegalResearchSchema } from "./tools/legal-research.js"
 import { legalAnalysis, LegalAnalysisSchema } from "./tools/legal-analysis.js"
+import { amendmentTable, AmendmentTableSchema } from "./tools/amendment-table.js"
 // Chain tool imports
 import {
   chainLawSystem, chainLawSystemSchema,
@@ -202,6 +203,12 @@ export const allTools: McpTool[] = [
     description: "[비교] 신구법 대조표 조회.",
     schema: CompareOldNewSchema,
     handler: compareOldNew
+  },
+  {
+    name: "amendment_table",
+    description: "[개정입안] 일부개정안의 신·구조문대비표 작성. 개정안 조문 전문(amendments[].text)을 주면 현행 조문을 법제처에서 조회해 대조 — 바뀐 부분 밑줄, 개정안 칸의 같은 부분 '----', 바뀌지 않은 항·호는 '(생  략)'/'(현행과 같음)'으로 묶고 <신  설>·<삭  제>·<단서 신설>. 개정안에도 '② ∼ ⑤ (현행과 같음)' 자리표시를 쓸 수 있다. 조례·행정규칙은 currentText 에 현행 원문. 로컬 실행에서는 outputPath 로 한글(.hwpx) 저장(법제업무편람 서식). 이미 공포된 개정의 대조표 조회는 compare_old_new.",
+    schema: AmendmentTableSchema,
+    handler: amendmentTable
   },
   {
     name: "get_three_tier",
@@ -842,11 +849,13 @@ export const MAX_TEXT_ARG_CHARS = 50_000
  * O(n²) 라 2천 자에서도 1회 94ms 였고, articles 배열로 여러 번 부르면 수 초가 된다(2026-09-23 독립 리뷰).
  */
 export const MAX_SHORT_ARG_CHARS = 100
+/** 조문 본문을 받는 인자 — 본문(text)과 같은 상한. 대비표의 현행 원문(currentText)도 조문 전체다 */
+const LONG_ARG_KEYS = new Set(["text", "currentText"])
 const SHORT_ARG_KEYS = new Set(["jo", "articles", "annexNo", "bylSeq", "hang", "ho", "mok"])
 
 export function findOversizedArg(value: unknown, key = "", depth = 0): string | null {
   if (typeof value === "string") {
-    const limit = key === "text" ? MAX_TEXT_ARG_CHARS : SHORT_ARG_KEYS.has(key) ? MAX_SHORT_ARG_CHARS : MAX_ARG_CHARS
+    const limit = LONG_ARG_KEYS.has(key) ? MAX_TEXT_ARG_CHARS : SHORT_ARG_KEYS.has(key) ? MAX_SHORT_ARG_CHARS : MAX_ARG_CHARS
     return value.length > limit ? `${key || "인자"} ${value.length}자 (상한 ${limit}자)` : null
   }
   if (depth >= 5 || value === null || typeof value !== "object") return null

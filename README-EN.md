@@ -42,10 +42,11 @@ If this saves you time, a GitHub ⭐ helps others find it.
 
 ## Recent updates
 
-Current version **v4.15.15**. All numbers come from the measurements recorded in the [CHANGELOG](CHANGELOG.md).
+Current version **v4.15.16**. All numbers come from the measurements recorded in the [CHANGELOG](CHANGELOG.md).
 
 | Version | Main change | Measured change |
 |---------|-------------|-----------------|
+| 4.15.16 | Amendment comparison table (신·구조문대비표) `amendment_table` (via execute_tool): proposed article text → current text fetched and compared, underlines, `----`, `(생  략)`, `<신  설>`; local runs save a Hangul (.hwpx) file | 433 articles from 100 unseen laws: **67.7%** identical to the official tables (3.9% structural mismatch) |
 | 4.15.15 | Annex parser kordoc 4.24.25 (PDF table row and unit-line fixes, among others), `@hono/node-server` 2.1.5 | `npm audit` 1 → **0**, 3 real annexes unchanged |
 | 4.15.14 | Security: dependency vulnerabilities cleared — kordoc 4.24.8 (zod 4) underneath, zod 4.6.7, patched dev tools and transitive dependencies | `npm audit` 10 → **0** |
 | 4.15.13 | The Claude Code plugin connects to the hosted server (`mcp.gomdori.app/law`) instead of running npx; the key is optional | Nothing to install |

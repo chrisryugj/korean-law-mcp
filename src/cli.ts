@@ -20,6 +20,7 @@ import { z } from "zod"
 import * as readline from "readline"
 import { LawApiClient } from "./lib/api-client.js"
 import { allTools } from "./tool-registry.js"
+import { enableAmendmentFileOutput } from "./tools/amendment-table.js"
 import { explainRoute } from "./lib/route-explain.js"
 import { VERSION } from "./version.js"
 import {
@@ -407,6 +408,7 @@ function separateFlags(args: string[]): { queryArgs: string[]; verbose: boolean;
 
 async function main() {
   const args = process.argv.slice(2)
+  enableAmendmentFileOutput()
 
   // 인자가 없으면 대화형 모드
   if (args.length === 0) {

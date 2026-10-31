@@ -10,7 +10,7 @@
 >   - `.github/workflows/publish.yml`(GitHub Release → OIDC trusted publishing + provenance)은 **npm 쪽 trusted publisher 등록이 아직 안 됐다**. 그래서 게시는 위 로컬 `npm publish` 가 정규 경로이고, Release 는 그 뒤에 만든다 — 워크플로는 같은 버전이 이미 레지스트리에 있으면 게시를 건너뛰고 검증(typecheck·test·build·verify:package·audit)만 릴리스 시점에 재확인한다.
 > - **🚫 이 레포에서 `fly deploy` 직접 실행 절대 금지** — 통합 이미지를 law 단독 이미지로 덮어써 stats·patent·archhub·school까지 전부 죽는다. 자세한 배경: [docs/FLY-COST.md](docs/FLY-COST.md)
 
-Korean Law MCP Server v4.15.15 - 법제처 42개 API → 10개 통합 도구 (내부 99개) + 9개 시나리오 + 자연어 CLI + HTTP stateless + 판례 토큰 74% 감축 + **legal_research (체인 8종 통합, task 파라미터)** + **legal_analysis (인용검증·판례생사·행위시법·영향그래프 통합, mode 파라미터)** + **time_travel (시점 diff)** + **action_plan (이럴 땐 이렇게, 5단계 안내)** + **시행예정 감지 (search_law가 제명변경·미시행 개정 자동 병기)** + **ordinance_radar (조례 정비 레이더 — 근거 상위법 개정 자동 대조, v4.7.0)** + **인용 검증 표기 내성 (낫표·가운뎃점·`같은 법` 조응, v4.9.0)** + **폐지 감지 (검색 0건 시 폐지 법령·행정규칙 연혁 추적 — 폐지사유·후속 통합 규정 자동 안내, v4.10.0)** + **search_law_bulk (등록부 대량 조회 + MST diff 감시, v4.13.0)** + **행정규칙 부분 조회 (get_admin_rule 의 jo·chapter·keyword·page — 통짜 전문을 조문 단위로, v4.14.0)** + **법령ID 계보 연혁 (제명이 바뀌기 전 버전까지 — search_historical_law·applicable_law·time_travel, get_annexes date 시점 별표, get_law_text efYd 기준일 보정, 행정규칙 기준일 판단, v4.15.0)**
+Korean Law MCP Server v4.15.16 - 법제처 42개 API → 10개 통합 도구 (내부 100개) + 9개 시나리오 + 자연어 CLI + HTTP stateless + 판례 토큰 74% 감축 + **legal_research (체인 8종 통합, task 파라미터)** + **legal_analysis (인용검증·판례생사·행위시법·영향그래프 통합, mode 파라미터)** + **time_travel (시점 diff)** + **action_plan (이럴 땐 이렇게, 5단계 안내)** + **시행예정 감지 (search_law가 제명변경·미시행 개정 자동 병기)** + **ordinance_radar (조례 정비 레이더 — 근거 상위법 개정 자동 대조, v4.7.0)** + **인용 검증 표기 내성 (낫표·가운뎃점·`같은 법` 조응, v4.9.0)** + **폐지 감지 (검색 0건 시 폐지 법령·행정규칙 연혁 추적 — 폐지사유·후속 통합 규정 자동 안내, v4.10.0)** + **search_law_bulk (등록부 대량 조회 + MST diff 감시, v4.13.0)** + **행정규칙 부분 조회 (get_admin_rule 의 jo·chapter·keyword·page — 통짜 전문을 조문 단위로, v4.14.0)** + **법령ID 계보 연혁 (제명이 바뀌기 전 버전까지 — search_historical_law·applicable_law·time_travel, get_annexes date 시점 별표, get_law_text efYd 기준일 보정, 행정규칙 기준일 판단, v4.15.0)** + **amendment_table (일부개정안 신·구조문대비표 — 현행 자동 대조·HWPX, v4.15.16)**
 
 ## Structure
 
@@ -18,7 +18,7 @@ Korean Law MCP Server v4.15.15 - 법제처 42개 API → 10개 통합 도구 (�
 src/
 ├── index.ts              # 엔트리포인트 (STDIO/HTTP 모드)
 ├── cli.ts                # CLI v2.0 (자연어 라우팅 + REPL)
-├── tool-registry.ts      # 99개 도구 등록, V3_EXPOSED 10개만 노출 (TOOL_COUNTS 파생값)
+├── tool-registry.ts      # 100개 도구 등록, V3_EXPOSED 10개만 노출 (TOOL_COUNTS 파생값)
 ├── tools/                # 도구 구현 (76개 파일, scenarios/ 포함)
 ├── lib/
 │   ├── api-client.ts     # API 클라이언트 (throwIfError/checkHtmlError 통일)
@@ -171,7 +171,7 @@ get_law_text(mst, jo="006300") → 제63조(휴직) 조회
 |------|------|
 | `cli.ts` | CLI v2.0 — 자연어 라우팅 + REPL |
 | `lib/query-router.ts` | 자연어 → 도구 자동 라우팅 (verify/비교/시간필터/impact_map/time_travel/action_plan 포함) |
-| `tool-registry.ts` | 99개 도구 정의, V3_EXPOSED 10개 노출 (TOOL_COUNTS 파생값) |
+| `tool-registry.ts` | 100개 도구 정의, V3_EXPOSED 10개 노출 (TOOL_COUNTS 파생값) |
 | `tools/legal-research.ts` | chain_* 8개 통합 진입점 — task 파라미터 디스패치 (v4.4.0) |
 | `tools/legal-analysis.ts` | 킬러피처 4개 통합 진입점 — mode 파라미터 디스패치 (v4.4.0) |
 | `tools/verify-citations.ts` | LLM 환각 방지 인용 검증 (v3.5 killer feature) |
@@ -233,6 +233,17 @@ get_law_text(mst, jo="006300") → 제63조(휴직) 조회
 | `tools/annex-list.ts` | 목록 수집 — 봉투 파싱 + 페이지네이션(업스트림 100건/페이지) |
 | `tools/annex-select.ts` | 번호·제목·위임조문으로 목록에서 항목 선택 |
 | `lib/annex-canonical.ts` | 현행 본문 별표단위 대조 (정본 링크·신설 병합) |
+
+### 개정 입안 (신·구조문대비표)
+
+| 파일 | 역할 |
+|------|------|
+| `tools/amendment-table.ts` | `amendment_table` — 현행 조회·정렬·출력. HWPX 저장은 `enableAmendmentFileOutput()`을 부른 STDIO·CLI 진입점만 |
+| `lib/amendment-units.ts` | 조문 텍스트 → 조·항·호·목 트리 (연혁 표기 제거, `<16>` 항 번호, 곧은 겹따옴표 → “ ”) |
+| `lib/amendment-align.ts` | 단위 짝짓기 — 번호 우선(법제처 신구법비교와 같이), 번호가 어긋난 단위만 내용 유사도 |
+| `lib/amendment-diff.ts` | 문장 비교 → 밑줄 구간 (어절 LCS, 끼워 넣기 앞 어절 붙잡기, 끝 조사 밖으로) |
+| `lib/amendment-render.ts` · `lib/amendment-marks.ts` | 대비표 행 조립 / 표기 원자(`----`·`(생  략)`·`①·②`·`① ∼ ⑪`) |
+| `lib/amendment-hwpx.ts` · `lib/amendment-hwpx-header.ts` | HWPX 생성 (법제업무편람 서식). 줄바꿈은 글자 단위 — 어절 단위면 좁은 칸이 벌어진다 |
 
 ### 기타 공용
 

@@ -15,6 +15,7 @@ import { parseHttpPort } from "./server/http-config.js"
 import { readExecutionLimits, type ExecutionLimits } from "./lib/execution-limits.js"
 import { VERSION } from "./version.js"
 import { SERVER_INSTRUCTIONS } from "./lib/tool-profiles.js"
+import { enableAmendmentFileOutput } from "./tools/amendment-table.js"
 
 // API 클라이언트 초기화 (LAW_OC 또는 KOREAN_LAW_API_KEY 지원)
 const LAW_OC = process.env.LAW_OC || process.env.KOREAN_LAW_API_KEY || ""
@@ -59,6 +60,8 @@ async function main() {
     const stderrWrite = (...args: unknown[]) =>
       process.stderr.write(args.map(String).join(" ") + "\n")
     console.log = console.warn = console.info = console.debug = stderrWrite
+    // 로컬 실행만 대비표 HWPX 를 디스크에 쓴다(HTTP 원격은 끈 채로)
+    enableAmendmentFileOutput()
     const server = createServer()
     const transport = new StdioServerTransport()
     await server.connect(transport)
