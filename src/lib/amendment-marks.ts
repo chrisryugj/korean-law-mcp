@@ -17,12 +17,14 @@ export const MARK_DEL = "<삭  제>"
 export const plain = (text: string): Seg => ({ text, u: false })
 export const under = (text: string): Seg => ({ text, u: true })
 
-/** 개정안 칸의 같은 부분 → 줄표. 문장 끝 마침표와 양 끝 공백(밑줄과의 경계)은 남긴다 */
-export function dashify(text: string): string {
+/** 개정안 칸의 같은 부분 → 줄표. 문장 끝 마침표와 양 끝 공백(밑줄과의 경계)은 남긴다.
+ *  before 는 이 조각 앞 글자 — 밑줄 친 "…한다" 뒤에 마침표만 남은 조각도 문장 끝으로 본다(#180) */
+export function dashify(text: string, before = ""): string {
   const [lead, core, tail] = splitEdges(text)
+  const prev = lead ? lead[lead.length - 1] : before
   let out = ""
   for (let k = 0; k < core.length; k++) {
-    const sentenceEnd = core[k] === "." && (k === core.length - 1 || /\s/.test(core[k + 1])) && /[가-힣)」\]”]/.test(core[k - 1] ?? "")
+    const sentenceEnd = core[k] === "." && (k === core.length - 1 || /\s/.test(core[k + 1])) && /[가-힣)」\]”]/.test(k > 0 ? core[k - 1] : prev)
     if (sentenceEnd) out += "."
     else out += out.endsWith(".") && /\s/.test(core[k]) ? " " : "-"
   }
@@ -31,7 +33,7 @@ export function dashify(text: string): string {
 
 /** 개정안 칸 세그먼트 — 밑줄 아닌 부분을 줄표로 */
 export function dashSegs(segs: Seg[]): Seg[] {
-  return segs.map(s => s.u ? s : plain(dashify(s.text)))
+  return segs.map((s, i) => s.u ? s : plain(dashify(s.text, segs[i - 1]?.text.slice(-1) ?? "")))
 }
 
 export function joinLabels(labels: string[]): string {
