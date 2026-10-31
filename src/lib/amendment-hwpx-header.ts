@@ -6,6 +6,8 @@
  * 조·항·호·목 내어 쓰기 14 · 14 · 24.4 · 45.4 · 54.2 · 75.2pt.
  * 한글 줄바꿈은 글자 단위 — 한컴 XML 에서 breakNonLatinWord="KEEP_WORD" 가 글자 단위다(이름과 반대,
  * kordoc 한글 실렌더 실측). 어절 단위면 좁은 대비표 칸이 양쪽 정렬로 크게 벌어진다(한글 화면 확인).
+ * 본문 정렬은 왼쪽 — 줄표 덩어리(라틴 단어라 안 쪼개짐)가 다음 줄로 넘어가면 남은 짧은 줄이 양쪽 정렬로
+ * "설   및   공동주택", "- - - -"처럼 벌어졌다(한글 화면 확인). 한글은 글자 단위라 왼쪽이어도 줄이 꽉 찬다.
  */
 
 const NS_HEAD = "http://www.hancom.co.kr/hwpml/2011/head"
@@ -93,7 +95,7 @@ function paraPr(id: number, align: string, lineSpacing: number, hangPt = 0): str
 export function headerXml(): string {
   const chars = [charPr(CHAR.body, 14), charPr(CHAR.underline, 14, { underline: true }), charPr(CHAR.title, 16, { bold: true })]
   const paras = [paraPr(PARA.title, "CENTER", 160), paraPr(PARA.center, "CENTER", 180),
-    ...HANG_PT.map((pt, i) => paraPr(PARA.bodyLevel + i, "JUSTIFY", 180, pt))]
+    ...HANG_PT.map((pt, i) => paraPr(PARA.bodyLevel + i, "LEFT", 180, pt))]
   const borders = [borderFill(BORDER.none, false, false, false), borderFill(BORDER.topBottom, true, true, true),
     borderFill(BORDER.top, true, false, true), borderFill(BORDER.open, false, false, true), borderFill(BORDER.bottom, false, true, true)]
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
