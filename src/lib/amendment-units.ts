@@ -125,25 +125,32 @@ export function parseArticle(text: string): ArticleTree {
 }
 
 /**
- * 개정안의 자리표시를 현행 단위로 채운다. 현행에 없는 번호를 가리키면 빼고 missing 에 적는다.
+ * 개정안의 자리표시를 현행 단위로 채운다. 현행에 없는 번호를 가리키면 빼고 missing 에 적는다. 범위 끝만 현행보다 길면
+ * 현행 마지막 단위까지로 줄이고 clamped 에 적는다.
  * 조 본문 자체가 "(현행과 같음)"이면 현행 본문을 쓴다.
  */
-export function fillSame(proposal: ArticleTree, current: ArticleTree, missing: string[]): ArticleTree {
+export function fillSame(proposal: ArticleTree, current: ArticleTree, missing: string[], clamped?: string[]): ArticleTree {
   const lead = SAME_LEAD.test(proposal.lead) ? current.lead : proposal.lead
-  return { ...proposal, lead, children: fillUnits(proposal.children, current.children, missing) }
+  return { ...proposal, lead, children: fillUnits(proposal.children, current.children, missing, clamped) }
 }
 
-function fillUnits(units: Unit[], current: Unit[], missing: string[]): Unit[] {
+function fillUnits(units: Unit[], current: Unit[], missing: string[], clamped?: string[]): Unit[] {
   const out: Unit[] = []
   for (const u of units) {
     const at = (label: string) => current.findIndex(c => c.kind === u.kind && c.label === label)
     if (u.sameUntil !== undefined) {
-      const i = at(u.label), j = at(u.sameUntil)
+      const i = at(u.label)
+      let j = at(u.sameUntil)
+      // 범위 끝이 현행에 없으면 현행의 그 층 마지막 단위까지로 줄인다 — 범위 전체를 빼면 멀쩡한 항이 <삭  제>로 나갔다(#181)
+      if (i >= 0 && j < 0 && u.sameUntil !== u.label) {
+        for (let k = current.length - 1; k >= i; k--) if (current[k].kind === u.kind) { j = k; break }
+        if (j >= i) clamped?.push(`${u.label} ∼ ${u.sameUntil}`)
+      }
       if (i < 0 || j < i) missing.push(u.sameUntil === u.label ? u.label : `${u.label} ∼ ${u.sameUntil}`)
       else out.push(...structuredClone(current.slice(i, j + 1)))
       continue
     }
-    out.push({ ...u, children: fillUnits(u.children, current[at(u.label)]?.children ?? [], missing) })
+    out.push({ ...u, children: fillUnits(u.children, current[at(u.label)]?.children ?? [], missing, clamped) })
   }
   return out
 }

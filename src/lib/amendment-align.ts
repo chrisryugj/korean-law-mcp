@@ -16,6 +16,7 @@ export interface PairNode {
 
 const LABEL_BONUS = 2
 const MIN_SIM_UNLABELED = 0.5
+const MOVED_SCORE = 0.999
 
 type Grams = { map: Map<string, number>; total: number; norm: string }
 
@@ -81,6 +82,9 @@ export function alignUnits(a: Unit[], b: Unit[]): PairNode[] {
     if (a[i].kind !== b[j].kind) return -1
     const sim = Math.max(dice(ga[i][0], gb[j][0]), dice(ga[i][1], gb[j][1]))
     if (a[i].label === b[j].label) return LABEL_BONUS + sim
+    // 호·목을 끼워 번호만 밀린 단위(내용·자손 그대로)는 번호 짝보다 먼저 — 법제업무편람 "(현행 제2호와 같음)" (#181).
+    // 같은 번호의 같은 내용(LABEL_BONUS + 1)보다는 낮게 둔다
+    if (a[i].kind !== "hang" && ga[i][1].norm === gb[j][1].norm) return LABEL_BONUS + MOVED_SCORE
     return sim >= MIN_SIM_UNLABELED ? sim : -1
   }
   const score = a.map((_, i) => b.map((_, j) => pairScore(i, j)))
@@ -117,4 +121,10 @@ export function isSame(n: PairNode): boolean {
 /** 개정안이 "③ 삭제" 로 지운 단위 */
 export function isDeletedInPlace(n: PairNode): boolean {
   return !!n.old && !!n.new && /^삭제\.?$/.test(n.new.body) && !/^삭제\.?$/.test(n.old.body)
+}
+
+/** 번호만 밀린 호·목 — 번호는 다르고 내용·자손은 그대로 ("(현행 제2호와 같음)") */
+export function isMoved(n: PairNode): boolean {
+  return !!n.old && !!n.new && n.old.kind !== "hang" && n.old.label !== n.new.label &&
+    normalizeForCompare(fullText(n.old)) === normalizeForCompare(fullText(n.new))
 }

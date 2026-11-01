@@ -7,7 +7,7 @@
  * - 바뀐 단위: 현행 칸은 바뀐 부분 밑줄, 개정안 칸은 같은 부분 "----" + 바뀐 부분 밑줄.
  */
 import { diffInline, type Seg } from "./amendment-diff.js"
-import { alignUnits, isDeletedInPlace, isSame, type PairNode } from "./amendment-align.js"
+import { alignUnits, isDeletedInPlace, isMoved, isSame, type PairNode } from "./amendment-align.js"
 import { fillSame, normalizeForCompare, unitLines, type ArticleTree, type Unit } from "./amendment-units.js"
 import {
   dashify, dashSegs, joinLabels, plain, under,
@@ -19,7 +19,8 @@ export interface Row {
   new: Line[]
 }
 
-const TAIL = /\s(다만,|이 경우)\s/
+// "이 경우," 처럼 쉼표를 붙인 후단도 있다(지방공무원법 제29조의4①, #181)
+const TAIL = /\s(다만,|이 경우,?)\s/
 
 /** 끝에 붙은 단서("다만,")·후단("이 경우") 문장을 떼어 낸다 */
 function splitTail(body: string): { main: string; tail: string; kind: "단서" | "후단" | null } {
@@ -83,11 +84,28 @@ function renderNodes(nodes: PairNode[], rows: Row[]) {
       rows.push({ old: [[plain(`${labels} ${OMIT_OLD}`)]], new: [[plain(`${labels} ${OMIT_NEW}`)]] })
       continue
     }
+    if (isMoved(n)) {
+      const run: PairNode[] = []
+      while (k < nodes.length && isMoved(nodes[k])) run.push(nodes[k++])
+      rows.push({
+        old: [[plain(`${joinLabels(run.map(r => r.old!.label))} ${OMIT_OLD}`)]],
+        new: [[plain(`${joinLabels(run.map(r => r.new!.label))} ${movedNote(run.map(r => r.old!))}`)]],
+      })
+      continue
+    }
     k++
     if (!n.old) rows.push({ old: [[under(MARK_NEW)]], new: underAll(unitLines(n.new!)) })
     else if (!n.new || isDeletedInPlace(n)) rows.push({ old: underAll(unitLines(n.old)), new: [[under(MARK_DEL)]] })
     else changedRows(n, rows)
   }
+}
+
+/** 번호가 밀린 단위의 개정안 칸 문구 — "(현행 제2호와 같음)" · "(현행 제2호 및 제3호와 같음)" · "(현행 제2호부터 제4호까지와 같음)" */
+function movedNote(units: Unit[]): string {
+  const name = (u: Unit) => u.kind === "ho" ? `제${u.label.replace(/\.$/, "")}호` : `${u.label.replace(/[.)]$/, "")}${u.kind === "mok" ? "목" : ""}`
+  if (units.length === 1) return `(현행 ${name(units[0])}와 같음)`
+  if (units.length === 2) return `(현행 ${name(units[0])} 및 ${name(units[1])}와 같음)`
+  return `(현행 ${name(units[0])}부터 ${name(units[units.length - 1])}까지와 같음)`
 }
 
 function headingSegs(t: ArticleTree, titleChanged: boolean): Seg[] {
@@ -127,9 +145,10 @@ function droppedLabels(nodes: PairNode[], prefix = ""): string[] {
  */
 export function renderArticle(oldTree: ArticleTree | null, proposal: ArticleTree, notes: string[] = []): Row[] | null {
   if (!oldTree) return [{ old: [[under(MARK_NEW)]], new: underAll(articleLines(proposal)) }]
-  const missing: string[] = []
-  const newTree = fillSame(proposal, oldTree, missing)
+  const missing: string[] = [], clamped: string[] = []
+  const newTree = fillSame(proposal, oldTree, missing, clamped)
   if (missing.length) notes.push(`"(현행과 같음)"으로 적은 ${missing.join(", ")}이(가) 현행에 없어 뺐습니다`)
+  if (clamped.length) notes.push(`"(현행과 같음)"으로 적은 ${clamped.join(", ")}의 끝 번호가 현행에 없어 현행 마지막 번호까지로 줄였습니다 — 범위를 확인하세요`)
   if (isArticleDeleted(newTree) && !isArticleDeleted(oldTree)) {
     return [{ old: underAll(articleLines(oldTree)), new: [[under(`${newTree.num} 삭제`)]] }]
   }

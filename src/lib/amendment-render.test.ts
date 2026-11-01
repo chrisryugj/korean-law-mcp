@@ -52,8 +52,8 @@ describe("자리표시 (현행과 같음)", () => {
 
   it("현행에 없는 번호를 가리키면 빼고 알린다", () => {
     const notes: string[] = []
-    renderArticle(parseArticle("제3조(가) ① 가는 한다.\n② 나는 한다."), parseArticle("제3조(가) ① ∼ ⑤ (현행과 같음)"), notes)
-    expect(notes[0]).toContain("① ∼ ⑤이(가) 현행에 없어 뺐습니다")
+    renderArticle(parseArticle("제3조(가) ① 가는 한다.\n② 나는 한다."), parseArticle("제3조(가) ①·② (현행과 같음)\n⑥ ∼ ⑨ (현행과 같음)"), notes)
+    expect(notes[0]).toContain("⑥ ∼ ⑨이(가) 현행에 없어 뺐습니다")
   })
 })
 
@@ -216,3 +216,33 @@ describe("표기 원자", () => {
     expect(dashify(".", "")).toBe("-")
   })
 })
+
+describe("#181", () => {
+  it("1: 쉼표 붙은 후단('이 경우,')을 지우면 <후단 삭제>, 남은 어미는 줄표 (지방공무원법 제29조의4①)", () => {
+    const old = "제29조의4(개방형직위) ① 임용권자는 직위를 개방형직위로 지정하여 운영할 수 있다. 이 경우, 시ㆍ도는 5급 이상 직위는 개방형직위로 본다.\n② 나는 한다."
+    const neu = "제29조의4(개방형직위) ① 임용권자는 직위를 개방형직위로 지정하여 운영할 수 있다.\n② (현행과 같음)"
+    const rows = table(old, neu)
+    expect(rows[0].old).toBe("제29조의4(개방형직위) ① 임용권자는 직위를 개방형직위로 지정하여 운영할 수 있다. ‹이 경우, 시ㆍ도는 5급 이상 직위는 개방형직위로 본다.›")
+    expect(rows[0].new).toMatch(/^제29조의4\(개방형직위\) ① [-\s]+\. ‹<후단 삭제>›$/)
+  })
+
+  it("2: 호를 끼워 번호만 밀린 호는 (생  략) ↔ (현행 제N호와 같음), 새 호만 <신  설> (주택법 제57조의2① 가상 개정)", () => {
+    const old = "제57조의2(공급) ① 다음 각 호와 같다.\n1. 가를 한다.\n2. 나를 한다.\n3. 다를 한다."
+    const neu = "제57조의2(공급) ① 다음 각 호와 같다.\n1. 가를 한다.\n2. 새 호를 한다.\n3. 나를 한다.\n4. 다를 한다."
+    expect(table(old, neu)).toEqual([
+      { old: "제57조의2(공급) ① 다음 각 호와 같다.", new: "제57조의2(공급) ① ----------." },
+      { old: "1. (생  략)", new: "1. (현행과 같음)" },
+      { old: "‹<신  설>›", new: "‹2. 새 호를 한다.›" },
+      { old: "2.·3. (생  략)", new: "3.·4. (현행 제2호 및 제3호와 같음)" },
+    ])
+  })
+
+  it("3: (현행과 같음) 범위 끝이 현행보다 길면 현행 마지막 번호까지로 줄이고 알린다 — <삭  제> 없음", () => {
+    const notes: string[] = []
+    const rows = show(renderArticle(parseArticle("제3조(가) ① 가는 한다.\n② 나는 한다.\n③ 다는 한다."), parseArticle("제3조(가) ① 가는 새로 한다.\n② ∼ ⑩ (현행과 같음)"), notes))
+    expect(rows.some(r => r.new.includes("삭  제"))).toBe(false)
+    expect(rows[rows.length - 1]).toEqual({ old: "②·③ (생  략)", new: "②·③ (현행과 같음)" })
+    expect(notes.join(" ")).toContain("현행 마지막 번호까지로 줄였습니다")
+  })
+})
+

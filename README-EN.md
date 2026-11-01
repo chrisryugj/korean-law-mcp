@@ -42,10 +42,11 @@ If this saves you time, a GitHub ⭐ helps others find it.
 
 ## Recent updates
 
-Current version **v4.15.20**. All numbers come from the measurements recorded in the [CHANGELOG](CHANGELOG.md).
+Current version **v4.15.21**. All numbers come from the measurements recorded in the [CHANGELOG](CHANGELOG.md).
 
 | Version | Main change | Measured change |
 |---------|-------------|-----------------|
+| 4.15.21 | Comparison table: deleting a second sentence that opens with "이 경우," shows `<후단 삭제>` · items only renumbered by an insertion read "(현행 제2호와 같음)" · a "(현행과 같음)" range longer than the current text is cut to its last unit (#181) | 3 regression tests |
 | 4.15.20 | Comparison table, proposed column: the period after a change that ends right before it no longer turns into 「-」 when a proviso or second sentence is added (#180) | Building Act Art. 79(5) regression test |
 | 4.15.19 | Comparison-table HWPX body left-aligned — short lines left behind by wrapped dash runs no longer stretch | Checked in Hangul |
 | 4.15.18 | `legal_analysis` description and title now carry the word users type, 「신구조문대비표」 (claude.ai tool search found nothing before) | Search-word gate test |
