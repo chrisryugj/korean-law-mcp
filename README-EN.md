@@ -42,10 +42,11 @@ If this saves you time, a GitHub ⭐ helps others find it.
 
 ## Recent updates
 
-Current version **v4.15.22**. All numbers come from the measurements recorded in the [CHANGELOG](CHANGELOG.md).
+Current version **v4.15.23**. All numbers come from the measurements recorded in the [CHANGELOG](CHANGELOG.md).
 
 | Version | Main change | Measured change |
 |---------|-------------|-----------------|
+| 4.15.23 | Citation check: a paragraph cited on an article that has no numbered paragraphs (e.g. Civil Act Art. 750) is now ✗ instead of ⚠ for "(2)" and above; "(1)" gets a note to cite the article alone | 5 regression tests |
 | 4.15.22 | Ministry of the Interior and Safety interpretations `mois` (local-tax rulings) + central-ministry first-line interpretations `ministry` (39 ministries via `options.ministry`) (#182). Local-tax interpretation queries now route to MOIS instead of NTS | Domains 21 → 23 |
 | 4.15.21 | Comparison table: deleting a second sentence that opens with "이 경우," shows `<후단 삭제>` · items only renumbered by an insertion read "(현행 제2호와 같음)" · a "(현행과 같음)" range longer than the current text is cut to its last unit (#181) | 3 regression tests |
 | 4.15.20 | Comparison table, proposed column: the period after a change that ends right before it no longer turns into 「-」 when a proviso or second sentence is added (#180) | Building Act Art. 79(5) regression test |
@@ -350,12 +351,12 @@ Every result ends with suggested follow-up queries.
 Actual `verify_citations` output:
 
 ```
-"Civil Act Art. 750 … Labor Standards Act Art. 60(1) … Commercial Act Art. 401-2(7) … Criminal Act Art. 9999"
+"Housing Lease Protection Act Art. 3-2(2) … Art. 6-3(1) … Art. 7(3) caps increases at 5% … Art. 8(4)"
 
-✓ Civil Act Article 750 (Tort liability) — exists
-✓ Labor Standards Act Article 60 (Annual paid leave) Paragraph 1 — exists
-✗ Commercial Act Article 401-2 — Paragraph 7 doesn't exist (max Paragraph 2)
-✗ Criminal Act Article 9999 — no such article (valid range: Art.1~Art.372)
+✓ 주택임대차보호법 제3조의2(보증금의 회수) 제2항 실존            (Art. 3-2(2) exists)
+✓ 주택임대차보호법 제6조의3(계약갱신 요구 등) 제1항 실존        (Art. 6-3(1) exists)
+✗ 주택임대차보호법 제7조(차임 등의 증감청구권) — [NOT_FOUND] 제3항 없음 (최대 제2항)   (Art. 7 has only 2 paragraphs)
+✗ 주택임대차보호법 제8조(보증금 중 일정액의 보호) — [NOT_FOUND] 제4항 없음 (최대 제3항)  (Art. 8 has only 3 paragraphs)
 ```
 
 ### Handy options

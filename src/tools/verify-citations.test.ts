@@ -232,3 +232,47 @@ describe("꼬리 후보 거르기가 실존 법령을 떨어뜨리지 않는다 
     expect(text).not.toContain("HALLUCINATION")
   })
 })
+
+describe("항 구분 없는 조문의 항 인용 (2026-11-03)", () => {
+  // 법제처 응답 실측: 한 문장짜리 조문(민법 제750조)은 항 필드가 없고,
+  // 호만 있는 조문(민법 제777조)은 항번호 없는 항 객체 하나에 호만 담긴다
+  const CIVIL = `<LawSearch><law id="1"><법령일련번호>1</법령일련번호><법령명한글><![CDATA[민법]]></법령명한글><법령ID>1</법령ID><법령구분명>법률</법령구분명></law></LawSearch>`
+  function client(unit: Record<string, unknown>): LawApiClient {
+    return {
+      searchLaw: async () => CIVIL,
+      getLawText: async () => JSON.stringify({ 법령: { 조문: { 조문단위: [{ 조문여부: "조문", ...unit }] } } }),
+      fetchApi: async () => `<LawSearch></LawSearch>`,
+    } as unknown as LawApiClient
+  }
+  const run = async (unit: Record<string, unknown>, text: string) =>
+    (await verifyCitations(client(unit), { text, maxCitations: 5 })).content[0].text
+
+  it("항 필드가 없는 조문의 제2항 인용은 ✗", async () => {
+    const text = await run({ 조문번호: "750", 조문제목: "불법행위의 내용" }, "민법 제750조 제2항")
+    expect(text).toContain("✗ 민법 제750조(불법행위의 내용) — [NOT_FOUND] 제2항 없음 (항으로 나뉘지 않은 조문)")
+    expect(text).toContain("[HALLUCINATION_DETECTED]")
+  })
+
+  it("호만 있는 조문의 제3항 인용도 ✗", async () => {
+    const unit = { 조문번호: "777", 조문제목: "친족의 범위", 항: { 호: [{ 호번호: "1.", 호내용: "1. 8촌 이내의 혈족" }] } }
+    expect(await run(unit, "민법 제777조 제3항")).toContain("[NOT_FOUND] 제3항 없음 (항으로 나뉘지 않은 조문)")
+  })
+
+  it("제1항 인용은 조문 자체가 있으므로 ⚠ 표기 안내", async () => {
+    const text = await run({ 조문번호: "750", 조문제목: "불법행위의 내용" }, "민법 제750조 제1항")
+    expect(text).toContain("⚠ 민법 제750조(불법행위의 내용) 실존, 항으로 나뉘지 않은 조문이라 '제1항' 없이 '제750조'로 인용")
+    expect(text).not.toContain("API 응답 형식 이상")
+  })
+
+  it("조문내용에 ①이 있는데 항 필드가 빠진 응답은 ✗로 단정하지 않는다", async () => {
+    const unit = { 조문번호: "7", 조문내용: "제7조(증감청구) ① 당사자는 … ② 증액청구는 …" }
+    const text = await run(unit, "민법 제7조 제2항")
+    expect(text).toContain("확인 실패 (API 응답 형식 이상)")
+    expect(text).not.toContain("HALLUCINATION")
+  })
+
+  it("항번호가 있는데 읽지 못하면 종전대로 응답 이상 ⚠", async () => {
+    const unit = { 조문번호: "7", 항: [{ 항번호: "??", 항내용: "알 수 없음" }] }
+    expect(await run(unit, "민법 제7조 제2항")).toContain("확인 실패 (API 응답 형식 이상)")
+  })
+})

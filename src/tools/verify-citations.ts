@@ -510,6 +510,15 @@ async function verifyOne(
       if (hangNumbers.includes(cite.hang)) {
         return `✓ ${officialLabel}${joTitle} 제${cite.hang}항 실존`
       }
+      // 항번호가 하나도 없으면 항으로 나뉘지 않은 조문이다(실측: 한 문장 조문은 항 필드가 없고,
+      // 호만 있는 조문은 항번호 없는 항 객체에 호만 담긴다). 응답 이상이 아니다
+      // 조문내용에 ①이 보이면 항이 있는데 응답에서 빠진 것이므로 종전 ⚠로 둔다
+      if (!hangs.some((h: any) => h?.항번호 != null && String(h.항번호).trim() !== "") && !/①/.test(String(found.조문내용 ?? ""))) {
+        if (cite.hang === 1) {
+          return `⚠ ${officialLabel}${joTitle} 실존, 항으로 나뉘지 않은 조문이라 '제1항' 없이 '${cite.displayArticle}'로 인용`
+        }
+        return `✗ ${officialLabel}${joTitle} — [NOT_FOUND] 제${cite.hang}항 없음 (항으로 나뉘지 않은 조문)`
+      }
       const maxHang = hangNumbers.length > 0 ? Math.max(...hangNumbers) : 0
       // maxHang=0이면 파싱 실패 가능성 높음 — 조문 자체는 실존이므로 ⚠로 보고
       if (maxHang === 0) {
