@@ -736,13 +736,13 @@ export const allTools: McpTool[] = [
   // === 통합 도구 (v3) ===
   {
     name: "search_decisions",
-    description: "[통합검색] 21개 도메인(판례·해석례·헌재·행심·조세심판·관세·국세청·고용노동부 해석·공정위·개인정보위·노동위·산재보험재심사·고용보험심사·권익위·소청심사·학칙·공사공단·공공기관·조약·영문법령) 통합 검색. domain으로 선택. 판례 본문까지 필요하면 domain='precedent', options.includeText=true, options.detailLimit=N. 판례 기본은 판례명 검색이라 법리·사실관계·유사판례 탐색은 options.search='both'(판례명+본문). 세무 관련 국세청 직접 회신 해석은 domain='nts', 고용노동부 행정해석(질의회시)은 domain='moel'(본문검색 options.search=2), 산재보험 재심사 재결은 'iaciac', 고용보험 재심사 재결은 'eiac'.",
+    description: "[통합검색] 23개 도메인(판례·해석례·헌재·행심·조세심판·관세·국세청·고용노동부·행정안전부 해석·중앙부처 1차 해석·공정위·개인정보위·노동위·산재보험재심사·고용보험심사·권익위·소청심사·학칙·공사공단·공공기관·조약·영문법령) 통합 검색. domain으로 선택. 판례 본문까지 필요하면 domain='precedent', options.includeText=true, options.detailLimit=N. 판례 기본은 판례명 검색이라 법리·사실관계·유사판례 탐색은 options.search='both'(판례명+본문). 세무 관련 국세청 직접 회신 해석은 domain='nts', 고용노동부 행정해석(질의회시)은 domain='moel'(본문검색 options.search=2), 지방세(취득세·재산세 등) 행정안전부 유권해석은 domain='mois', 그 밖의 부처(국토교통부·재정경제부·보건복지부 등 39개) 1차 해석은 domain='ministry'+options.ministry(부처 코드나 부처명), 산재보험 재심사 재결은 'iaciac', 고용보험 재심사 재결은 'eiac'.",
     schema: SearchDecisionsSchema,
     handler: searchDecisions
   },
   {
     name: "get_decision_text",
-    description: "[통합조회] 21개 도메인 전문 조회. domain+id. full=false(기본) 시 본문 계단식 축약",
+    description: "[통합조회] 23개 도메인 전문 조회. domain+id. full=false(기본) 시 본문 계단식 축약",
     schema: GetDecisionTextSchema,
     handler: getDecisionText
   },

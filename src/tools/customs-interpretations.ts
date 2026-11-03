@@ -6,20 +6,19 @@ import { formatToolError, noResultHint, notFoundResponse } from "../lib/errors.j
 import { decisionFields } from "../lib/decision-fields.js";
 import { rethrowIfFatal } from "../lib/fatal-errors.js";
 import { extractTaxlawEditorBody, fetchTaxlawAction, normalizeHtmlText } from "./precedents.js";
+import { ministryLabel } from "../lib/cgm-expc-ministries.js";
 
-// 관세청(kcsCgmExpc)·국세청(ntsCgmExpc)·고용노동부(moelCgmExpc) 중앙부처 1차 해석은
-// 응답 구조(CgmExpc/cgmExpc, CgmExpcService)가 동일하므로 target만 분기해 재사용
-type CgmExpcTarget = "kcsCgmExpc" | "ntsCgmExpc" | "moelCgmExpc";
-const TARGET_LABEL: Record<CgmExpcTarget, string> = {
-  kcsCgmExpc: "관세청",
-  ntsCgmExpc: "국세청",
-  moelCgmExpc: "고용노동부",
-};
-const TOOL_NAMES: Record<CgmExpcTarget, { search: string; text: string }> = {
+// 관세청(kcsCgmExpc)·국세청(ntsCgmExpc)·고용노동부(moelCgmExpc)·행정안전부(moisCgmExpc) 등 중앙부처 1차 해석은
+// 응답 구조(CgmExpc/cgmExpc, CgmExpcService)가 동일하므로 target만 분기해 재사용 (부처 목록: lib/cgm-expc-ministries)
+export type CgmExpcTarget = `${string}CgmExpc`;
+const TOOL_NAMES: Record<string, { search: string; text: string }> = {
   kcsCgmExpc: { search: "search_customs_interpretations", text: "get_customs_interpretation_text" },
   ntsCgmExpc: { search: "search_nts_interpretations", text: "get_nts_interpretation_text" },
   moelCgmExpc: { search: "search_moel_interpretations", text: "get_moel_interpretation_text" },
+  moisCgmExpc: { search: "search_mois_interpretations", text: "get_mois_interpretation_text" },
 };
+const toolNames = (target: CgmExpcTarget) =>
+  TOOL_NAMES[target] ?? { search: "search_decisions[ministry]", text: "get_decision_text[ministry]" };
 
 /** 검색범위 search(1=안건명 기본, 2=본문). options 경유로 문자열 "2"가 올 수 있다 */
 function normalizeSearchScope(value: unknown): string | undefined {
@@ -68,12 +67,20 @@ export async function searchMoelInterpretations(
   return searchCgmExpcByTarget(apiClient, args, "moelCgmExpc");
 }
 
-async function searchCgmExpcByTarget(
+/** 행정안전부 법령해석(지방세 등 유권해석) 검색 (#182) — 응답 구조 관세청과 동일, target만 분기. unified-decisions만 사용 */
+export async function searchMoisInterpretations(
+  apiClient: LawApiClient,
+  args: SearchCustomsInterpretationsInput
+): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
+  return searchCgmExpcByTarget(apiClient, args, "moisCgmExpc");
+}
+
+export async function searchCgmExpcByTarget(
   apiClient: LawApiClient,
   args: SearchCustomsInterpretationsInput,
   target: CgmExpcTarget
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
-  const orgLabel = TARGET_LABEL[target];
+  const orgLabel = ministryLabel(target);
   try {
     const extraParams: Record<string, string> = {
       display: (args.display || 20).toString(),
@@ -128,8 +135,8 @@ async function searchCgmExpcByTarget(
       if (expc.법령해석상세링크) {
         output += `  링크: ${expc.법령해석상세링크}\n`;
       }
-      // 국세청은 법제처 일련번호로 본문을 못 받는다 — 본문 조회 키(ntstDcmId)를 따로 싣는다 (#178)
-      const ntstDcmId = target === "ntsCgmExpc" ? extractNtstDcmId(expc.법령해석상세링크) : "";
+      // 국세청·재정경제부는 법제처 일련번호로 본문을 못 받는다 — 상세링크가 taxlaw 면 본문 조회 키(ntstDcmId)를 따로 싣는다 (#178, #182)
+      const ntstDcmId = extractNtstDcmId(expc.법령해석상세링크);
       if (ntstDcmId) output += `  본문조회ID(ntstDcmId): ${ntstDcmId}\n`;
       output += `\n`;
     }
@@ -143,7 +150,7 @@ async function searchCgmExpcByTarget(
       }]
     };
   } catch (error) {
-    return formatToolError(error, TOOL_NAMES[target].search);
+    return formatToolError(error, toolNames(target).search);
   }
 }
 
@@ -171,8 +178,16 @@ export async function getMoelInterpretationText(
   return getCgmExpcTextByTarget(apiClient, args, "moelCgmExpc");
 }
 
+/** 행정안전부 법령해석 본문 조회 — lawService.do?target=moisCgmExpc (CgmExpcService) (#182) */
+export async function getMoisInterpretationText(
+  apiClient: LawApiClient,
+  args: GetCustomsInterpretationTextInput
+): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
+  return getCgmExpcTextByTarget(apiClient, args, "moisCgmExpc");
+}
+
 /** 국세법령정보시스템 문서 ID — 18자리 숫자 또는 그것을 담은 taxlaw.nts.go.kr 상세링크 */
-function extractNtstDcmId(value: string | undefined): string {
+export function extractNtstDcmId(value: string | undefined): string {
   const text = (value || "").trim();
   if (/^\d{18}$/.test(text)) return text;
   try {
@@ -256,7 +271,7 @@ export async function getNtsInterpretationText(
   }
 }
 
-async function getCgmExpcTextByTarget(
+export async function getCgmExpcTextByTarget(
   apiClient: LawApiClient,
   args: GetCustomsInterpretationTextInput,
   target: CgmExpcTarget
@@ -281,7 +296,7 @@ async function getCgmExpcTextByTarget(
     }
 
     if (!data.CgmExpcService) {
-      throw new Error(`${TARGET_LABEL[target]} interpretation not found or invalid response format`);
+      throw new Error(`${ministryLabel(target)} interpretation not found or invalid response format`);
     }
 
     const expc = decisionFields(data.CgmExpcService);
@@ -303,7 +318,7 @@ async function getCgmExpcTextByTarget(
       관세법령정보포털원문링크: expc.관세법령정보포털원문링크
     };
 
-    let output = `=== ${basic.안건명 || `${TARGET_LABEL[target]} 법령해석`} ===\n\n`;
+    let output = `=== ${basic.안건명 || `${ministryLabel(target)} 법령해석`} ===\n\n`;
 
     output += `기본 정보:\n`;
     output += `  해석일련번호: ${basic.법령해석일련번호 || "N/A"}\n`;
@@ -341,6 +356,6 @@ async function getCgmExpcTextByTarget(
       }]
     };
   } catch (error) {
-    return formatToolError(error, TOOL_NAMES[target].text);
+    return formatToolError(error, toolNames(target).text);
   }
 }

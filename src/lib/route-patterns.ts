@@ -92,7 +92,7 @@ const routePatterns: Pattern[] = [
       "impact_map", "applicable_law", "verify_citations", "cite_check",
       "law_system", "law_comparison", "amendment", "precedent",
       "annex", "law_tree", "constitutional", "english_law",
-      "interpretation", "nts_interpretation", "moel_interpretation", "insurance_review", "contract_review",
+      "interpretation", "nts_interpretation", "mois_interpretation", "moel_interpretation", "insurance_review", "contract_review",
       "scenario_time_travel",
     ],
     extract: (query) => {
@@ -400,9 +400,9 @@ const routePatterns: Pattern[] = [
     patterns: [
       /국세청\s*(?:법령\s*)?해석|국세청\s*(?:해석|질의|회신|예규)/,
       // "국세청 + 세목" 단독 패턴 (예: "국세청 양도세", "국세청 부가세")
-      /국세청\s+(?:양도|소득|법인|부가가치|부가|상속|증여|종합부동산|취득|재산|지방|양도소득)세/,
-      // 세목 + 해석/예규/질의 (양도세/부가세 같은 약칭 포함)
-      /(?:양도소득|양도|소득|법인|부가가치|부가|상속|증여|종합부동산|취득|재산|지방)세\s*(?:해석|예규|질의|회신)/,
+      /국세청\s+(?:양도|소득|법인|부가가치|부가|상속|증여|종합부동산|취득|재산|지방|지방소득|양도소득)세/,
+      // 세목 + 해석/예규/질의 (양도세/부가세 같은 약칭 포함). 지방세(취득·재산·지방소득세 등)는 행안부 소관이라 mois 로 (#182)
+      /(?<!지방)(?:양도소득|양도|소득|법인|부가가치|부가|상속|증여|종합부동산)세\s*(?:해석|예규|질의|회신)/,
       /예규\s*(?:국세|소득세|법인세|부가세|양도소득세|양도세|상속세|증여세)/,
     ],
     tool: "search_decisions",
@@ -414,6 +414,27 @@ const routePatterns: Pattern[] = [
       return { domain: "nts", query: cleaned || query }
     },
     reason: "국세청 해석 키워드 → search_decisions(domain=nts) — 국세청 직접 회신 해석례",
+    priority: 3,
+  },
+
+  // ── 19-1b. 행정안전부 법령해석 — 지방세 유권해석 (#182) ──
+  // 국세청 DB 에도 취득세 건이 있지만(103건) 지방세 해석은 행안부 회신(1,036건)이 실무 기준이다.
+  // "국세청 취득세"처럼 국세청을 명시하면 위 nts 패턴이 먼저 잡는다
+  {
+    name: "mois_interpretation",
+    patterns: [
+      /(?:행정\s*안전부|행안부)\s*(?:법령\s*|유권\s*)?(?:해석|질의|회신)/,
+      /(?:취득|재산|지방\S{0,3}|등록면허|주민)세\s*(?:유권\s*)?(?:해석|예규|질의|회신)/,
+    ],
+    tool: "search_decisions",
+    extract: (query) => {
+      const cleaned = query
+        .replace(/행정\s*안전부|행안부|법령\s*해석|유권\s*해석|해석례?|질의|회신|예규/g, "")
+        .replace(/\s+/g, " ")
+        .trim()
+      return { domain: "mois", query: cleaned || query }
+    },
+    reason: "행안부·지방세 해석 키워드 → search_decisions(domain=mois) — 행정안전부 유권해석",
     priority: 3,
   },
 

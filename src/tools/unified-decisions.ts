@@ -1,5 +1,5 @@
 /**
- * Unified Decision Tools — 21개 도메인의 search/get을 2개 도구로 통합
+ * Unified Decision Tools — 23개 도메인의 search/get을 2개 도구로 통합
  *
  * 기존 34개 도구 → search_decisions + get_decision_text
  * 컨텍스트 절감: ~51KB → ~3KB
@@ -20,7 +20,9 @@ import {
   searchCustomsInterpretations, getCustomsInterpretationText,
   searchNtsInterpretations, getNtsInterpretationText,
   searchMoelInterpretations, getMoelInterpretationText,
+  searchMoisInterpretations, getMoisInterpretationText,
 } from "./customs-interpretations.js"
+import { searchMinistryInterpretations, getMinistryInterpretationText } from "./ministry-interpretations.js"
 import { searchConstitutionalDecisions, getConstitutionalDecisionText } from "./constitutional-decisions.js"
 import { searchAdminAppeals, getAdminAppealText } from "./admin-appeals.js"
 import {
@@ -46,7 +48,7 @@ import { fetchPrecedentEvidence, validatePrecedentSearchResult } from "./precede
 // ========================================
 
 const DOMAINS = [
-  "precedent", "interpretation", "tax_tribunal", "customs", "nts", "moel",
+  "precedent", "interpretation", "tax_tribunal", "customs", "nts", "moel", "mois", "ministry",
   "constitutional", "admin_appeal", "ftc", "pipc", "nlrc", "iaciac", "eiac", "acr",
   "appeal_review", "acr_special",
   "school", "public_corp", "public_inst",
@@ -62,6 +64,8 @@ const DOMAIN_LABELS: Record<Domain, string> = {
   customs: "관세청 법령해석",
   nts: "국세청 법령해석",
   moel: "고용노동부 법령해석",
+  mois: "행정안전부 법령해석",
+  ministry: "중앙부처 1차 해석",
   constitutional: "헌재 결정례",
   admin_appeal: "행정심판례",
   ftc: "공정위 결정문",
@@ -87,6 +91,8 @@ const SEARCH_HANDLERS: Record<Domain, (api: LawApiClient, args: any) => Promise<
   customs: searchCustomsInterpretations,
   nts: searchNtsInterpretations,
   moel: searchMoelInterpretations,
+  mois: searchMoisInterpretations,
+  ministry: searchMinistryInterpretations,
   constitutional: searchConstitutionalDecisions,
   admin_appeal: searchAdminAppeals,
   ftc: searchFtcDecisions,
@@ -112,7 +118,8 @@ const SEARCH_HANDLERS: Record<Domain, (api: LawApiClient, args: any) => Promise<
 // compactLongSections 가 그 섹션을 기본으로 절반 가까이 잘랐다(실측 ID 338575: 4,608자 → 2,279자).
 // 라벨 정정 전처럼 축약하지 않는다(2026-09-23 독립 리뷰).
 // moel: 고용노동부 질의회시는 회답·이유가 곧 해석 본문이라 해석례와 같은 이유로 축약하지 않는다.
-const ALREADY_COMPACTED: ReadonlySet<Domain> = new Set(["precedent", "constitutional", "admin_appeal", "interpretation", "moel"])
+// mois·ministry: 같은 CgmExpcService 구조의 중앙부처 1차 해석이라 moel 과 같이 둔다 (#182).
+const ALREADY_COMPACTED: ReadonlySet<Domain> = new Set(["precedent", "constitutional", "admin_appeal", "interpretation", "moel", "mois", "ministry"])
 
 // Get handler dispatch table
 const GET_HANDLERS: Record<Domain, (api: LawApiClient, args: any) => Promise<LooseToolResponse>> = {
@@ -122,6 +129,8 @@ const GET_HANDLERS: Record<Domain, (api: LawApiClient, args: any) => Promise<Loo
   customs: getCustomsInterpretationText,
   nts: getNtsInterpretationText,
   moel: getMoelInterpretationText,
+  mois: getMoisInterpretationText,
+  ministry: getMinistryInterpretationText,
   constitutional: getConstitutionalDecisionText,
   admin_appeal: getAdminAppealText,
   ftc: getFtcDecisionText,
@@ -152,7 +161,7 @@ export const SearchDecisionsSchema = z.object({
   page: z.number().min(1).default(1).optional().describe("페이지 (기본1)"),
   sort: z.string().optional().describe("정렬: lasc/ldes/dasc/ddes/nasc/ndes"),
   options: z.record(z.string(), z.unknown()).optional().describe(
-    "도메인별 옵션. prec:{court,caseNumber,fromDate,toDate,search(1=판례명 기본·2=본문·\"both\"=판례명+본문)} tax_tribunal:{cls,gana,dpaYd,rslYd} customs:{inq,rpl,gana,explYd} moel:{search(1=안건명 기본·2=본문),explYd} constitutional:{caseNumber} interpretation:{fromDate,toDate} treaty:{cls,natCd,eftYd,concYd}"
+    "도메인별 옵션. prec:{court,caseNumber,fromDate,toDate,search(1=판례명 기본·2=본문·\"both\"=판례명+본문)} tax_tribunal:{cls,gana,dpaYd,rslYd} customs:{inq,rpl,gana,explYd} moel·mois:{search(1=안건명 기본·2=본문),explYd} ministry:{ministry(필수: 부처 코드 molit·moef·mohw… 또는 부처명 '국토교통부'),search,explYd} constitutional:{caseNumber} interpretation:{fromDate,toDate} treaty:{cls,natCd,eftYd,concYd}"
   ),
   apiKey: z.string().optional(),
 })
@@ -245,10 +254,10 @@ export async function searchDecisions(
 
 export const GetDecisionTextSchema = z.object({
   domain: z.enum(DOMAINS).describe("도메인 선택 (enum 값 참조)"),
-  id: z.string().describe("일련번호/ID (search 결과에서 획득. nts는 본문조회ID(ntstDcmId))"),
+  id: z.string().describe("일련번호/ID (search 결과에서 획득. nts·ministry=moef는 본문조회ID(ntstDcmId))"),
   full: z.boolean().optional().describe("true=본문 전문 그대로. 미지정=이유/전문 섹션 계단식 축약 (판시·요지·주문은 항상 full)"),
   options: z.record(z.string(), z.unknown()).optional().describe(
-    "도메인별 옵션. treaty:{chrClsCd:'010202'(한)/'010203'(영)} english_law:{mst,lawName} prec/constitutional/admin_appeal/interpretation:{caseName}"
+    "도메인별 옵션. treaty:{chrClsCd:'010202'(한)/'010203'(영)} english_law:{mst,lawName} ministry:{ministry(search 때와 같은 부처)} prec/constitutional/admin_appeal/interpretation:{caseName}"
   ),
   apiKey: z.string().optional(),
 })

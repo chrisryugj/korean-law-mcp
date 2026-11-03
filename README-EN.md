@@ -42,10 +42,11 @@ If this saves you time, a GitHub ⭐ helps others find it.
 
 ## Recent updates
 
-Current version **v4.15.21**. All numbers come from the measurements recorded in the [CHANGELOG](CHANGELOG.md).
+Current version **v4.15.22**. All numbers come from the measurements recorded in the [CHANGELOG](CHANGELOG.md).
 
 | Version | Main change | Measured change |
 |---------|-------------|-----------------|
+| 4.15.22 | Ministry of the Interior and Safety interpretations `mois` (local-tax rulings) + central-ministry first-line interpretations `ministry` (39 ministries via `options.ministry`) (#182). Local-tax interpretation queries now route to MOIS instead of NTS | Domains 21 → 23 |
 | 4.15.21 | Comparison table: deleting a second sentence that opens with "이 경우," shows `<후단 삭제>` · items only renumbered by an insertion read "(현행 제2호와 같음)" · a "(현행과 같음)" range longer than the current text is cut to its last unit (#181) | 3 regression tests |
 | 4.15.20 | Comparison table, proposed column: the period after a change that ends right before it no longer turns into 「-」 when a proviso or second sentence is added (#180) | Building Act Art. 79(5) regression test |
 | 4.15.19 | Comparison-table HWPX body left-aligned — short lines left behind by wrapped dash runs no longer stretch | Checked in Hangul |
@@ -383,8 +384,8 @@ Actual `verify_citations` output:
 | | `get_law_text` | Full article text retrieval (`jo="부칙"` for addenda) |
 | | `get_annexes` | Annex/form retrieval (fee tables, rate tables, forms; `date` for the version in force that day) |
 | **Ordinance** (1) | `ordinance_radar` | Ordinance revision radar — auto-diffs the parent statutes a local ordinance cites |
-| **Unified** (2) | `search_decisions` | **21 domain** unified search (precedents, interpretations, tax tribunal, customs, NTS, MOEL interpretations, constitutional court, admin appeals, FTC, PIPC, NLRC, industrial-accident review, employment-insurance review, ACR, appeal review, ACR special, school rules, public corps, public institutions, treaties, English law) |
-| | `get_decision_text` | **21 domain** full text retrieval |
+| **Unified** (2) | `search_decisions` | **23 domain** unified search (precedents, interpretations, tax tribunal, customs, NTS, MOEL, MOIS interpretations, central-ministry interpretations (39 ministries), constitutional court, admin appeals, FTC, PIPC, NLRC, industrial-accident review, employment-insurance review, ACR, appeal review, ACR special, school rules, public corps, public institutions, treaties, English law) |
+| | `get_decision_text` | **23 domain** full text retrieval |
 | **Meta** (2) | `discover_tools` | Search specialized tools (terms, annexes, history, comparison, etc.) |
 | | `execute_tool` | Execute discovered specialized tool |
 
@@ -424,7 +425,7 @@ Full tool reference: [docs/API.md](docs/API.md).
 - **Failures are never reported as "not found"** — lookup failures, maintenance pages and exhausted budgets carry explicit markers such as `[NOT_FOUND]`
 - **Annex Extraction** — Downloads HWPX/HWP/PDF/XLSX/DOCX annexes and converts to Markdown ([kordoc](https://github.com/chrisryugj/kordoc) engine)
 - **8 chains + 9 scenarios** — Situation-specific analysis added automatically (penalty reduction, customs clearance, delegated legislation, etc.)
-- **21 Decision Domains** — `search_decisions` covers precedents, constitutional court, tax tribunal, FTC, NLRC and more in one tool
+- **23 Decision Domains** — `search_decisions` covers precedents, constitutional court, tax tribunal, FTC, NLRC and more in one tool
 - **Caching** — 1-hour search cache, 24-hour article cache
 - **Remote Endpoint** — Use without installation via `https://mcp.gomdori.app/law` (the legacy `korean-law-mcp.fly.dev/mcp` stays backward compatible)
 
