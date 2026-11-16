@@ -112,6 +112,11 @@ export function verifyPackageArtifacts() {
     const a = readFileSync(resolve(root, rel)), b = readFileSync(resolve(root, "plugins/korean-law", rel))
     assert(a.equals(b), `plugins/korean-law/${rel} must match ${rel}`)
   }
+  // ChatGPT 플러그인 디렉터리 제출본(plugins/chatgpt/korean-law, ZIP 으로 올림)도 게시 버전·공개 서버 주소를 맞춘다
+  const gptPlugin = JSON.parse(readFileSync(resolve(root, "plugins/chatgpt/korean-law/plugin.json"), "utf8"))
+  const gptMcp = JSON.parse(readFileSync(resolve(root, "plugins/chatgpt/korean-law/mcp.json"), "utf8"))
+  assert(gptPlugin.version === packageJson.version, `plugins/chatgpt/korean-law/plugin.json version ${gptPlugin.version} ≠ package.json ${packageJson.version}`)
+  assert(gptMcp.mcpServers["korean-law"]?.url === "https://mcp.gomdori.app/law", `plugins/chatgpt/korean-law/mcp.json must point to https://mcp.gomdori.app/law`)
 
   const allowedTopLevel = new Set(["README.md", "LICENSE", "NOTICE", "package.json"])
   const files = packedFiles()

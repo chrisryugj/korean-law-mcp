@@ -1,0 +1,108 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "korean-law",
+  "version": "4.15.23",
+  "description": "Korean law via the official Ministry of Government Legislation (법제처) Open API: statutes, ordinances, precedents, interpretations, and citation verification.",
+  "author": {
+    "name": "Seungin Ryu",
+    "email": "hello@pubax.org",
+    "url": "https://github.com/chrisryugj"
+  },
+  "homepage": "https://pubax.org/law/",
+  "repository": "https://github.com/chrisryugj/korean-law-mcp",
+  "license": "MIT",
+  "keywords": ["korean-law", "법령", "판례", "법제처", "legal-research", "citation-verification"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Korean Law",
+        "shortDescription": "Search Korean law & precedents",
+        "longDescription": "Look up Korean statutes, local ordinances, administrative rules, court precedents, legal interpretations and treaties from the official National Law Information Center (법제처 국가법령정보 Open API), and check whether article and case citations in an answer actually exist.\n\nWhat you can do:\n- Find a law and read the exact article text, including annexes and forms.\n- Search precedents and interpretations and open the full decision.\n- See the version of a law that was in force on a past date, with transitional provisions.\n- Track later decisions that cite a precedent (citator) to check whether it still stands.\n- Paste an AI answer and verify every statute and case citation against the official database.\n\nAll tools are read-only and return public legal data. Results are not legal advice; confirm important decisions against the original text on law.go.kr.",
+        "developerName": "Seungin Ryu",
+        "category": "Productivity",
+        "capabilities": [
+          "Search Korean statutes, ordinances and administrative rules",
+          "Read article text, annexes and forms",
+          "Search precedents and legal interpretations",
+          "Show the law in force on a past date",
+          "Track citing decisions for a precedent",
+          "Verify statute and case citations in a text"
+        ],
+        "websiteURL": "https://pubax.org/law/",
+        "supportURL": "https://github.com/chrisryugj/korean-law-mcp/issues",
+        "privacyPolicyURL": "https://pubax.org/law/privacy/",
+        "termsOfServiceURL": "https://pubax.org/law/terms/",
+        "defaultPrompt": [
+          "근로기준법 제74조 현행 조문 알려줘",
+          "2023.5.10 당시 도로교통법 제44조는 어땠어?",
+          "이 답변의 법령 인용이 실제로 있는지 검증해줘"
+        ],
+        "brandColor": "#121212",
+        "composerIcon": "./assets/logo.png",
+        "logo": "./assets/logo.png"
+      },
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Read the current text of a statute article",
+              "prompt": "근로기준법 제74조 현행 조문 알려줘",
+              "tools_triggered": "search_law, get_law_text",
+              "expected_behavior": "Finds the Labor Standards Act (근로기준법) and returns the current text of Article 74 (임산부의 보호, protection of pregnant workers) with its promulgation and enforcement dates."
+            },
+            {
+              "description": "Find the version of a law in force on a past date",
+              "prompt": "2023년 5월 10일 당시 도로교통법 제44조는 어떤 내용이었어?",
+              "tools_triggered": "legal_analysis",
+              "expected_behavior": "Calls legal_analysis with mode applicable_law and returns Article 44 (drunk driving ban) of the Road Traffic Act version in force on 2023-05-10 (enforced 2023-04-04), noting later amendments."
+            },
+            {
+              "description": "Check whether a precedent is still followed",
+              "prompt": "대법원 2007다27670 판례 아직 유효해? 이 판례를 인용한 후속 판례를 보여줘",
+              "tools_triggered": "legal_analysis",
+              "expected_behavior": "Calls legal_analysis with mode cite_check and returns the Supreme Court en banc decision 2007다27670 (2008-11-20) with the list of later decisions that cite it."
+            },
+            {
+              "description": "Detect a citation that does not exist",
+              "prompt": "이 문장의 법령 인용을 검증해줘: \"주택임대차보호법 제7조 제5항에 따라 차임 증액은 5%를 넘을 수 없습니다.\"",
+              "tools_triggered": "legal_analysis",
+              "expected_behavior": "Calls legal_analysis with mode verify_citations and reports that Article 7 of the Housing Lease Protection Act has only two paragraphs, so the cited paragraph 5 does not exist. The tool marks this result as an error on purpose so the model does not present the citation as verified."
+            },
+            {
+              "description": "Search court precedents by topic",
+              "prompt": "임대차보증금 반환과 관련된 최근 대법원 판례를 찾아줘",
+              "tools_triggered": "search_decisions",
+              "expected_behavior": "Calls search_decisions with domain precedent and returns matching decisions with case numbers, courts and decision dates, such as Supreme Court 2022다311736 (2025-07-18)."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Law of another country is out of scope",
+              "prompt": "미국 캘리포니아주 임대차법에서 보증금 반환 기한을 알려줘"
+            },
+            {
+              "description": "Filing documents with a court is not supported",
+              "prompt": "내 소송 서류를 대신 작성해서 법원 전자소송에 제출해줘"
+            },
+            {
+              "description": "Unrelated request",
+              "prompt": "오늘 서울 날씨 알려줘"
+            }
+          ]
+        },
+        "demo_recording_url": "https://youtu.be/RzoU_6v9sgo",
+        "commerce": false,
+        "commerce_description": "This plugin does not sell products or process payments."
+      },
+      "publication": {
+        "release_notes": "First ChatGPT directory release. Remote MCP server at https://mcp.gomdori.app/law (version 4.15.23) with 10 read-only tools for Korean statutes, ordinances, precedents, interpretations, past-date versions and citation verification.",
+        "translations": {
+          "ko-KR": {
+            "subtitle": "대한민국 법령·판례 검색과 인용 검증",
+            "description": "법제처 국가법령정보 Open API로 법령, 자치법규, 행정규칙, 판례, 해석례, 조약을 찾고 조문 원문을 확인합니다.\n\n- 법령을 찾아 조문 원문과 별표·서식을 읽습니다.\n- 판례와 해석례를 검색하고 전문을 엽니다.\n- 과거 날짜 기준으로 그때 시행 중이던 조문과 부칙을 보여 줍니다.\n- 판례를 인용한 후속 판결을 추적해 아직 유효한지 확인합니다.\n- AI 답변을 붙여 넣으면 법령·판례 인용이 실제로 있는지 대조합니다.\n\n모든 도구는 조회 전용이며 공공 법령 자료를 돌려줍니다. 결과는 법률 자문이 아니며, 중요한 판단은 국가법령정보센터 원문으로 확인하세요."
+          }
+        }
+      }
+    }
+  }
+}
