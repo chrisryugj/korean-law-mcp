@@ -19,6 +19,8 @@
 
 [English](./README-EN.md)
 
+> **옛 주소 종료 안내 (2026. 11. 23.)** 원격 서버를 국내 공공 클라우드로 옮겼습니다. `https://korean-law-mcp.fly.dev/mcp` 는 **2026. 11. 23.** 에 멈춥니다. 커넥터·설정의 주소를 `https://mcp.gomdori.app/law` 로 바꿔 다시 등록해 주세요(본인 키는 그대로 `?oc=본인키`). 도구와 사용법은 같습니다.
+
 **바로 쓰기:** Claude.ai 커넥터에 `https://mcp.gomdori.app/law?oc=본인키` 한 줄, Claude Code는 플러그인 두 줄 → [설치 및 사용법](#설치-및-사용법)
 
 VS Code·Cursor는 버튼 한 번으로 연결됩니다(키 없이 공용 한도로 동작, 본인 키는 주소 끝에 `?oc=본인키`).
@@ -440,7 +442,7 @@ reg delete "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /
 - **8개 체인 + 9개 시나리오**: 기본 체인에 상황별 확장 분석 자동 추가 (과태료 감경, 관세 통관, 위임입법 감시 등)
 - **23개 도메인 통합 검색**: `search_decisions` 하나로 판례·헌재·조세심판·공정위·노동위 등 즉시 접근
 - **캐시**: 검색 1시간, 조문 24시간 TTL
-- **원격 엔드포인트**: 설치 없이 `https://mcp.gomdori.app/law`로 바로 사용 (구 `korean-law-mcp.fly.dev/mcp`도 하위호환 유지)
+- **원격 엔드포인트**: 설치 없이 `https://mcp.gomdori.app/law`로 바로 사용 (구 `korean-law-mcp.fly.dev/mcp` 는 2026. 11. 23. 종료)
 
 ---
 

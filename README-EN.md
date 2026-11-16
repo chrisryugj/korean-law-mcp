@@ -20,6 +20,8 @@
 
 [한국어](./README.md)
 
+> **Legacy endpoint shutdown (2026-11-23)** The remote server moved to a public cloud in Korea. `https://korean-law-mcp.fly.dev/mcp` stops on **2026-11-23**. Please re-register your connector or config with `https://mcp.gomdori.app/law` (keep your own key as `?oc=YOUR_KEY`). Tools and usage are unchanged.
+
 **Start in one line:** add `https://mcp.gomdori.app/law?oc=YOUR_KEY` as a custom connector in Claude.ai, or run `npx --ignore-scripts --omit=optional korean-law-mcp setup` → [Quick Start](#quick-start)
 
 One-click install for VS Code and Cursor (works without a key on a shared quota; add `?oc=YOUR_KEY` to the URL for your own):
@@ -428,7 +430,7 @@ Full tool reference: [docs/API.md](docs/API.md).
 - **8 chains + 9 scenarios** — Situation-specific analysis added automatically (penalty reduction, customs clearance, delegated legislation, etc.)
 - **23 Decision Domains** — `search_decisions` covers precedents, constitutional court, tax tribunal, FTC, NLRC and more in one tool
 - **Caching** — 1-hour search cache, 24-hour article cache
-- **Remote Endpoint** — Use without installation via `https://mcp.gomdori.app/law` (the legacy `korean-law-mcp.fly.dev/mcp` stays backward compatible)
+- **Remote Endpoint**: Use without installation via `https://mcp.gomdori.app/law` (the legacy `korean-law-mcp.fly.dev/mcp` stops on 2026-11-23)
 
 ---
 

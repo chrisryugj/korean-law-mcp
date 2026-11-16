@@ -3,7 +3,7 @@
 > ## ⚠️ 배포 — 통합 호스트 (2026-07-02부터)
 >
 > 프로덕션은 이 레포가 아니라 **[gomdori-mcp](https://github.com/chrisryugj/gomdori-mcp) 통합 호스트**(fly 앱 `korean-law-mcp` 1대, MCP 5종 동거)가 서빙한다.
-> - 공식 주소: `https://mcp.gomdori.app/law` (구 `korean-law-mcp.fly.dev/mcp`는 하위호환으로 유지)
+> - 공식 주소: `https://mcp.gomdori.app/law` (운영 = 네이버클라우드 gov 서버 ax-mcp, 설정 레포 chrisryugj/ncp-gov. 구 `korean-law-mcp.fly.dev/mcp` 는 2026. 11. 23. 종료)
 > - **반영 절차**: 이 레포 커밋·푸시 → `npm publish` → **npm 전파 대기**(`npm view korean-law-mcp version`이 새 버전을 반환할 때까지 — 보통 30초 안쪽. 전파 전에 배포하면 이미지가 옛 버전을 설치한다) → `~/workspace/gomdori-mcp/Dockerfile`의 `korean-law-mcp@X.Y.Z` 핀 갱신 → `cd ~/workspace/gomdori-mcp && fly deploy -c fly.production.toml` → **GitHub Release 생성**(`gh release create vX.Y.Z`) → `gomdori-mcp/scripts/verify-deploy.sh` 로 사용자 경로 반영 확인
 >   - **MCP 레지스트리**: 릴리스 뒤 `mcp-publisher publish` (registry.modelcontextprotocol.io, `io.github.chrisryugj/korean-law-mcp`). `server.json`·`.claude-plugin/plugin.json`·`marketplace.json` version 은 package.json 과 같아야 한다. 플러그인 MCP 는 4.15.13 부터 원격 http(`https://mcp.gomdori.app/law`, 키는 `apikey: ${user_config.api_key}`)이고 `verify:package` 가 둘 다 막는다. 디렉터리 제출본·마켓플레이스 소스는 `plugins/korean-law/`(레포 맨 위는 package-lock 때문에 "lockfile 설치"로 보류). 맨 위 `.claude-plugin/plugin.json`·`skills/` 는 옛 제출을 거둘 때까지 남기는 사본이고 `verify:package` 가 두 사본이 같은지 본다
 >   - **릴리스는 배포와 항상 같이 간다** — npm 게시만 하고 Release 를 빠뜨리면 이 레포의 릴리스 이력에 구멍이 남는다(v4.10.0·v4.11.0 이 그렇게 비었다가 2026-08-17 에 소급 생성됐다). 노트 본문은 CHANGELOG 의 해당 절을 옮긴다.

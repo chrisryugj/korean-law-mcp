@@ -40,5 +40,5 @@
 - 통합 호스트: fly 앱 `korean-law-mcp` — **1GB / shared-cpu 2 vCPU + swap 512MB**, 리전 `sin`
   - vCPU 는 2026-09-08 에 1→2. shared-cpu-1x 로는 baseline 을 다 태워 steal 92%·idle 0% 였고, 그 지연이 헬스프로브 3초를 넘겨 멀쩡한 law 가 반복 SIGKILL 됐다.
   - **리전 `sin` 은 의도된 값이다.** `nrt` egress 에서 law.go.kr·kosis.kr·apis.data.go.kr 아웃바운드가 전면 TCP 타임아웃이라 옮겼다. 되돌리지 말 것 — 자세한 근거는 `fly.production.toml` 주석.
-- 공식 URL: `https://mcp.gomdori.app/law` (구 `https://korean-law-mcp.fly.dev/mcp` 하위호환 유지)
+- 공식 URL: `https://mcp.gomdori.app/law` (운영 = gov 서버 ax-mcp, gomdori-mcp main push 후 1분 안에 서버가 자동 배포. 구 `https://korean-law-mcp.fly.dev/mcp` 는 2026. 11. 23. 종료)
 - 롤백: `fly releases -a korean-law-mcp` → `fly deploy -a korean-law-mcp -i <직전 이미지>`

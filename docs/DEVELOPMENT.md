@@ -232,7 +232,7 @@ GitHub Release가 `.github/workflows/publish.yml`을 실행합니다. workflow�
 # 4) cd ~/workspace/gomdori-mcp && fly deploy -c fly.production.toml
 ```
 
-- 공식 주소: `https://mcp.gomdori.app/law` (구 `korean-law-mcp.fly.dev/mcp`는 하위호환 유지)
+- 공식 주소: `https://mcp.gomdori.app/law` (구 `korean-law-mcp.fly.dev/mcp` 는 2026. 11. 23. 종료)
 
 ### Docker (자체 호스팅)
 
