@@ -95,7 +95,7 @@
         "commerce_description": "This plugin does not sell products or process payments."
       },
       "publication": {
-        "release_notes": "First ChatGPT directory release. Remote MCP server at https://mcp.gomdori.app/law (version 4.15.23) with 10 read-only tools for Korean statutes, ordinances, precedents, interpretations, past-date versions and citation verification.",
+        "release_notes": "First ChatGPT directory release. Remote MCP server at https://mcp.gomdori.app/law with 10 read-only tools for Korean statutes, ordinances, precedents, interpretations, past-date versions and citation verification.",
         "translations": {
           "ko-KR": {
             "subtitle": "대한민국 법령·판례 검색과 인용 검증",
