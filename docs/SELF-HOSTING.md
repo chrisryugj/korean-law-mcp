@@ -101,6 +101,8 @@ MCP_HTTP_HOST=0.0.0.0 TRUST_PROXY=1 MCP_AUTH_TOKEN=replace-with-a-secret \
 | `FALLBACK_RATE_LIMIT_RPM` | 아니요 | 120 | 자체 키 없는 요청이 서버 키를 쓰는 전역 상한(토큰버킷, 429에 `Retry-After`). `0`이면 서버 키 대체 사용을 끔 |
 | `FALLBACK_RATE_LIMIT_BURST` | 아니요 | `FALLBACK_RATE_LIMIT_RPM`과 같음 | 위 토큰버킷 용량 |
 | `FALLBACK_DAILY_CAP` | 아니요 | `0` | 서버 키 대체 사용의 최근 24시간 총량 상한. `0`이면 끔 |
+| `FALLBACK_PER_IP_RPM` | 아니요 | `0` | 서버 키 대체 사용의 접속 IP별 분당 몫. 한 IP가 전역 상한을 혼자 다 쓰지 못하게 함. `0`이면 끔. 공개 서버는 전역 상한의 1/4 정도 권장 |
+| `FALLBACK_PER_IP_BURST` | 아니요 | `FALLBACK_PER_IP_RPM`과 같음 | 위 IP별 토큰버킷 용량 |
 | `MCP_MAX_BATCH_CALLS` | 아니요 | 20 | JSON-RPC HTTP 요청 하나에 담을 수 있는 `tools/call` 최대 개수 |
 | `MCP_MAX_BODY_BYTES` | 아니요 | 102400 | 받는 JSON 요청 최대 크기. 옛 `MCP_BODY_LIMIT`(`100kb` 등)도 받음 |
 | `MCP_MAX_UPSTREAM_REQUESTS` | 아니요 | 48 | 요청 하나의 upstream 시도 예산(재시도·안티봇 hop 포함) |

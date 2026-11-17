@@ -292,7 +292,7 @@ legal_research(task="action_basis")  ── 45초 ──▶ 만료
 - **Dockerfile**: multi-stage build (Node 22.12.0 Alpine image pinned by digest; install scripts disabled for optional native helpers)
 - **Health check**: `GET /health` (30초 간격)
 - **Endpoint**: `https://mcp.gomdori.app/law`
-  - 2026-11-16 통합 호스트를 네이버클라우드 gov 서버(ax-mcp, 설정 레포 chrisryugj/ncp-gov)로 옮김. 구 `https://korean-law-mcp.fly.dev/mcp` 는 2026. 11. 23. 까지 fly 에서 받고 그 뒤 종료. 프리픽스 없는 `/mcp` 를 law 로 넘기는 처리는 `mcp.gomdori.app/mcp` 에 남음.
+  - 2026-11-16 통합 호스트를 네이버클라우드 gov 서버(ax-mcp, 설정 레포 chrisryugj/ncp-gov)로 옮김. 구 `https://korean-law-mcp.fly.dev/mcp` 는 2026. 11. 17.부터 법령을 조회하지 않고 새 주소 안내만 돌려준다(gomdori-mcp `fly-moved/`). 프리픽스 없는 `/mcp` 를 law 로 넘기는 처리는 `mcp.gomdori.app/mcp` 에 남음.
 
 ```json
 {

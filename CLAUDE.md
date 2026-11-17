@@ -3,14 +3,14 @@
 > ## ⚠️ 배포 — 통합 호스트 (2026-07-02부터)
 >
 > 프로덕션은 이 레포가 아니라 **[gomdori-mcp](https://github.com/chrisryugj/gomdori-mcp) 통합 호스트**(fly 앱 `korean-law-mcp` 1대, MCP 5종 동거)가 서빙한다.
-> - 공식 주소: `https://mcp.gomdori.app/law` (운영 = 네이버클라우드 gov 서버 ax-mcp, 설정 레포 chrisryugj/ncp-gov. 구 `korean-law-mcp.fly.dev/mcp` 는 2026. 11. 23. 종료)
-> - **반영 절차**: 이 레포 커밋·푸시 → `npm publish` → **npm 전파 대기**(`npm view korean-law-mcp version`이 새 버전을 반환할 때까지 — 보통 30초 안쪽. 전파 전에 배포하면 이미지가 옛 버전을 설치한다) → `~/workspace/gomdori-mcp/Dockerfile`의 `korean-law-mcp@X.Y.Z` 핀 갱신 → `cd ~/workspace/gomdori-mcp && fly deploy -c fly.production.toml` → **GitHub Release 생성**(`gh release create vX.Y.Z`) → `gomdori-mcp/scripts/verify-deploy.sh` 로 사용자 경로 반영 확인
+> - 공식 주소: `https://mcp.gomdori.app/law` (운영 = 네이버클라우드 gov 서버 ax-mcp, 설정 레포 chrisryugj/ncp-gov. 구 `korean-law-mcp.fly.dev/mcp` 는 2026. 11. 17.부터 새 주소 안내만 돌려준다: gomdori-mcp `fly-moved/`)
+> - **반영 절차**: 이 레포 커밋·푸시 → `npm publish` → **npm 전파 대기**(`npm view korean-law-mcp version`이 새 버전을 반환할 때까지 — 보통 30초 안쪽. 전파 전에 배포하면 이미지가 옛 버전을 설치한다) → `~/workspace/gomdori-mcp/Dockerfile`의 `korean-law-mcp@X.Y.Z` 핀 갱신 → gomdori-mcp main 커밋·푸시(ax-mcp 가 1분 안에 빌드·교체. fly 에 통합 이미지를 다시 올리지 말 것, 안내 서버가 덮인다) → **GitHub Release 생성**(`gh release create vX.Y.Z`) → `gomdori-mcp/scripts/verify-deploy.sh` 로 사용자 경로 반영 확인
 >   - **MCP 레지스트리**: 릴리스 뒤 `mcp-publisher publish` (registry.modelcontextprotocol.io, `io.github.chrisryugj/korean-law-mcp`). `server.json`·`.claude-plugin/plugin.json`·`marketplace.json` version 은 package.json 과 같아야 한다. 플러그인 MCP 는 4.15.13 부터 원격 http(`https://mcp.gomdori.app/law`, 키는 `apikey: ${user_config.api_key}`)이고 `verify:package` 가 둘 다 막는다. 디렉터리 제출본·마켓플레이스 소스는 `plugins/korean-law/`(레포 맨 위는 package-lock 때문에 "lockfile 설치"로 보류). 맨 위 `.claude-plugin/plugin.json`·`skills/` 는 옛 제출을 거둘 때까지 남기는 사본이고 `verify:package` 가 두 사본이 같은지 본다. ChatGPT 플러그인 디렉터리 제출본은 `plugins/chatgpt/korean-law/`(Agent Plugins 형식, platform.openai.com/plugins 에 ZIP 업로드, 테스트 케이스·약관·처리방침 URL 포함)이고 `verify:package` 가 버전·서버 주소를 대조한다
 >   - **릴리스는 배포와 항상 같이 간다** — npm 게시만 하고 Release 를 빠뜨리면 이 레포의 릴리스 이력에 구멍이 남는다(v4.10.0·v4.11.0 이 그렇게 비었다가 2026-08-17 에 소급 생성됐다). 노트 본문은 CHANGELOG 의 해당 절을 옮긴다.
 >   - `.github/workflows/publish.yml`(GitHub Release → OIDC trusted publishing + provenance)은 **npm 쪽 trusted publisher 등록이 아직 안 됐다**. 그래서 게시는 위 로컬 `npm publish` 가 정규 경로이고, Release 는 그 뒤에 만든다 — 워크플로는 같은 버전이 이미 레지스트리에 있으면 게시를 건너뛰고 검증(typecheck·test·build·verify:package·audit)만 릴리스 시점에 재확인한다.
 > - **🚫 이 레포에서 `fly deploy` 직접 실행 절대 금지** — 통합 이미지를 law 단독 이미지로 덮어써 stats·patent·archhub·school까지 전부 죽는다. 자세한 배경: [docs/FLY-COST.md](docs/FLY-COST.md)
 
-Korean Law MCP Server v4.15.23 - 법제처 42개 API → 10개 통합 도구 (내부 100개) + 9개 시나리오 + 자연어 CLI + HTTP stateless + 판례 토큰 74% 감축 + **legal_research (체인 8종 통합, task 파라미터)** + **legal_analysis (인용검증·판례생사·행위시법·영향그래프 통합, mode 파라미터)** + **time_travel (시점 diff)** + **action_plan (이럴 땐 이렇게, 5단계 안내)** + **시행예정 감지 (search_law가 제명변경·미시행 개정 자동 병기)** + **ordinance_radar (조례 정비 레이더 — 근거 상위법 개정 자동 대조, v4.7.0)** + **인용 검증 표기 내성 (낫표·가운뎃점·`같은 법` 조응, v4.9.0)** + **폐지 감지 (검색 0건 시 폐지 법령·행정규칙 연혁 추적 — 폐지사유·후속 통합 규정 자동 안내, v4.10.0)** + **search_law_bulk (등록부 대량 조회 + MST diff 감시, v4.13.0)** + **행정규칙 부분 조회 (get_admin_rule 의 jo·chapter·keyword·page — 통짜 전문을 조문 단위로, v4.14.0)** + **법령ID 계보 연혁 (제명이 바뀌기 전 버전까지 — search_historical_law·applicable_law·time_travel, get_annexes date 시점 별표, get_law_text efYd 기준일 보정, 행정규칙 기준일 판단, v4.15.0)** + **amendment_table (일부개정안 신·구조문대비표 — 현행 자동 대조·HWPX, v4.15.16)**
+Korean Law MCP Server v4.15.24 - 법제처 42개 API → 10개 통합 도구 (내부 100개) + 9개 시나리오 + 자연어 CLI + HTTP stateless + 판례 토큰 74% 감축 + **legal_research (체인 8종 통합, task 파라미터)** + **legal_analysis (인용검증·판례생사·행위시법·영향그래프 통합, mode 파라미터)** + **time_travel (시점 diff)** + **action_plan (이럴 땐 이렇게, 5단계 안내)** + **시행예정 감지 (search_law가 제명변경·미시행 개정 자동 병기)** + **ordinance_radar (조례 정비 레이더 — 근거 상위법 개정 자동 대조, v4.7.0)** + **인용 검증 표기 내성 (낫표·가운뎃점·`같은 법` 조응, v4.9.0)** + **폐지 감지 (검색 0건 시 폐지 법령·행정규칙 연혁 추적 — 폐지사유·후속 통합 규정 자동 안내, v4.10.0)** + **search_law_bulk (등록부 대량 조회 + MST diff 감시, v4.13.0)** + **행정규칙 부분 조회 (get_admin_rule 의 jo·chapter·keyword·page — 통짜 전문을 조문 단위로, v4.14.0)** + **법령ID 계보 연혁 (제명이 바뀌기 전 버전까지 — search_historical_law·applicable_law·time_travel, get_annexes date 시점 별표, get_law_text efYd 기준일 보정, 행정규칙 기준일 판단, v4.15.0)** + **amendment_table (일부개정안 신·구조문대비표 — 현행 자동 대조·HWPX, v4.15.16)**
 
 ## Structure
 
@@ -28,7 +28,8 @@ src/
 │   ├── session-state.ts  # 요청별 API 키·취소 신호·실행 예산 격리 (AsyncLocalStorage, stateless)
 │   ├── execution-limits.ts  # 요청 단위 실행 예산 (upstream 호출 수·본문 byte) + env 정수 검증
 │   ├── response-body.ts  # 예산·취소·청크 무응답 20초가 걸린 업스트림 본문 리더 (response.text() 대체)
-│   ├── rate-limit.ts     # 토큰버킷 + 롤링 일일 캡 (폴백 쿼터 게이트, now 주입 테스트)
+│   ├── rate-limit.ts     # 토큰버킷 + IP별 토큰버킷 + 롤링 일일 캡 (now 주입 테스트)
+│   ├── fallback-gate.ts  # 서버 키 폴백 게이트: 클라이언트별 몫 → 공유 분당 → 일일 총량, 429 문구
 │   ├── xml-parser.ts     # 공통 XML 파싱
 │   ├── errors.ts         # 에러 표준화
 │   ├── schemas.ts        # 날짜/응답크기 검증 (truncateResponse)
@@ -111,6 +112,8 @@ korean-law get_law_text --mst 160001 --jo "제1조"
 - `FALLBACK_RATE_LIMIT_RPM`: 자체 키 없는 요청의 서버 LAW_OC 폴백 전역 상한 (기본 `120`, `0`이면 폴백 비활성). **토큰버킷** — 소진 후 연속 리필되며 429에 `Retry-After` 동반
 - `FALLBACK_RATE_LIMIT_BURST`: 폴백 토큰버킷 용량 (기본 = `FALLBACK_RATE_LIMIT_RPM` = 1분치)
 - `FALLBACK_DAILY_CAP`: 폴백의 롤링 24시간 총량 캡 (기본 `0` = 비활성). 분당을 풀되 하루 총량으로 서버 키 quota 보호
+- `FALLBACK_PER_IP_RPM`: 폴백 공유 버킷 앞의 클라이언트(IP)별 몫 (기본 `0` = 끔). 한 IP 가 공유 몫을 다 쓰지 못하게 한다. 이 몫에서 거부된 요청은 공유 토큰을 쓰지 않는다. 운영(gomdori-mcp)은 60(2026-11-17 실측: claude.ai·OpenAI egress IP 하나당 분당 최대 36·56건)
+- `FALLBACK_PER_IP_BURST`: 위 IP별 버킷 용량 (기본 = `FALLBACK_PER_IP_RPM`)
 - `MCP_BODY_LIMIT`: POST body 한도 (기본 `100kb`)
 - `MCP_MAX_BATCH_CALLS`: 단일 POST(JSON-RPC 배치)에 허용하는 tools/call 최대 개수 (기본 `20`) — 배치 증폭으로 rate limit·폴백 쿼터 우회 차단
 - `MCP_MAX_UPSTREAM_REQUESTS`: 한 outer request가 사용할 수 있는 upstream attempt 수 (기본 `48`, 재시도/안티봇 hop 포함)

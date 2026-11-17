@@ -11,7 +11,7 @@ import { timingSafeEqual } from "node:crypto"
 import type { Server } from "@modelcontextprotocol/sdk/server/index.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
 import { requestContext } from "../lib/session-state.js"
-import { createTokenBucket, createDailyCap } from "../lib/rate-limit.js"
+import { createFallbackGate, fallbackDeniedMessage } from "../lib/fallback-gate.js"
 import { RequestExecutionBudget, type ExecutionLimits } from "../lib/execution-limits.js"
 import { maskSensitiveUrl } from "../lib/fetch-with-retry.js"
 import { TOOL_COUNTS } from "../tool-registry.js"
@@ -276,16 +276,15 @@ export async function startHTTPServer(
   // 몇 명이 다 쓰면 나머지가 남은 창 내내 429를 맞았다 — 실측으로 무키 요청의
   // 2/3가 즉시 429였다(2026-08-12). 토큰버킷으로 바꿔 같은 평균 처리율에서
   // 버스트를 흡수하고, 총량 보호는 일일 캡으로 따로 건다.
-  const fallbackMinute = createTokenBucket(config.fallbackRpm, config.fallbackBurst)
-  const fallbackDay = createDailyCap(config.fallbackDailyCap)
-  // n = 이 요청이 소모하는 tools/call 개수 (배치는 배열 길이만큼 서버 키를 쓴다)
-  function fallbackAllowed(n: number): { ok: boolean; retryAfterSec: number; daily: boolean } {
-    const minute = fallbackMinute.take(n)
-    if (!minute.ok) return { ...minute, daily: false }
-    // 분당 게이트를 통과한 요청만 일일 총량을 소모한다 (거부분 낭비 방지)
-    const day = fallbackDay.take(n)
-    return { ok: day.ok, retryAfterSec: day.retryAfterSec, daily: !day.ok }
-  }
+  // 공유 버킷 앞에 클라이언트(IP)별 몫(FALLBACK_PER_IP_RPM)을 둔다: lib/fallback-gate.ts
+  const fallbackGate = createFallbackGate({
+    rpm: config.fallbackRpm,
+    burst: config.fallbackBurst,
+    dailyCap: config.fallbackDailyCap,
+    perClientRpm: config.fallbackPerIpRpm,
+    perClientBurst: config.fallbackPerIpBurst,
+  })
+  if (config.fallbackPerIpRpm > 0) setInterval(() => fallbackGate.sweep(), 5 * 60 * 1000).unref()
 
   // POST /mcp - stateless 요청 처리
   app.post("/mcp", async (req, res) => {
@@ -322,17 +321,12 @@ export async function startHTTPServer(
     // (핸드셰이크까지 429로 막으면 claude.ai 커넥터가 도구 목록 자체를 못 싣는다)
     const fallbackCallCount = countToolCalls(req.body)
     if (!apiKey && fallbackCallCount > 0) {
-      const verdict = fallbackAllowed(fallbackCallCount)
+      const verdict = fallbackGate.take(req.ip || req.socket.remoteAddress || "unknown", fallbackCallCount)
       if (!verdict.ok) {
         res.setHeader("Retry-After", String(verdict.retryAfterSec))
         res.status(429).json({
           jsonrpc: "2.0",
-          error: {
-            code: -32000,
-            message: verdict.daily
-              ? "Shared API daily cap reached. Provide your own key via 'apiKey' header (free: https://open.law.go.kr)."
-              : `Shared API quota exceeded — retry in ${verdict.retryAfterSec}s, or provide your own key via 'apiKey' header (free: https://open.law.go.kr).`,
-          },
+          error: { code: -32000, message: fallbackDeniedMessage(verdict, config.fallbackPerIpRpm) },
           id: null,
         })
         return

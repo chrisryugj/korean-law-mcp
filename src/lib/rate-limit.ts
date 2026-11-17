@@ -48,6 +48,59 @@ export function createTokenBucket(ratePerMin: number, burst = ratePerMin): Token
   }
 }
 
+export interface KeyedTokenBuckets {
+  take(key: string, n: number, now?: number): Verdict
+  /** take 로 뺀 토큰을 돌려준다. 뒤 게이트가 거부한 요청이 이 몫을 쓰지 않게 */
+  refund(key: string, n: number): void
+  /** 다 찬 버킷(=기본 상태)을 지운다. 지워도 판정은 같다 */
+  sweep(now?: number): void
+  size(): number
+}
+
+/**
+ * 키(접속 IP)마다 따로 도는 토큰버킷. 공용 버킷을 한 클라이언트가 다 쓰지 못하게 몫을 나눈다.
+ * createTokenBucket 과 달리 rate 0 은 "몫 제한 없음"(항상 통과)이다.
+ * @param maxKeys 키 수 상한. 넘으면 다 찬 버킷부터, 그래도 넘으면 가장 오래된 키를 지운다
+ */
+export function createKeyedTokenBuckets(ratePerMin: number, burst = ratePerMin, maxKeys = 50_000): KeyedTokenBuckets {
+  const buckets = new Map<string, { tokens: number; last: number }>()
+  const refill = (b: { tokens: number; last: number }, now: number) =>
+    Math.min(burst, b.tokens + ((now - b.last) / 60_000) * ratePerMin)
+
+  function sweep(now = Date.now()) {
+    for (const [key, b] of buckets) if (refill(b, now) >= burst) buckets.delete(key)
+  }
+
+  return {
+    take(key: string, n: number, now = Date.now()): Verdict {
+      if (ratePerMin <= 0) return OK
+      let b = buckets.get(key)
+      if (!b) {
+        if (buckets.size >= maxKeys) {
+          sweep(now)
+          if (buckets.size >= maxKeys) buckets.delete(buckets.keys().next().value as string)
+        }
+        b = { tokens: burst, last: now }
+        buckets.set(key, b)
+      }
+      b.tokens = refill(b, now)
+      b.last = now
+      if (b.tokens >= n) {
+        b.tokens -= n
+        return OK
+      }
+      const deficit = Math.min(n, burst) - b.tokens
+      return { ok: false, retryAfterSec: Math.max(1, Math.ceil((deficit / ratePerMin) * 60)) }
+    },
+    refund(key: string, n: number) {
+      const b = buckets.get(key)
+      if (b) b.tokens = Math.min(burst, b.tokens + n)
+    },
+    sweep,
+    size: () => buckets.size,
+  }
+}
+
 export interface DailyCap {
   take(n: number, now?: number): Verdict
   used(now?: number): number

@@ -22,7 +22,7 @@ MCP server and CLI for Korea's official legal database (법제처 Open API). Wor
 
 [한국어](./README.md)
 
-> **Legacy endpoint shutdown (2026-11-23)** The remote server moved to a public cloud in Korea. `https://korean-law-mcp.fly.dev/mcp` stops on **2026-11-23**. Please re-register your connector or config with `https://mcp.gomdori.app/law` (keep your own key as `?oc=YOUR_KEY`). Tools and usage are unchanged.
+> **Legacy endpoint shutdown (2026-11-17)** The remote server moved to a public cloud in Korea. Since **2026-11-17** `https://korean-law-mcp.fly.dev/mcp` no longer looks up laws and only returns a notice with the new address. Please re-register your connector or config with `https://mcp.gomdori.app/law` (keep your own key as `?oc=YOUR_KEY`). Tools and usage are unchanged.
 
 - ⚖️ **Straight from the official source**: statutes, precedents, administrative rules, ordinances, treaties and interpretations, with **23 decision domains**, all fetched from 법제처. Past versions of a law and the successors of repealed statutes are covered too.
 - ✅ **Citation check for AI answers**: verifies that the articles and case numbers in an answer exist and that their titles match the 법제처 database. [Actual output](#verification-and-analysis)
@@ -355,7 +355,7 @@ Full tool reference: [docs/API.md](docs/API.md).
 `https://mcp.gomdori.app/law` is the hosted server you can use without installing anything.
 
 - **Traffic**: about 1.65 million MCP requests a day (all five MCP servers combined, measured over 9 days from 2026-11-02 to 11-10). Request counts include connection requests and differ from user or question counts.
-- **Location**: runs on a public cloud in Korea since 2026-11-16. The legacy `korean-law-mcp.fly.dev/mcp` stops on 2026-11-23.
+- **Location**: runs on a public cloud in Korea since 2026-11-16. The legacy `korean-law-mcp.fly.dev/mcp` only returns a moved notice since 2026-11-17.
 - **Limits**: without a key, requests go through a shared quota (per minute and per day); with your own key, lookups use your own quota.
 - **Policies**: [Privacy policy](https://pubax.org/law/privacy/) · [Terms of service](https://pubax.org/law/terms/) (Korean)
 
@@ -363,10 +363,11 @@ Full tool reference: [docs/API.md](docs/API.md).
 
 ## Recent updates
 
-Current version **v4.15.23**. All numbers come from the measurements recorded in the [CHANGELOG](CHANGELOG.md).
+Current version **v4.15.24**. All numbers come from the measurements recorded in the [CHANGELOG](CHANGELOG.md).
 
 | Version | What changed | Measured change |
 |---------|--------------|-----------------|
+| 4.15.24 | Remote server: keyless use of the shared key now has a per-client-IP share (60 calls/min on the public server). One IP that uses up the shared limit waits alone; other users keep working | Regression test from a measured 1,146-requests/min IP |
 | 4.15.23 | Citation check: a paragraph cited on an article that has no numbered paragraphs (e.g. Civil Act Art. 750) is now ✗ instead of ⚠ for "(2)" and above; "(1)" gets a note to cite the article alone | 5 regression tests |
 | 4.15.22 | Adds Ministry of the Interior and Safety interpretations `mois` (local-tax rulings) and central-ministry first-line interpretations `ministry` (39 ministries via `options.ministry`) (#182). Local-tax interpretation queries now go to MOIS instead of NTS | Domains 21 → 23 |
 | 4.15.21 | Comparison table: deleting a second sentence that opens with "이 경우," shows `<후단 삭제>`; items only renumbered by an insertion read "(현행 제2호와 같음)"; a "(현행과 같음)" range longer than the current text is cut to its last unit (#181) | 3 regression tests |

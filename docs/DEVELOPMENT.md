@@ -229,10 +229,11 @@ GitHub Release가 `.github/workflows/publish.yml`을 실행합니다. workflow�
 ```bash
 # 1) 이 레포 커밋·푸시 → 2) npm publish
 # 3) ~/workspace/gomdori-mcp/Dockerfile 의 korean-law-mcp@X.Y.Z 핀 갱신
-# 4) cd ~/workspace/gomdori-mcp && fly deploy -c fly.production.toml
+# 4) gomdori-mcp main 에 커밋·푸시 → ax-mcp 서버가 1분 안에 빌드·교체 (ncp-gov autodeploy)
 ```
 
-- 공식 주소: `https://mcp.gomdori.app/law` (구 `korean-law-mcp.fly.dev/mcp` 는 2026. 11. 23. 종료)
+- 공식 주소: `https://mcp.gomdori.app/law`
+- 구 `korean-law-mcp.fly.dev/mcp` 는 2026. 11. 17.부터 새 주소 안내만 돌려준다(gomdori-mcp `fly-moved/`). `fly.production.toml` 로 통합 이미지를 다시 올리면 안내가 사라진다
 
 ### Docker (자체 호스팅)
 

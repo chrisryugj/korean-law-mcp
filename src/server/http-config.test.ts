@@ -44,6 +44,15 @@ describe("HTTP security configuration", () => {
     expect(() => readHttpServerConfig({ MCP_CHAIN_DEADLINE_MS: "30000" })).not.toThrow()
   })
 
+  it("keeps the per-client fallback share off unless configured", () => {
+    expect(readHttpServerConfig({}).fallbackPerIpRpm).toBe(0)
+    const config = readHttpServerConfig({ FALLBACK_PER_IP_RPM: "60" })
+    expect([config.fallbackPerIpRpm, config.fallbackPerIpBurst]).toEqual([60, 60])
+    expect(readHttpServerConfig({ FALLBACK_PER_IP_RPM: "60", FALLBACK_PER_IP_BURST: "90" }).fallbackPerIpBurst).toBe(90)
+    expect(() => readHttpServerConfig({ FALLBACK_PER_IP_RPM: "sixty" })).toThrow("FALLBACK_PER_IP_RPM must be an integer")
+    expect(() => readHttpServerConfig({ FALLBACK_PER_IP_BURST: "0" })).toThrow("FALLBACK_PER_IP_BURST must be an integer")
+  })
+
   it("validates the HTTP port as a whole number", () => {
     expect(parseHttpPort(undefined, { PORT: "8123" })).toBe(8123)
     expect(() => parseHttpPort(undefined, { PORT: "8123oops" })).toThrow("PORT must be an integer")

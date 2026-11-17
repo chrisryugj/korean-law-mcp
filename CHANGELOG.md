@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.15.24] - 2026-11-17
+
+### Added
+
+- 서버 키 폴백에 클라이언트(접속 IP)별 몫 `FALLBACK_PER_IP_RPM`·`FALLBACK_PER_IP_BURST`(기본 0 = 끔). 공유 토큰버킷 앞에서 IP마다 따로 세고, 이 몫에서 거부된 요청은 공유 토큰을 쓰지 않는다. 공유 분당·일일 한도가 거부하면 뺀 몫을 돌려준다. 429 본문에 「이 클라이언트가 몫을 넘었다」와 몫 크기, 대기 초, 본인 키 안내를 싣는다
+  - 2026-11-17 13:33 KST 실측: IP 하나(UA `omp/18.22.0`)가 1분에 POST 1,146건을 보내 공유 몫(분당 240)을 다 쓰고, 같은 분에 다른 무키 사용자도 429를 받았다(그날 429 976건 중 819건이 이 IP). 같은 날 claude.ai·OpenAI egress IP는 IP 하나당 분당 최대 36·56건이라 운영값은 60으로 둔다(gomdori-mcp `LAW_FALLBACK_PER_IP_RPM`)
+  - 판정은 `src/lib/fallback-gate.ts` 로 옮겼다. 키별 버킷은 다 찬 것부터 5분마다 지우고, 키 수 상한(5만)을 둔다
+
+### Changed
+
+- 옛 원격 주소 `korean-law-mcp.fly.dev/mcp` 는 2026. 11. 17.부터 법령을 조회하지 않고 새 주소(`https://mcp.gomdori.app/law`) 안내만 돌려준다(README·문서)
+
 ## [4.15.23] - 2026-11-03
 
 ### Fixed

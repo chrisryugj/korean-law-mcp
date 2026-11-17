@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { createTokenBucket, createDailyCap } from "./rate-limit.js"
+import { createTokenBucket, createDailyCap, createKeyedTokenBuckets } from "./rate-limit.js"
 
 const T0 = 1_700_000_000_000
 
@@ -52,6 +52,44 @@ describe("createTokenBucket", () => {
     const b = createTokenBucket(60, 180)
     expect(b.take(180, T0).ok).toBe(true)
     expect(b.take(1, T0).ok).toBe(false)
+  })
+})
+
+describe("createKeyedTokenBuckets", () => {
+  it("키마다 따로 센다: 한 키가 다 써도 다른 키는 통과", () => {
+    const b = createKeyedTokenBuckets(60, 3)
+    for (let i = 0; i < 3; i++) expect(b.take("a", 1, T0).ok).toBe(true)
+    expect(b.take("a", 1, T0)).toEqual({ ok: false, retryAfterSec: 1 })
+    expect(b.take("b", 1, T0).ok).toBe(true)
+  })
+
+  it("rate 0 은 몫 제한 없음(항상 통과, 키도 안 쌓는다)", () => {
+    const b = createKeyedTokenBuckets(0)
+    for (let i = 0; i < 1000; i++) expect(b.take("a", 5, T0).ok).toBe(true)
+    expect(b.size()).toBe(0)
+  })
+
+  it("refund 는 뺀 몫을 돌려주되 용량을 넘기지 않는다", () => {
+    const b = createKeyedTokenBuckets(60, 2)
+    b.take("a", 2, T0)
+    b.refund("a", 5)
+    expect(b.take("a", 2, T0).ok).toBe(true)
+    expect(b.take("a", 1, T0).ok).toBe(false)
+  })
+
+  it("sweep 은 다 찬 버킷만 지운다", () => {
+    const b = createKeyedTokenBuckets(60, 60)
+    b.take("old", 1, T0)
+    b.take("busy", 60, T0 + 59_000)
+    b.sweep(T0 + 60_000) // old 는 1초 만에 다시 찼다, busy 는 1개만 찼다
+    expect(b.size()).toBe(1)
+    expect(b.take("busy", 2, T0 + 60_000).ok).toBe(false)
+  })
+
+  it("키 수 상한을 넘지 않는다", () => {
+    const b = createKeyedTokenBuckets(60, 60, 3)
+    for (let i = 0; i < 10; i++) b.take(`ip${i}`, 60, T0)
+    expect(b.size()).toBe(3)
   })
 })
 

@@ -101,6 +101,8 @@ MCP_HTTP_HOST=0.0.0.0 TRUST_PROXY=1 MCP_AUTH_TOKEN=replace-with-a-secret \
 | `FALLBACK_RATE_LIMIT_RPM` | No | 120 | Global limit for keyless requests that fall back to the server key (token bucket, 429 with `Retry-After`). `0` disables the fallback |
 | `FALLBACK_RATE_LIMIT_BURST` | No | same as `FALLBACK_RATE_LIMIT_RPM` | Capacity of that token bucket |
 | `FALLBACK_DAILY_CAP` | No | `0` | Rolling 24-hour cap on server-key fallback usage. `0` disables it |
+| `FALLBACK_PER_IP_RPM` | No | `0` | Per-client-IP share of the server-key fallback, per minute, so one IP cannot use up the global limit. `0` disables it. About a quarter of the global limit is a good start for a public server |
+| `FALLBACK_PER_IP_BURST` | No | same as `FALLBACK_PER_IP_RPM` | Capacity of that per-IP token bucket |
 | `MCP_MAX_BATCH_CALLS` | No | 20 | Maximum `tools/call` items in one JSON-RPC HTTP envelope |
 | `MCP_MAX_BODY_BYTES` | No | 102400 | Maximum incoming JSON request size. The older `MCP_BODY_LIMIT` (`100kb`, etc.) is accepted for compatibility |
 | `MCP_MAX_UPSTREAM_REQUESTS` | No | 48 | Request-wide upstream attempt budget, including retries and anti-bot hops |
