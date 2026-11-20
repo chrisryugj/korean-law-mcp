@@ -6,7 +6,7 @@ import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
 import { lawJoCode } from "../lib/law-jo.js"
 import { lawCache } from "../lib/cache.js"
-import { formatArticleUnit } from "../lib/article-parser.js"
+import { cleanHtml, flattenContent, formatArticleUnit } from "../lib/article-parser.js"
 import { getStrategyWarning } from "../lib/article-warnings.js"
 import { formatToolError } from "../lib/errors.js"
 import { rethrowIfFatal } from "../lib/fatal-errors.js"
@@ -316,16 +316,42 @@ async function renderLawText(apiClient: LawApiClient, input: GetLawTextInput, re
       }
     }
 
+    let rendered = 0
     for (const unit of articleUnits) {
       const formatted = formatArticleUnit(unit)
       if (!formatted) continue
 
       if (formatted.header) resultText += `${formatted.header}\n`
       if (formatted.body) resultText += `${formatted.body}\n\n`
+      if (formatted.header || formatted.body) rendered++
 
       // 민법 의사표시 하자 조문(107~110)에 전략 경고 주입
       const warning = getStrategyWarning(lawName, unit.조문번호 || "", unit.조문가지번호 || "")
       if (warning) resultText += `${warning}\n\n`
+    }
+
+    // 조문이 없는 법령(단문 대통령령 등)은 본문 전체가 조문여부="전문" 단위 하나로 온다(#185, 실측 「이자제한법 제2조제1항의
+    // 최고이자율에 관한 규정」 MST 230727: 조문번호 "0", 조문키 "0000000"). 장·절 머리도 "전문"이라 formatArticleUnit 은 이를 버린다.
+    // 조문 단위가 하나도 없을 때만 "전문" 단위를 본문으로 낸다
+    if (!joCode && !articleUnits.some(u => u?.조문여부 === "조문")) {
+      for (const unit of articleUnits) {
+        if (unit?.조문여부 !== "전문") continue
+        const text = cleanHtml(flattenContent(unit.조문내용)).trim()
+        if (!text) continue
+        resultText += `${text}\n\n`
+        rendered++
+      }
+    }
+
+    // 단위는 받았는데 내보낸 본문이 없으면 정상 응답처럼 보이지 않게 한다
+    if (rendered === 0) {
+      return {
+        content: [{
+          type: "text",
+          text: resultText + `[EMPTY_BODY] 법제처 응답에 조문단위 ${articleUnits.length}건이 있었으나 본문으로 바꾸지 못했습니다.\n⚠️ LLM은 본문이 없다고 단정하거나 추측/생성하지 말고 법제처 원문을 확인하세요.` + addendaHint
+        }],
+        isError: true
+      }
     }
 
     // 응답 크기 제한 - 조문 경계에서 자르기 (mid-article 절단 방지)
