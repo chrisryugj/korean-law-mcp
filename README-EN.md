@@ -363,16 +363,16 @@ Full tool reference: [docs/API.md](docs/API.md).
 
 ## Recent updates
 
-Current version **v4.15.24**. All numbers come from the measurements recorded in the [CHANGELOG](CHANGELOG.md).
+Current version **v4.15.25**. All numbers come from the measurements recorded in the [CHANGELOG](CHANGELOG.md).
 
 | Version | What changed | Measured change |
 |---------|--------------|-----------------|
+| 4.15.25 | `get_law_text`: laws with no numbered articles (short presidential decrees) lost their body text and still returned a normal-looking answer; fixed (#185). An answer with no body now says `[EMPTY_BODY]` | Live check: the 「이자제한법 제2조제1항의 최고이자율에 관한 규정」 body now prints · 3 regression tests |
 | 4.15.24 | Remote server: keyless use of the shared key now has a per-client-IP share (60 calls/min on the public server). One IP that uses up the shared limit waits alone; other users keep working | Regression test from a measured 1,146-requests/min IP |
 | 4.15.23 | Citation check: a paragraph cited on an article that has no numbered paragraphs (e.g. Civil Act Art. 750) is now ✗ instead of ⚠ for "(2)" and above; "(1)" gets a note to cite the article alone | 5 regression tests |
 | 4.15.22 | Adds Ministry of the Interior and Safety interpretations `mois` (local-tax rulings) and central-ministry first-line interpretations `ministry` (39 ministries via `options.ministry`) (#182). Local-tax interpretation queries now go to MOIS instead of NTS | Domains 21 → 23 |
 | 4.15.21 | Comparison table: deleting a second sentence that opens with "이 경우," shows `<후단 삭제>`; items only renumbered by an insertion read "(현행 제2호와 같음)"; a "(현행과 같음)" range longer than the current text is cut to its last unit (#181) | 3 regression tests |
 | 4.15.20 | Comparison table, proposed column: the period after a change that ends right before it no longer turns into 「-」 when a proviso or second sentence is added (#180) | Building Act Art. 79(5) regression test |
-| 4.15.19 | Comparison-table HWPX body is left-aligned, so short lines left behind by wrapped dash runs no longer stretch | Checked in Hangul |
 
 Earlier versions: see [CHANGELOG.md](CHANGELOG.md). Milestones:
 
