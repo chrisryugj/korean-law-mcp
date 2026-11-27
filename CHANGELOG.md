@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [4.15.29] - 2026-11-28
+
+### Security
+
+- `hono`·`@hono/node-server`(MCP SDK 의존) 보안 권고 대응: overrides 하한을 `hono ^4.13.16`·`@hono/node-server ^2.1.6` 으로 올려 4.13.23·2.1.11 로 고정했다(경로 기반 접근 통제 우회, WebSocket 업그레이드 중 ECONNRESET 로 프로세스 종료 등 moderate 6건). 릴리스 때 도는 GitHub 「Publish npm package」 워크플로가 `npm audit` 에서 4.15.25 부터 실패하고 있었다(npm 게시는 로컬 정규 경로로 이미 됨). `npm audit` 0건
+
 ## [4.15.28] - 2026-11-28
 
 법제처 law-mcp(`https://www.law.go.kr/lawmcp`)와 같은 질문으로 대조해 남은 차이를 고쳤다.
