@@ -1,6 +1,6 @@
 # Korean Law MCP - API Reference
 
-> **v4.13.0** | 10개 노출 도구 (내부 100개, 미노출 도구는 execute_tool 또는 직접 호출로 접근)
+> **v4.13.0** | 10개 노출 도구 (내부 101개, 미노출 도구는 execute_tool 또는 직접 호출로 접근)
 
 도구 구조는 [README.md](../README.md) 참조.
 상세 파라미터는 각 도구의 Zod 스키마(`src/tools/*.ts`) 참조.
@@ -196,6 +196,7 @@
 | 도구 | 설명 |
 |------|------|
 | `search_ai_law` | AI 지능형 법령검색 (자연어, `lawTypes` 필터) |
+| `search_life_law` | 찾기 쉬운 생활법령정보(법제처) 쉬운 말 해설 검색: 생활분야·관심규정해설·백문백답·관련 판례 발췌와 원문 링크 (`question`, `keywords`, `maxItems`). 법제처 공개 생활법령 MCP 를 호출하며 인증키가 필요 없다 |
 | `search_english_law` / `get_english_law_text` | 영문법령 검색/조회 |
 | `search_historical_law` / `get_historical_law` | 연혁법령 검색/조회. 검색은 법령ID 계보(`eflaw` `LID`)로 제명이 바뀌기 전 버전까지 시행일별로 모으고 제명 변천을 병기한다. 조회는 `mst` 와 `efYd` 를 함께 넘기면 분리시행 슬라이스를 정확히 집는다 (v4.15.0) |
 | `search_legal_terms` | 법령용어 사전 검색 |

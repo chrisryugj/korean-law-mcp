@@ -41,6 +41,7 @@ export const SERVER_INSTRUCTIONS = [
   "- 사건·처분 시점에 적용되던 법령과 경과조치: legal_analysis(mode=\"applicable_law\").",
   "- 단일 조회로 답이 되면 search_law·get_law_text 를 쓰고, 여러 API 를 엮는 복합 질문만 legal_research.",
   "- 조례 정비 대조: ordinance_radar 에 조례명(ordinanceName)을 주거나, execute_tool(tool_name=\"search_ordinance\") 결과의 일련번호(ordinSeq)를 넣는다.",
+  "- 일상생활 법률 질문(전세 보증금·임금 체불·운전면허 등)의 쉬운 말 해설: execute_tool(tool_name=\"search_life_law\") 에 질문을 그대로 넣는다. 결과가 없으면 keywords 에 같은 뜻의 다른 표현(집주인→임대인)을 넣어 다시 찾고, 인용된 조문은 get_law_text 로 확인한다.",
   "- 노출 도구에 없는 자료(조세심판·관세·헌재·조약·영문법령·용어 등)는 discover_tools 로 찾고 execute_tool 로 실행한다.",
 ].join("\n")
 
@@ -107,6 +108,7 @@ export const TOOL_ALIASES: Record<string, string[]> = {
   "별표서식": ["별표", "서식", "별지", "양식", "신청서"],
   "용어": ["법률용어", "법령용어", "용어 정의", "법적 용어", "법률 사전"],
   "판례": ["대법원", "판결문", "판례검색", "대법원 판례"],
+  "생활법령": ["생활법률", "찾기 쉬운 생활법령", "백문백답", "쉬운 법률 해설", "일상 법률 상담", "easylaw"],
   "해석례": ["법제처 해석", "유권해석", "질의회신"],
   "개정입안": ["신구조문대비표", "신·구조문대비표", "신구대비표", "조문대비표", "개정안 작성", "일부개정안", "개정 문안"],
   // 도구 의도 별칭
@@ -122,6 +124,7 @@ export const TOOL_ALIASES: Record<string, string[]> = {
 /** 도구 카테고리 매핑 (discover_tools용) */
 export const TOOL_CATEGORIES: Record<string, string[]> = {
   "법령검색": ["search_law", "search_law_bulk", "search_all", "advanced_search", "suggest_law_names", "search_ai_law"],
+  "생활법령": ["search_life_law"],
   "법령조회": ["get_law_text", "get_article_detail", "get_batch_articles", "get_article_with_precedents"],
   "행정규칙": ["search_admin_rule", "get_admin_rule", "compare_admin_rule_old_new"],
   "자치법규": ["search_ordinance", "get_ordinance", "ordinance_radar", "chain_ordinance_compare"],
