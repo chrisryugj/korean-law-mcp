@@ -1,6 +1,6 @@
 # Korean Law MCP - API Reference
 
-> **v4.13.0** | 10개 노출 도구 (내부 103개, 미노출 도구는 execute_tool 또는 직접 호출로 접근)
+> **v4.13.0** | 10개 노출 도구 (내부 104개, 미노출 도구는 execute_tool 또는 직접 호출로 접근)
 
 도구 구조는 [README.md](../README.md) 참조.
 상세 파라미터는 각 도구의 Zod 스키마(`src/tools/*.ts`) 참조.
@@ -198,7 +198,8 @@
 | `search_ai_law` | AI 지능형 법령검색 (자연어, `lawTypes` 필터) |
 | `get_penalties` | 벌칙 조회: 벌칙 장 조문(벌칙·과태료·양벌규정), 의무 조문(`duty`)을 지목한 항·호, 시행령 과태료·과징금·범칙금 부과기준 별표에서 그 조가 나오는 행(차수·차종별 금액). `duty` 없이 부르면 의무 조문 → 벌칙 위치 목록 |
 | `get_law_info` | 법령 기본정보 카드(조문 없음): 소관부처·대표 전화, 업무별 담당부서와 연락처, 공포·시행일, 조문별 시행일, 제개정이유, 시행예정 개정 (`lawName`·`mst`·`lawId`, `includeReason`) |
-| `search_life_law` | 찾기 쉬운 생활법령정보(법제처) 쉬운 말 해설 검색: 생활분야·관심규정해설·백문백답·관련 판례 발췌와 원문 링크 (`question`, `keywords`, `maxItems`). 법제처 공개 생활법령 MCP 를 호출하며 인증키가 필요 없다 |
+| `search_life_law` | 찾기 쉬운 생활법령정보(법제처) 쉬운 말 해설 검색: 생활분야·관심규정해설·백문백답·판례·헌재·행정심판·해석례·생활조례 발췌와 원문 링크, 본문 전문 식별값 (`question`, `keywords`, `maxItems`, `region` 지자체 생활조례, `lang` 외국어판). 서비스키(`EASYLAW_SERVICE_KEY`)가 있으면 Open API 직접, 없으면 법제처 공개 생활법령 MCP |
+| `get_life_law` | 생활법령 본문 전문: 백문백답 답변·관련 법령(`qa`), 관심규정해설(`guide`), 생활조례 해설(`bylaw`), 외국어 생활법령(`foreign`, `withKorean`). 서비스키 필요 |
 | `search_english_law` / `get_english_law_text` | 영문법령 검색/조회 |
 | `search_historical_law` / `get_historical_law` | 연혁법령 검색/조회. 검색은 법령ID 계보(`eflaw` `LID`)로 제명이 바뀌기 전 버전까지 시행일별로 모으고 제명 변천을 병기한다. 조회는 `mst` 와 `efYd` 를 함께 넘기면 분리시행 슬라이스를 정확히 집는다 (v4.15.0) |
 | `search_legal_terms` | 법령용어 사전 검색 |

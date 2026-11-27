@@ -45,7 +45,7 @@ export const SERVER_INSTRUCTIONS = [
   "- 법을 어기면 받는 제재(벌칙·과태료 금액): execute_tool(tool_name=\"get_penalties\") 에 법률명(lawName)과 어긴 의무 조문(duty, 예: 48)을 준다. 의무 조문을 모르면 duty 없이 불러 의무 조문 → 벌칙 위치 목록에서 고른다.",
   "- 한 법률에 연결된 특정 지자체 조례·규칙(예: 주차장법의 광진구 조례): execute_tool(tool_name=\"get_law_system_tree\", params={lawName, region}).",
   "- 법령의 담당부서·전화번호, 왜 개정됐는지(제개정이유), 조문별 시행일: execute_tool(tool_name=\"get_law_info\").",
-  "- 일상생활 법률 질문(전세 보증금·임금 체불·운전면허 등)의 쉬운 말 해설: execute_tool(tool_name=\"search_life_law\") 에 질문을 그대로 넣는다. 결과가 없으면 keywords 에 같은 뜻의 다른 표현(집주인→임대인)을 넣어 다시 찾고, 인용된 조문은 get_law_text 로 확인한다.",
+  "- 일상생활 법률 질문(전세 보증금·임금 체불·운전면허 등)의 쉬운 말 해설: execute_tool(tool_name=\"search_life_law\") 에 질문을 그대로 넣는다. 결과가 없으면 keywords 에 같은 뜻의 다른 표현(집주인→임대인)을 넣어 다시 찾는다. 결과의 「본문 전문」 식별값으로 execute_tool(tool_name=\"get_life_law\") 를 부르면 백문백답 답변·해설 전문을 받는다. 지자체 생활조례 해설은 region, 외국어판은 lang 을 준다. 인용된 조문은 get_law_text 로 확인한다.",
   "- 노출 도구에 없는 자료(조세심판·관세·헌재·조약·영문법령·용어 등)는 discover_tools 로 찾고 execute_tool 로 실행한다.",
 ].join("\n")
 
@@ -113,7 +113,7 @@ export const TOOL_ALIASES: Record<string, string[]> = {
   "용어": ["법률용어", "법령용어", "용어 정의", "법적 용어", "법률 사전"],
   "판례": ["대법원", "판결문", "판례검색", "대법원 판례"],
   "법령조회": ["담당부서", "소관부처 연락처", "담당자 전화번호", "제개정이유", "개정이유", "조문별 시행일"],
-  "생활법령": ["생활법률", "찾기 쉬운 생활법령", "백문백답", "쉬운 법률 해설", "일상 법률 상담", "easylaw"],
+  "생활법령": ["생활법률", "찾기 쉬운 생활법령", "백문백답", "쉬운 법률 해설", "일상 법률 상담", "easylaw", "생활조례", "외국어 법률 안내", "외국인 법률 정보"],
   "해석례": ["법제처 해석", "유권해석", "질의회신"],
   "개정입안": ["신구조문대비표", "신·구조문대비표", "신구대비표", "조문대비표", "개정안 작성", "일부개정안", "개정 문안"],
   // 도구 의도 별칭
@@ -129,7 +129,7 @@ export const TOOL_ALIASES: Record<string, string[]> = {
 /** 도구 카테고리 매핑 (discover_tools용) */
 export const TOOL_CATEGORIES: Record<string, string[]> = {
   "법령검색": ["search_law", "search_law_bulk", "search_all", "advanced_search", "suggest_law_names", "search_ai_law"],
-  "생활법령": ["search_life_law"],
+  "생활법령": ["search_life_law", "get_life_law"],
   "법령조회": ["get_law_text", "get_article_detail", "get_batch_articles", "get_article_with_precedents", "get_law_info"],
   "행정규칙": ["search_admin_rule", "get_admin_rule", "compare_admin_rule_old_new"],
   "자치법규": ["search_ordinance", "get_ordinance", "ordinance_radar", "chain_ordinance_compare"],

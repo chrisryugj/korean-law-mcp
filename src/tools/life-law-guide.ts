@@ -1,9 +1,9 @@
 /**
  * 찾기 쉬운 생활법령정보(easylaw.go.kr, 법제처) 해설 검색.
  *
- * 법제처가 2026. 11. 23. 공개한 생활법령 MCP(https://open.easylaw.go.kr/mcp, 인증키 없음)의
- * search_life_law 를 호출한다. 원본 Open API(open.easylaw.go.kr:8181)는 기관별 인증키와 8181 포트가
- * 필요해 공개 MCP 를 거친다. 결과는 생활분야·관심규정해설·백문백답 등 쉬운 말 해설의 발췌와 원문 링크다.
+ * 생활법령 Open API 서비스키(EASYLAW_SERVICE_KEY)가 있으면 키워드 통합검색을 직접 부르고(분류 10종, 본문 전문 식별값 포함),
+ * 지자체 생활조례(region)·외국어 생활법령(lang)도 연다. 키가 없거나 직접 검색이 비면 법제처가 2026. 11. 23. 공개한
+ * 생활법령 MCP(https://open.easylaw.go.kr/mcp, 인증키 없음)의 search_life_law 로 대신한다(검색어를 줄이거나 넓혀 다시 찾는다).
  */
 import { z } from "zod"
 import type { LawApiClient } from "../lib/api-client.js"
@@ -12,6 +12,9 @@ import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError, LawApiError, ErrorCodes } from "../lib/errors.js"
 import { cleanHtml } from "../lib/article-parser.js"
 import type { ToolResponse } from "../lib/types.js"
+import { easylawConfigured } from "../lib/easylaw-client.js"
+import { aiSearchQuery } from "./chain-law-lookup.js"
+import { directAllKeyword, directEasyBylaw, directMultiLang, LIFE_LAW_LANGS } from "./life-law-direct.js"
 
 export const LIFE_LAW_MCP_URL = "https://open.easylaw.go.kr/mcp"
 
@@ -21,6 +24,8 @@ export const searchLifeLawSchema = z.object({
     "선택. 자동 추출 대신 쓸 핵심 명사 2~4개. 본문 문자열 검색이라 결과가 없으면 같은 뜻의 다른 말(집주인→임대인, 월급→임금)로 바꿔 다시 찾는다"
   ),
   maxItems: z.number().min(1).max(10).default(3).describe("분류별 최대 건수 (1~10, 기본 3)"),
+  region: z.string().optional().describe("선택. 지자체 이름(예: '광진구', '경기도 연천군'). 주면 그 지자체 조례를 쉬운 말로 풀어 쓴 생활조례 해설에서 찾는다"),
+  lang: z.enum(Object.keys(LIFE_LAW_LANGS) as [string, ...string[]]).optional().describe("선택. 외국어 생활법령 목록 언어. keywords 가 있으면 그 언어 제목에서 거른다"),
 })
 
 export type SearchLifeLawInput = z.infer<typeof searchLifeLawSchema>
@@ -92,25 +97,62 @@ export function renderLifeLawResult(args: SearchLifeLawInput, r: LifeLawResult):
   return { content: [{ type: "text", text: truncateResponse(out.join("\n")) }] }
 }
 
+const FOOTER = "\n\n발췌문은 생활법령정보의 해설입니다. 답에 쓸 때는 원문 링크를 출처로 밝히고, 인용된 조문은 현행 법령 본문으로 확인하세요."
+const text = (t: string, isError?: boolean): ToolResponse => ({ content: [{ type: "text", text: truncateResponse(t) }], ...(isError ? { isError } : {}) })
+
+/** 법제처 공개 생활법령 MCP 의 search_life_law (서비스키 없이) */
+async function proxySearch(args: SearchLifeLawInput): Promise<{ res: ToolResponse; queryUsed?: string }> {
+  const body = JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "tools/call",
+    params: {
+      name: "search_life_law",
+      arguments: { question: args.question, max_items: args.maxItems ?? 3, ...(args.keywords?.length ? { keywords: args.keywords } : {}) },
+    },
+  })
+  const res = await fetchWithRetry(LIFE_LAW_MCP_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+    body,
+    retries: 1,
+  })
+  if (!res.ok) throw new LawApiError(`생활법령 MCP HTTP ${res.status}`, ErrorCodes.API_ERROR, ["잠시 뒤 다시 시도하세요"])
+  const parsed = parseLifeLawResponse(await res.text())
+  return { res: renderLifeLawResult(args, parsed), queryUsed: parsed.query_used }
+}
+
 export async function searchLifeLaw(_apiClient: LawApiClient, args: SearchLifeLawInput): Promise<ToolResponse> {
   try {
-    const body = JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "tools/call",
-      params: {
-        name: "search_life_law",
-        arguments: { question: args.question, max_items: args.maxItems ?? 3, ...(args.keywords?.length ? { keywords: args.keywords } : {}) },
-      },
-    })
-    const res = await fetchWithRetry(LIFE_LAW_MCP_URL, {
-      method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-      body,
-      retries: 1,
-    })
-    if (!res.ok) throw new LawApiError(`생활법령 MCP HTTP ${res.status}`, ErrorCodes.API_ERROR, ["잠시 뒤 다시 시도하세요"])
-    return renderLifeLawResult(args, parseLifeLawResponse(await res.text()))
+    const max = args.maxItems ?? 3
+    const query = args.keywords?.length ? args.keywords.join(" ") : aiSearchQuery(args.question)
+    if ((args.region || args.lang) && !easylawConfigured()) {
+      return text("[INVALID_PARAMETER] region·lang 은 생활법령 Open API 서비스키(EASYLAW_SERVICE_KEY)가 있는 서버에서만 됩니다. 두 값을 빼고 다시 찾으세요.", true)
+    }
+    if (args.lang) {
+      const list = await directMultiLang(LIFE_LAW_LANGS[args.lang], args.keywords?.join(" "))
+      return list
+        ? text(`찾기 쉬운 생활법령정보 외국어판(${args.lang}) 목록\n\n${list}${FOOTER}`)
+        : text(`[NOT_FOUND] ${args.lang} 생활법령 목록에서 '${args.keywords?.join(" ")}' 를 찾지 못했습니다. keywords 를 빼면 전체 목록이 나옵니다.`, true)
+    }
+    if (args.region) {
+      const r = await directEasyBylaw(query, args.region, max)
+      if (r.text) return text(`찾기 쉬운 생활법령정보 생활조례 검색 · 검색어: ${r.used}\n\n${r.text}${FOOTER}`)
+      return text(`[NOT_FOUND] 생활조례 '${r.used}' 에서 ${args.region} 해설을 찾지 못했습니다(전국 ${r.total}건${r.regions.length ? `, 지자체 예: ${r.regions.slice(0, 8).join(", ")}` : ""}). 생활조례는 일부 지자체·주제만 있습니다. 조례 원문은 자치법규 검색으로 확인하세요.`, true)
+    }
+    if (easylawConfigured()) {
+      const direct = await directAllKeyword(query, max)
+      if (direct) return text(`찾기 쉬운 생활법령정보(법제처) 검색 결과 · 검색어: ${query}${direct}${FOOTER}`)
+      // 직접 검색이 비면 공개 MCP 로 검색어를 줄이거나 넓혀 찾고, 그 검색어로 다시 직접 받는다(분류가 더 많다)
+      const proxy = await proxySearch(args)
+      const used = proxy.queryUsed?.replace(/\*/g, "").trim()
+      if (used && used !== query) {
+        const again = await directAllKeyword(used, max)
+        if (again) return text(`찾기 쉬운 생활법령정보(법제처) 검색 결과 · 검색어: ${used} (질문 전체로는 결과가 없어 줄여 찾음)${again}${FOOTER}`)
+      }
+      return proxy.res
+    }
+    return (await proxySearch(args)).res
   } catch (error) {
     return formatToolError(error, "search_life_law")
   }

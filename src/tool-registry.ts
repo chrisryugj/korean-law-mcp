@@ -56,6 +56,7 @@ import { searchEnglishLaw, searchEnglishLawSchema, getEnglishLawText, getEnglish
 import { searchLegalTerms, searchLegalTermsSchema } from "./tools/legal-terms.js"
 import { searchAiLaw, searchAiLawSchema } from "./tools/life-law.js"
 import { searchLifeLaw, searchLifeLawSchema } from "./tools/life-law-guide.js"
+import { getLifeLaw, getLifeLawSchema } from "./tools/life-law-detail.js"
 import { getLawInfo, getLawInfoSchema } from "./tools/law-info.js"
 import { getPenalties, getPenaltiesSchema } from "./tools/penalties.js"
 import { getLegalTermKB, getLegalTermKBSchema, getLegalTermDetail, getLegalTermDetailSchema, getDailyTerm, getDailyTermSchema, getDailyToLegal, getDailyToLegalSchema, getLegalToDaily, getLegalToDailySchema, getTermArticles, getTermArticlesSchema, getRelatedLaws, getRelatedLawsSchema } from "./tools/knowledge-base.js"
@@ -560,6 +561,12 @@ export const allTools: McpTool[] = [
     description: "[생활법령] 찾기 쉬운 생활법령정보(법제처)의 쉬운 말 해설(생활분야·관심규정해설·백문백답) 검색. 일상 질문을 그대로 넣으면 해설 발췌와 원문 링크를 돌려준다.",
     schema: searchLifeLawSchema,
     handler: searchLifeLaw
+  },
+  {
+    name: "get_life_law",
+    description: "[생활법령] 찾기 쉬운 생활법령정보 본문 전문: 백문백답 답변과 관련 법령(qa), 관심규정해설(guide), 지자체 생활조례 해설(bylaw), 외국어 생활법령(foreign). 생활법령 검색 결과의 식별값으로 부른다.",
+    schema: getLifeLawSchema,
+    handler: getLifeLaw
   },
 
   // === 법령용어 지식베이스 ===
