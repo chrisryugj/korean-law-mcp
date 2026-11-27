@@ -40,7 +40,10 @@ export const SERVER_INSTRUCTIONS = [
   "- 개정안의 신구조문대비표(신·구조문대비표·신구대비표) 작성: legal_analysis(mode=\"amendment_table\") — 개정 후 조문만 넣으면 현행을 가져와 줄표·묶음·밑줄을 규칙대로 계산한다. 이미 공포된 개정의 대조표 조회는 execute_tool(tool_name=\"compare_old_new\").",
   "- 사건·처분 시점에 적용되던 법령과 경과조치: legal_analysis(mode=\"applicable_law\").",
   "- 단일 조회로 답이 되면 search_law·get_law_text 를 쓰고, 여러 API 를 엮는 복합 질문만 legal_research.",
+  "- 법령명 없는 일상 질문을 legal_research 로 보낼 때는 쟁점을 법률용어로 바꾼 terms(2~4개)를 함께 준다 (\"회사가 갑자기 그만두래요\" → [\"부당해고\", \"해고 예고\"]). 기반 법령을 질문보다 그 말로 먼저 찾는다.",
   "- 조례 정비 대조: ordinance_radar 에 조례명(ordinanceName)을 주거나, execute_tool(tool_name=\"search_ordinance\") 결과의 일련번호(ordinSeq)를 넣는다.",
+  "- 법을 어기면 받는 제재(벌칙·과태료 금액): execute_tool(tool_name=\"get_penalties\") 에 법률명(lawName)과 어긴 의무 조문(duty, 예: 48)을 준다. 의무 조문을 모르면 duty 없이 불러 의무 조문 → 벌칙 위치 목록에서 고른다.",
+  "- 한 법률에 연결된 특정 지자체 조례·규칙(예: 주차장법의 광진구 조례): execute_tool(tool_name=\"get_law_system_tree\", params={lawName, region}).",
   "- 법령의 담당부서·전화번호, 왜 개정됐는지(제개정이유), 조문별 시행일: execute_tool(tool_name=\"get_law_info\").",
   "- 일상생활 법률 질문(전세 보증금·임금 체불·운전면허 등)의 쉬운 말 해설: execute_tool(tool_name=\"search_life_law\") 에 질문을 그대로 넣는다. 결과가 없으면 keywords 에 같은 뜻의 다른 표현(집주인→임대인)을 넣어 다시 찾고, 인용된 조문은 get_law_text 로 확인한다.",
   "- 노출 도구에 없는 자료(조세심판·관세·헌재·조약·영문법령·용어 등)는 discover_tools 로 찾고 execute_tool 로 실행한다.",
@@ -105,7 +108,7 @@ export const TOOL_ALIASES: Record<string, string[]> = {
   "공공기관": ["공공기관 규정", "공기업 규정", "공공기관 내규"],
   "조약": ["국제조약", "양자조약", "다자조약", "협정", "treaty"],
   "영문법령": ["영문 법률", "영어 법령", "English law", "영문 조문"],
-  "자치법규": ["조례", "규칙", "지자체 법규", "시 조례", "구 조례", "도 조례"],
+  "자치법규": ["조례", "규칙", "지자체 법규", "시 조례", "구 조례", "도 조례", "우리 구 조례", "지자체별 조례"],
   "별표서식": ["별표", "서식", "별지", "양식", "신청서"],
   "용어": ["법률용어", "법령용어", "용어 정의", "법적 용어", "법률 사전"],
   "판례": ["대법원", "판결문", "판례검색", "대법원 판례"],
@@ -119,7 +122,7 @@ export const TOOL_ALIASES: Record<string, string[]> = {
   "행위시법": ["applicable_law", "당시 법령", "적용 법령 판단", "경과조치", "부칙"],
   "영향그래프": ["impact_map", "조문 영향", "파급효과", "인용한 판례"],
   "문서분석": ["analyze_document", "chain_document_review", "계약서 검토", "약관 검토"],
-  "처분기준": ["chain_action_basis", "과태료 기준", "과징금 기준", "영업정지 기간"],
+  "처분기준": ["chain_action_basis", "과태료 기준", "과징금 기준", "영업정지 기간", "과태료 얼마", "벌칙", "어기면", "위반하면", "처벌"],
   "절차매뉴얼": ["chain_procedure_detail", "처리 절차", "신청 방법", "수수료"],
 }
 
@@ -161,7 +164,7 @@ export const TOOL_CATEGORIES: Record<string, string[]> = {
   // 별칭이 직접 겨냥하는 의도 카테고리 3종은 1-hop 진입점(legal_research)을 앞세운다 (#110).
   // chain_*는 하위호환으로 병기 — execute_tool 경유 2-hop이지만 파라미터가 단순하다.
   "문서분석": ["legal_research", "analyze_document", "chain_document_review"],
-  "처분기준": ["legal_research", "chain_action_basis"],
+  "처분기준": ["legal_research", "get_penalties", "chain_action_basis"],
   "절차매뉴얼": ["legal_research", "chain_procedure_detail"],
   // legal_analysis 의 네 mode 에 대응하는 카테고리도 같은 정책을 따른다 —
   // 별칭이 곧 mode 의도라 1-hop 진입점이 답이고, 원본 도구는 하위호환 병기다.

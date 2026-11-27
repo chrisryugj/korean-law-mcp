@@ -1,6 +1,6 @@
 # Korean Law MCP - API Reference
 
-> **v4.13.0** | 10개 노출 도구 (내부 102개, 미노출 도구는 execute_tool 또는 직접 호출로 접근)
+> **v4.13.0** | 10개 노출 도구 (내부 103개, 미노출 도구는 execute_tool 또는 직접 호출로 접근)
 
 도구 구조는 [README.md](../README.md) 참조.
 상세 파라미터는 각 도구의 Zod 스키마(`src/tools/*.ts`) 참조.
@@ -68,7 +68,7 @@
 
 | 도구 | 설명 |
 |------|------|
-| `legal_research` | 다단계 리서치 — `task` 8종(full_research·law_system·action_basis·dispute_prep·amendment_track·ordinance_compare·procedure_detail·document_review)으로 아래 체인 도구 8개를 디스패치 |
+| `legal_research` | 다단계 리서치: `task` 8종(full_research·law_system·action_basis·dispute_prep·amendment_track·ordinance_compare·procedure_detail·document_review)으로 아래 체인 도구 8개를 디스패치. 법령명 없는 일상 질문은 `terms`(쟁점을 법률용어로 바꾼 말 2~4개)로 기반 법령을 먼저 찾는다 |
 | `legal_analysis` | 정밀 분석/검증 — `mode` 4종(verify_citations·cite_check·applicable_law·impact_map)으로 아래 킬러 기능 4개를 디스패치. 비용 옵션 패스스루: `maxCitations`(기본 15), `display`(기본 20), `deepScan`(기본 true), `includeOrdinances`(기본 true), `includeMermaid`(기본 true) — v4.4.1 |
 
 **mode별 필수 파라미터**
@@ -196,12 +196,13 @@
 | 도구 | 설명 |
 |------|------|
 | `search_ai_law` | AI 지능형 법령검색 (자연어, `lawTypes` 필터) |
+| `get_penalties` | 벌칙 조회: 벌칙 장 조문(벌칙·과태료·양벌규정), 의무 조문(`duty`)을 지목한 항·호, 시행령 과태료·과징금·범칙금 부과기준 별표에서 그 조가 나오는 행(차수·차종별 금액). `duty` 없이 부르면 의무 조문 → 벌칙 위치 목록 |
 | `get_law_info` | 법령 기본정보 카드(조문 없음): 소관부처·대표 전화, 업무별 담당부서와 연락처, 공포·시행일, 조문별 시행일, 제개정이유, 시행예정 개정 (`lawName`·`mst`·`lawId`, `includeReason`) |
 | `search_life_law` | 찾기 쉬운 생활법령정보(법제처) 쉬운 말 해설 검색: 생활분야·관심규정해설·백문백답·관련 판례 발췌와 원문 링크 (`question`, `keywords`, `maxItems`). 법제처 공개 생활법령 MCP 를 호출하며 인증키가 필요 없다 |
 | `search_english_law` / `get_english_law_text` | 영문법령 검색/조회 |
 | `search_historical_law` / `get_historical_law` | 연혁법령 검색/조회. 검색은 법령ID 계보(`eflaw` `LID`)로 제명이 바뀌기 전 버전까지 시행일별로 모으고 제명 변천을 병기한다. 조회는 `mst` 와 `efYd` 를 함께 넘기면 분리시행 슬라이스를 정확히 집는다 (v4.15.0) |
 | `search_legal_terms` | 법령용어 사전 검색 |
-| `get_law_system_tree` | 법령체계도 |
+| `get_law_system_tree` | 법령체계도 + 단계별 자치법규 건수·제목별 건수. `region`(예: '광진구')을 주면 그 지자체 조례·규칙을 자치법규일련번호와 함께 |
 | `get_law_abbreviations` | 법령 약칭 목록 조회 |
 | `compare_admin_rule_old_new` | 행정규칙 신구대조 |
 

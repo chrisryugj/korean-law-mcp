@@ -24,15 +24,15 @@ const PENALTY_CHAPTER_RE = /벌\s*칙|과\s*태\s*료/
 const PENALTY_TITLE_RE = /벌칙|과태료|양벌/
 
 /**
- * 법령 JSON 에서 벌칙·과태료 조문만 골라 싣는다 (2026-09-23 리뷰 B#9).
- * 벌칙 장(章) 머리 뒤 다음 장 머리 전까지가 1순위다. 양벌규정·몰수처럼 제목에 "벌칙"이 없는 조문도
- * 장 단위로 함께 잡힌다. 장 구조가 없는 법령은 조문 제목으로 고른다.
+ * 벌칙 장(章) 머리 뒤 다음 장 머리 전까지의 조문. 장 구조가 없는 법령은 조문 제목(벌칙·과태료·양벌)으로 고른다.
+ * get_penalties 도 같은 기준으로 벌칙 조를 고른다
  */
-export function extractPenaltyArticles(lawJson: unknown): { text: string; labels: string[] } {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function pickPenaltyUnits(lawJson: unknown): any[] {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const units = toArray<any>((lawJson as any)?.법령?.조문?.조문단위)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let picked: any[] = []
+  const picked: any[] = []
   let inPenaltyChapter = false
   for (const u of units) {
     if (u?.조문여부 === "전문") {
@@ -42,9 +42,17 @@ export function extractPenaltyArticles(lawJson: unknown): { text: string; labels
     }
     if (inPenaltyChapter && u?.조문여부 === "조문") picked.push(u)
   }
-  if (picked.length === 0) {
-    picked = units.filter(u => u?.조문여부 === "조문" && PENALTY_TITLE_RE.test(String(u.조문제목 || "")))
-  }
+  return picked.length ? picked : units.filter(u => u?.조문여부 === "조문" && PENALTY_TITLE_RE.test(String(u.조문제목 || "")))
+}
+
+/**
+ * 법령 JSON 에서 벌칙·과태료 조문만 골라 싣는다 (2026-09-23 리뷰 B#9).
+ * 벌칙 장(章) 머리 뒤 다음 장 머리 전까지가 1순위다. 양벌규정·몰수처럼 제목에 "벌칙"이 없는 조문도
+ * 장 단위로 함께 잡힌다. 장 구조가 없는 법령은 조문 제목으로 고른다.
+ */
+export function extractPenaltyArticles(lawJson: unknown): { text: string; labels: string[] } {
+  const picked = pickPenaltyUnits(lawJson)
+
 
   const labels: string[] = []
   const blocks: string[] = []

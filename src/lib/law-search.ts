@@ -171,6 +171,12 @@ export async function findLaws(
  */
 const degradedResults = new WeakSet<LawInfo[]>()
 
+/**
+ * 법령명이 아닌 "…법" 낱말: 낱말 전체로 본다. 꼬리로 거르면 실제 법령명을 버린다
+ * (예방법: 결핵예방법, 징수법: 국세징수법, 조합법: 농업협동조합법, 등기법: 부동산등기법, 적법: 국적법)
+ */
+const NON_LAW_BEOP_RE = /^(?:방법|수법|불법|위법|편법|합법|탈법|기법|요법|용법|해법|문법|적법|입법|비법|준법|화법|(?:신청|처리|해결|이용|작성|계산|지급|납부|확인|대처|대응|구제|발급|등록|해지|변경|취소|사용|운영|가입|반환|청구|신고)방법)$/
+
 /** findLaws 의 업스트림 단계: 3단 검색 + 관련도 정렬. 자르기(max)와 캐시 쓰기는 호출부 몫이다. */
 async function searchAndRankLaws(
   apiClient: LawApiClient,
@@ -230,7 +236,9 @@ async function searchAndRankLaws(
 
   // 3차: 법령명 패턴 직접 추출
   if (results.length === 0) {
-    const lawNameMatch = query.match(/[가-힣]+(법|시행령|시행규칙|규칙|규정|령)(?:\s|$)/)
+    // "…법"으로 끝나도 법령명이 아닌 낱말(방법·불법·위법·수법 등)은 뺀다: 「외국인 근로자 고용 허가 받는 방법」이
+    // "방법"으로 검색돼 진폐의 예방과 진폐근로자의 보호 등에 관한 법률을 골랐다(법제처 law-mcp 대조, 2026-11-28)
+    const lawNameMatch = [...query.matchAll(/[가-힣]+(법|시행령|시행규칙|규칙|규정|령)(?=\s|$)/g)].find(m => !NON_LAW_BEOP_RE.test(m[0]))
     if (lawNameMatch) {
       results = await trySearch(lawNameMatch[0].trim())
     }

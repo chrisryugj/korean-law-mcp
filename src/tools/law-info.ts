@@ -87,9 +87,11 @@ export async function getLawInfo(apiClient: LawApiClient, input: GetLawInfoInput
       if (!hit) {
         return { content: [{ type: "text", text: `[NOT_FOUND] '${input.lawName}' 법령을 찾지 못했습니다. 정식 법령명이나 공식 약칭으로 다시 찾으세요.` }], isError: true }
       }
+      // 법령ID 로 받는다: MST 로 받으면 그 공포본의 시행예정 시점 기본정보가 왔다(도로교통법 MST 291133 → 시행 2027-04-14)
+      lawId = hit.lawId
       mst = hit.mst
     }
-    const json = JSON.parse(await apiClient.getLawText({ mst, lawId, jo: input.includeReason === false ? "000100" : undefined, apiKey: input.apiKey }))
+    const json = JSON.parse(await apiClient.getLawText({ ...(lawId ? { lawId } : { mst }), jo: input.includeReason === false ? "000100" : undefined, apiKey: input.apiKey }))
     const law = json?.법령
     if (!law?.기본정보) {
       return { content: [{ type: "text", text: `[NOT_FOUND] 법령 기본정보를 받지 못했습니다(${mst ? `mst=${mst}` : `lawId=${lawId}`}).` }], isError: true }

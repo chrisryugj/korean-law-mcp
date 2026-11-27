@@ -129,3 +129,26 @@ describe("findLaws — 단계 캐시 배열을 제자리 정렬하지 않는다 
     expect(lawCache.get<Array<{ lawName: string }>>("law-search-raw:건축법:100")?.map(r => r.lawName)).toEqual(rows)
   })
 })
+
+describe("법령명 패턴 폴백: \"…법\"으로 끝나는 일반 낱말 (2026-11-28)", () => {
+  it("「…받는 방법」의 \"방법\"을 법령명으로 검색하지 않는다", async () => {
+    lawCache.clear()
+    const searched: string[] = []
+    const client = {
+      searchLaw: async (q: string) => { searched.push(q); return "<LawSearch><totalCnt>0</totalCnt></LawSearch>" },
+    } as unknown as LawApiClient
+    const r = await findLaws(client, "외국인 근로자 고용 허가 받는 방법")
+    expect(r).toEqual([])
+    expect(searched).not.toContain("방법")
+  })
+
+  it("실제 법령명은 그대로 찾는다 (예방법·징수법 같은 꼬리도)", async () => {
+    lawCache.clear()
+    const searched: string[] = []
+    const client = {
+      searchLaw: async (q: string) => { searched.push(q); return "<LawSearch><totalCnt>0</totalCnt></LawSearch>" },
+    } as unknown as LawApiClient
+    await findLaws(client, "결핵 신고 결핵예방법 위반")
+    expect(searched).toContain("결핵예방법")
+  })
+})

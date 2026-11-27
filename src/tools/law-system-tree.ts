@@ -3,12 +3,14 @@ import type { LawApiClient } from "../lib/api-client.js";
 import { truncateResponse, formatDateDot } from "../lib/schemas.js";
 import { formatToolError } from "../lib/errors.js";
 import { collectLawHierarchy, renderLawHierarchy } from "../lib/law-system-hierarchy.js";
+import { collectTreeOrdinances, renderTreeOrdinances } from "../lib/ordinance-tree.js";
 
 // Law system tree tool - Get hierarchical structure of laws
 export const getLawSystemTreeSchema = z.object({
   lawId: z.string().optional().describe("법령ID (search_law에서 획득)"),
   mst: z.string().optional().describe("법령일련번호 (MST)"),
   lawName: z.string().optional().describe("법령명"),
+  region: z.string().optional().describe("지자체 이름 (예: '광진구', '서울특별시 광진구', '수원시'). 주면 이 법령 체계에 연결된 그 지자체 조례·규칙을 자치법규일련번호와 함께 낸다"),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달"),
 });
 
@@ -134,6 +136,10 @@ export async function getLawSystemTree(
       }
       output += `\n`;
     }
+
+    // 자치법규: 단계별 건수·제목별 건수, region 이면 그 지자체 것
+    const ordinanceSection = renderTreeOrdinances(collectTreeOrdinances(hierarchy), args.region);
+    if (ordinanceSection) output += `${ordinanceSection}\n`;
 
     // Tree visualization
     output += `체계도 시각화:\n\n`;

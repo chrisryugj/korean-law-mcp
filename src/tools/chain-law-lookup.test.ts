@@ -93,3 +93,24 @@ describe("의미검색 질의 정리·법령 점수 (법제처 law-mcp 대조, 2
     expect(rankAiLawNames(sig(["공동주택 층간소음의 범위와 기준에 관한 규칙", "공동주택관리법", "공동주택관리법"]))[0]).toBe("공동주택관리법")
   })
 })
+
+describe("terms: 쟁점을 법률용어로 바꾼 말 (법제처 law-mcp search_situation 대조, 2026-11-28)", () => {
+  it("terms 의미검색 조문을 질문 원문보다 앞 순위로 센다", async () => {
+    lawCache.clear()
+    const aiQueries: string[] = []
+    const client = {
+      async searchLaw(query: string) { return lawXml(["근로기준법", "고용보험법"].filter(n => n === query.trim())) },
+      async fetchApi({ extraParams }: { extraParams?: Record<string, string> }) {
+        const q = extraParams?.query ?? ""
+        aiQueries.push(q)
+        return aiXml(q.includes("부당해고") ? "근로기준법" : "고용보험법")
+      },
+    } as unknown as LawApiClient
+    const plain = await resolveChainBaseLaw(client, "회사가 갑자기 그만두래요")
+    expect(plain.laws[0]?.lawName).toBe("고용보험법")
+    lawCache.clear()
+    const withTerms = await resolveChainBaseLaw(client, "회사가 갑자기 그만두래요", undefined, 3, { terms: ["부당해고", "해고 예고"] })
+    expect(withTerms.laws[0]?.lawName).toBe("근로기준법")
+    expect(aiQueries).toContain("부당해고 해고 예고")
+  })
+})

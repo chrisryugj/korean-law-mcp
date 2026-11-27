@@ -20,7 +20,7 @@ import {
   chainOrdinanceCompare, chainOrdinanceCompareSchema,
   chainFullResearch, chainFullResearchSchema,
   chainProcedureDetail, chainProcedureDetailSchema,
-  chainDocumentReview,
+  chainDocumentReview, chainTerms,
 } from "./chains.js"
 import { throwIfRequestCancelled } from "../lib/session-state.js"
 import { truncateResponse } from "../lib/schemas.js"
@@ -74,6 +74,7 @@ export const LegalResearchSchema = z.preprocess((raw) => {
     .describe("[dispute_prep] 전문 분야 (tax=조세심판, labor=노동위, privacy=개인정보위, competition=공정위). 미지정 시 자동 감지"),
   articles: z.array(z.string()).optional()
     .describe("[law_system] 함께 조회할 조문 번호 (예: ['제38조'])"),
+  terms: chainTerms,
   parentLaw: z.string().optional()
     .describe("[ordinance_compare] 상위 법령명. 미지정 시 자동 검색"),
   mst: z.string().optional().describe("[amendment_track] 법령일련번호 (알고 있으면)"),
@@ -160,12 +161,12 @@ export async function legalResearch(
     case "law_system": {
       const { value: scenario, note } = pickScenario(chainLawSystemSchema.shape.scenario, input.scenario, task)
       return withNote(note, await chainLawSystem(apiClient, {
-        query, articles: input.articles, scenario, apiKey,
+        query, articles: input.articles, scenario, terms: input.terms, apiKey,
       }))
     }
     case "action_basis": {
       const { value: scenario, note } = pickScenario(chainActionBasisSchema.shape.scenario, input.scenario, task)
-      return withNote(note, await chainActionBasis(apiClient, { query, scenario, apiKey }))
+      return withNote(note, await chainActionBasis(apiClient, { query, scenario, terms: input.terms, apiKey }))
     }
     case "dispute_prep":
       return withNote(droppedNote(input.scenario, task),
@@ -186,12 +187,12 @@ export async function legalResearch(
     }
     case "procedure_detail": {
       const { value: scenario, note } = pickScenario(chainProcedureDetailSchema.shape.scenario, input.scenario, task)
-      return withNote(note, await chainProcedureDetail(apiClient, { query, scenario, apiKey }))
+      return withNote(note, await chainProcedureDetail(apiClient, { query, scenario, terms: input.terms, apiKey }))
     }
     case "full_research":
     default: {
       const { value: scenario, note } = pickScenario(chainFullResearchSchema.shape.scenario, input.scenario, task)
-      return withNote(note, await chainFullResearch(apiClient, { query, scenario, apiKey }))
+      return withNote(note, await chainFullResearch(apiClient, { query, scenario, terms: input.terms, apiKey }))
     }
   }
 }

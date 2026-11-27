@@ -52,6 +52,9 @@ import { getRequestSignal, throwIfRequestCancelled, runWithRequestContext } from
 
 export { MAX_CHAIN_QUERY, chainDisputePrepSchema } from "./chain-routing.js"
 const chainQuery = (desc: string) => z.string().max(MAX_CHAIN_QUERY).describe(desc)
+/** 법령명 없는 일상 질문의 쟁점을 법률용어로 바꾼 말: 기반 법령 의미검색에 질문보다 먼저 쓴다 */
+export const chainTerms = z.array(z.string().max(40)).max(4).optional()
+  .describe("법령명 없는 일상 질문이면 쟁점을 법률용어로 바꾼 말 2~4개 (예: '회사가 갑자기 그만두래요' → ['부당해고', '해고 예고']). 기반 법령을 찾을 때 질문보다 먼저 쓴다")
 
 // ========================================
 // Types
@@ -434,6 +437,7 @@ export const chainLawSystemSchema = z.object({
   articles: z.array(z.string()).optional().describe("조회할 조문 번호 (예: ['제38조', '제39조'])"),
   scenario: z.enum(["delegation", "impact"]).optional()
     .describe("확장 시나리오. delegation=위임입법 미이행 감시, impact=개정 영향도 분석. 미지정 시 쿼리에서 자동 감지."),
+  terms: chainTerms,
   apiKey: z.string().optional(),
 })
 
@@ -451,7 +455,7 @@ export async function chainLawSystem(
     const aiSignals = LAW_NAME_TOKEN_RE.test(input.query) ? undefined
       : baseLawAiSignals(apiClient, input.query, input.apiKey)
     void aiSignals?.catch(() => {})  // 1·2단계에서 끝나면 아무도 기다리지 않는다
-    const baseO = await raceDeadline(dl, resolveChainBaseLaw(apiClient, input.query, input.apiKey, 3, { aiSignals }))
+    const baseO = await raceDeadline(dl, resolveChainBaseLaw(apiClient, input.query, input.apiKey, 3, { aiSignals, terms: input.terms }))
     if (!baseO.ok) return expiredChainResult(expiredHeader)
     const laws = baseO.value.laws
     if (laws.length === 0) {
@@ -505,6 +509,7 @@ export const chainActionBasisSchema = z.object({
   query: chainQuery("처분 유형 + 키워드 (예: '건축허가 거부 근거', '보조금 환수')"),
   scenario: z.enum(["penalty"]).optional()
     .describe("확장 시나리오. penalty=처분·벌칙 기준 종합 (별표 처분기준표 + 감경 판례 + 개정이력). 미지정 시 쿼리에서 자동 감지."),
+  terms: chainTerms,
   apiKey: z.string().optional(),
 })
 
@@ -520,7 +525,7 @@ export async function chainActionBasis(
     const aiSignals = LAW_NAME_TOKEN_RE.test(input.query) ? undefined
       : baseLawAiSignals(apiClient, input.query, input.apiKey)
     void aiSignals?.catch(() => {})  // 1·2단계에서 끝나면 아무도 기다리지 않는다
-    const baseO = await raceDeadline(dl, resolveChainBaseLaw(apiClient, input.query, input.apiKey, 3, { aiSignals }))
+    const baseO = await raceDeadline(dl, resolveChainBaseLaw(apiClient, input.query, input.apiKey, 3, { aiSignals, terms: input.terms }))
     if (!baseO.ok) return expiredChainResult(expiredHeader)
     const laws = baseO.value.laws
     if (laws.length === 0) {
@@ -829,6 +834,7 @@ export const chainFullResearchSchema = z.object({
   query: chainQuery("자연어 질문 (예: '기간제 근로자 2년 초과 사용', '음주운전 처벌 기준', '전세금 못 받았어')"),
   scenario: z.enum(["customs", "action_plan"]).optional()
     .describe("확장 시나리오. customs=관세·통관 종합 | action_plan=이럴 땐 이렇게, 5단계 안내(v4.0, 진단→권리→기관/기한→서류→함정). 미지정 시 쿼리에서 자동 감지."),
+  terms: chainTerms,
   apiKey: z.string().optional(),
 })
 
@@ -850,7 +856,7 @@ export async function chainFullResearch(
     // 실패 마커로 밝힌다 (B#11). throw 는 Promise.all 전체를 죽이므로 결과로 돌려준다.
     const findBaseLaws = async (): Promise<{ laws: LawInfo[]; failure?: CallResult }> => {
       try {
-        return { laws: (await resolveChainBaseLaw(apiClient, input.query, input.apiKey, 2, { aiSignals })).laws }
+        return { laws: (await resolveChainBaseLaw(apiClient, input.query, input.apiKey, 2, { aiSignals, terms: input.terms })).laws }
       } catch (error) {
         if (getRequestSignal()?.aborted) throw error
         return { laws: [], failure: errorCallResult(error, "search_law") }
@@ -942,6 +948,7 @@ export const chainProcedureDetailSchema = z.object({
   query: chainQuery("절차/비용 관련 질문 (예: '여권발급 절차 수수료', '건축허가 신청 방법')"),
   scenario: z.enum(["manual"]).optional()
     .describe("확장 시나리오. manual=공무원 처리 매뉴얼 (행정규칙 + 자치법규 특칙 + 해석례 추가). 미지정 시 쿼리에서 자동 감지."),
+  terms: chainTerms,
   apiKey: z.string().optional(),
 })
 
@@ -976,7 +983,7 @@ export async function chainProcedureDetail(
     }
 
     // Step 1: 법령 검색
-    const baseO = await raceDeadline(dl, resolveChainBaseLaw(apiClient, input.query, input.apiKey, 3, { aiSignals }))
+    const baseO = await raceDeadline(dl, resolveChainBaseLaw(apiClient, input.query, input.apiKey, 3, { aiSignals, terms: input.terms }))
     if (!baseO.ok) return expiredAtBase()
     const laws = baseO.value.laws
     if (laws.length === 0) {

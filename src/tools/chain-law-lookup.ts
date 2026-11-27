@@ -29,6 +29,8 @@ export interface ChainBaseLawOptions {
    * 한 번 더 보내던 것을 없앤다. 호출부가 거부되지 않는 promise 로 넘긴다(실패는 빈 배열).
    */
   aiSignals?: Promise<AiLawArticleSignal[]>
+  /** 쟁점을 법률용어로 바꾼 말(호출 LLM 이 준다). 질문 원문의 의미검색보다 앞 순위로 센다 */
+  terms?: string[]
 }
 
 /**
@@ -68,15 +70,24 @@ export function rankAiLawNames(signals: AiLawArticleSignal[]): string[] {
   return [...score.entries()].sort((a, b) => b[1] - a[1]).map(([n]) => n)
 }
 
-/** 의미검색이 지목한 법령명 (법령별 점수 순, rankAiLawNames) */
+/**
+ * 의미검색이 지목한 법령명 (법령별 점수 순, rankAiLawNames). terms 가 있으면 그 의미검색 조문을 질문 원문 조문보다 앞 순위에 둔다.
+ * 「회사가 갑자기 그만두래요」는 원문 의미검색이 고용보험법을 냈고, 쟁점 「부당해고」로는 근로기준법이 나온다
+ */
 async function aiLawNames(
   apiClient: LawApiClient,
   query: string,
   apiKey?: string,
-  aiSignals?: Promise<AiLawArticleSignal[]>
+  aiSignals?: Promise<AiLawArticleSignal[]>,
+  terms?: string[]
 ): Promise<string[]> {
   try {
-    return rankAiLawNames(aiSignals ? await aiSignals : await baseLawAiSignals(apiClient, query, apiKey))
+    const t = (terms ?? []).map(x => x.trim()).filter(Boolean)
+    const [byTerms, byQuery] = await Promise.all([
+      t.length ? baseLawAiSignals(apiClient, t.join(" "), apiKey) : Promise.resolve([]),
+      aiSignals ?? baseLawAiSignals(apiClient, query, apiKey),
+    ])
+    return rankAiLawNames([...byTerms, ...byQuery])
   } catch (error) {
     // 예산 소진·요청 취소를 여기서 삼키면 체인이 "관련 법령 없음(NOT_FOUND)"으로 끝난다 (B#11)
     rethrowIfFatal(error)
@@ -115,7 +126,7 @@ export async function resolveChainBaseLaw(
   if (byQuery.length) return { laws: byQuery, searchedWith: query.trim(), attempts }
 
   // 3) 주제어 → 법령: 의미검색이 지목한 법령명으로 재검색
-  for (const name of await aiLawNames(apiClient, query, apiKey, options.aiSignals)) {
+  for (const name of await aiLawNames(apiClient, query, apiKey, options.aiSignals, options.terms)) {
     const byAi = await attempt(name)
     if (byAi.length) return { laws: byAi, searchedWith: name, attempts }
   }

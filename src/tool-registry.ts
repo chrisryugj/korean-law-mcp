@@ -57,6 +57,7 @@ import { searchLegalTerms, searchLegalTermsSchema } from "./tools/legal-terms.js
 import { searchAiLaw, searchAiLawSchema } from "./tools/life-law.js"
 import { searchLifeLaw, searchLifeLawSchema } from "./tools/life-law-guide.js"
 import { getLawInfo, getLawInfoSchema } from "./tools/law-info.js"
+import { getPenalties, getPenaltiesSchema } from "./tools/penalties.js"
 import { getLegalTermKB, getLegalTermKBSchema, getLegalTermDetail, getLegalTermDetailSchema, getDailyTerm, getDailyTermSchema, getDailyToLegal, getDailyToLegalSchema, getLegalToDaily, getLegalToDailySchema, getTermArticles, getTermArticlesSchema, getRelatedLaws, getRelatedLawsSchema } from "./tools/knowledge-base.js"
 import { searchFtcDecisions, searchFtcDecisionsSchema, getFtcDecisionText, getFtcDecisionTextSchema, searchPipcDecisions, searchPipcDecisionsSchema, getPipcDecisionText, getPipcDecisionTextSchema, searchNlrcDecisions, searchNlrcDecisionsSchema, getNlrcDecisionText, getNlrcDecisionTextSchema, searchAcrDecisions, searchAcrDecisionsSchema, getAcrDecisionText, getAcrDecisionTextSchema } from "./tools/committee-decisions.js"
 import { searchSchoolRules, searchSchoolRulesSchema, getSchoolRuleText, getSchoolRuleTextSchema, searchPublicCorpRules, searchPublicCorpRulesSchema, getPublicCorpRuleText, getPublicCorpRuleTextSchema, searchPublicInstitutionRules, searchPublicInstitutionRulesSchema, getPublicInstitutionRuleText, getPublicInstitutionRuleTextSchema } from "./tools/institutional-rules.js"
@@ -541,6 +542,12 @@ export const allTools: McpTool[] = [
     description: "[AI검색] 자연어로 관련 조문 의미검색. 법령명 몰라도 사용 가능. 법령명을 알면 search_law가 더 정확.",
     schema: searchAiLawSchema,
     handler: searchAiLaw
+  },
+  {
+    name: "get_penalties",
+    description: "[벌칙] 법령을 어기면 받는 제재: 벌칙 장 조문(벌칙·과태료·양벌규정), 의무 조문(duty)을 지목한 항·호, 시행령 과태료·과징금 부과기준 별표에서 그 조가 나오는 행(1차·2차·3차 금액).",
+    schema: getPenaltiesSchema,
+    handler: getPenalties
   },
   {
     name: "get_law_info",
