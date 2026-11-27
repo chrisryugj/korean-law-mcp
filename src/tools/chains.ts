@@ -14,7 +14,7 @@ import {
   type LawInfo,
 } from "../lib/law-search.js"
 import { routeQuery } from "../lib/query-router.js"
-import { resolveChainBaseLaw } from "./chain-law-lookup.js"
+import { resolveChainBaseLaw, baseLawAiSignals } from "./chain-law-lookup.js"
 import {
   startChainDeadline,
   raceDeadline,
@@ -449,7 +449,7 @@ export async function chainLawSystem(
   return withChainDeadline(expiredHeader, async dl => {
     // 법령명 없는 질의("음식점 영업정지 근거")는 검색 2회를 헛친 뒤에야 의미검색에 닿았다(1.75초) — 그때만 미리 띄운다
     const aiSignals = LAW_NAME_TOKEN_RE.test(input.query) ? undefined
-      : searchAiLawStructured(apiClient, { query: input.query, search: "0", display: 5, page: 1, apiKey: input.apiKey }).then(r => r.articleSignals)
+      : baseLawAiSignals(apiClient, input.query, input.apiKey)
     void aiSignals?.catch(() => {})  // 1·2단계에서 끝나면 아무도 기다리지 않는다
     const baseO = await raceDeadline(dl, resolveChainBaseLaw(apiClient, input.query, input.apiKey, 3, { aiSignals }))
     if (!baseO.ok) return expiredChainResult(expiredHeader)
@@ -518,7 +518,7 @@ export async function chainActionBasis(
   return withChainDeadline(expiredHeader, async dl => {
     // 법령명 없는 질의("음식점 영업정지 근거")는 검색 2회를 헛친 뒤에야 의미검색에 닿았다(1.75초) — 그때만 미리 띄운다
     const aiSignals = LAW_NAME_TOKEN_RE.test(input.query) ? undefined
-      : searchAiLawStructured(apiClient, { query: input.query, search: "0", display: 5, page: 1, apiKey: input.apiKey }).then(r => r.articleSignals)
+      : baseLawAiSignals(apiClient, input.query, input.apiKey)
     void aiSignals?.catch(() => {})  // 1·2단계에서 끝나면 아무도 기다리지 않는다
     const baseO = await raceDeadline(dl, resolveChainBaseLaw(apiClient, input.query, input.apiKey, 3, { aiSignals }))
     if (!baseO.ok) return expiredChainResult(expiredHeader)

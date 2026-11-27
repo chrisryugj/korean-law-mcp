@@ -31,7 +31,44 @@ export interface ChainBaseLawOptions {
   aiSignals?: Promise<AiLawArticleSignal[]>
 }
 
-/** 의미검색이 지목한 법령명 (등장 순, 중복 제거) */
+/**
+ * 의미검색에 넣을 질의: 구어 꼬리("얼마야"·"어떻게 되나요"·"있나요")와 낱말 뒤 목적격 조사를 뗀다.
+ * 의미검색이 이것에 흔들려 엉뚱한 법령을 1위로 냈다(「임금명세서를 안 주면 과태료 얼마」 → 아동ㆍ청소년의 성보호에 관한 법률,
+ * 떼면 근로기준법). 다 떼서 비면 원문을 쓴다
+ */
+export function aiSearchQuery(query: string): string {
+  const q = query.replace(/\s+/g, " ").trim()
+  const cut = q
+    .replace(/\s*(얼마(인가요|예요|야|나)?|어떻게\s*(되나요|하나요|해야\s*하나요|돼)?|뭐야|무엇인가요|있나요|수\s*있나요|받을\s*수\s*있나요)\s*[?？]?$/u, "")
+    .replace(/([가-힣]{2,})(을|를)(?= )/gu, "$1")
+    .trim()
+  return cut || q
+}
+
+/** 체인 기반 법령용 의미검색: 정리한 질의로 10건을 받아 법령별로 모은다(rankAiLawNames) */
+export function baseLawAiSignals(apiClient: LawApiClient, query: string, apiKey?: string): Promise<AiLawArticleSignal[]> {
+  return searchAiLawStructured(apiClient, { query: aiSearchQuery(query), search: "0", display: 10, page: 1, apiKey }).then(r => r.articleSignals)
+}
+
+const isSubordinateName = (n: string) => /시행령|시행규칙|규정|규칙$/.test(n)
+
+/**
+ * 의미검색 조문들을 법령별 점수로 모아 순서를 정한다. 시행령·시행규칙은 모법 이름으로 묶고, 순위 k 의 조문은 1/k 점이다.
+ * 이름이 규정·규칙으로 끝나는 별도 하위법령은 반 점이다. 체인은 3단비교·처분근거를 법률 기준으로 쌓는다.
+ * 1위 조문의 법령을 그대로 쓰면 단어만 겹친 조문 하나에 끌려갔다(「음식점 영업정지 근거」 → 건강기능식품에 관한 법률,
+ * 10건 중 식품위생법 조문이 더 많고 1위도 식품위생법 시행령)
+ */
+export function rankAiLawNames(signals: AiLawArticleSignal[]): string[] {
+  const score = new Map<string, number>()
+  signals.forEach((s, i) => {
+    const n = s.lawName?.trim().replace(/\s*(시행령|시행규칙)$/, "")
+    if (!n) return
+    score.set(n, (score.get(n) ?? 0) + (isSubordinateName(n) ? 0.5 : 1) / (i + 1))
+  })
+  return [...score.entries()].sort((a, b) => b[1] - a[1]).map(([n]) => n)
+}
+
+/** 의미검색이 지목한 법령명 (법령별 점수 순, rankAiLawNames) */
 async function aiLawNames(
   apiClient: LawApiClient,
   query: string,
@@ -39,18 +76,7 @@ async function aiLawNames(
   aiSignals?: Promise<AiLawArticleSignal[]>
 ): Promise<string[]> {
   try {
-    const articleSignals = aiSignals
-      ? await aiSignals
-      : (await searchAiLawStructured(apiClient, { query, search: "0", display: 5, page: 1, apiKey })).articleSignals
-    const names: string[] = []
-    for (const s of articleSignals) {
-      const n = s.lawName?.trim()
-      if (n && !names.includes(n)) names.push(n)
-    }
-    // 하위법령보다 모법을 앞세운다 — 체인은 3단비교·처분근거를 법률 기준으로 쌓는다.
-    // 의미검색은 조문 적합도 순이라 "도로교통법 시행규칙"이 "도로교통법"보다 먼저 오기 쉽다
-    const isSubordinate = (n: string) => /시행령|시행규칙|규정|규칙$/.test(n)
-    return [...names.filter(n => !isSubordinate(n)), ...names.filter(isSubordinate)]
+    return rankAiLawNames(aiSignals ? await aiSignals : await baseLawAiSignals(apiClient, query, apiKey))
   } catch (error) {
     // 예산 소진·요청 취소를 여기서 삼키면 체인이 "관련 법령 없음(NOT_FOUND)"으로 끝난다 (B#11)
     rethrowIfFatal(error)
