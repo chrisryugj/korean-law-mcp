@@ -212,7 +212,7 @@ export async function ordinanceRadar(
       }
     }
 
-    // 조별 대조. 조례 조가 인용한 근거법 조를 그 조의 마지막 개정일 판과 오늘 판에서 맞댄다(일부개정 때 손대지 않은 조의 정비 누락)
+    // 조별 대조. 조례 조가 인용한 근거법 조에 조례 조·항의 마지막 개정일보다 늦은 개정·삭제 표시가 있나(일부개정 때 손대지 않은 조의 정비 누락)
     let citeNote = ""
     if (validOrdDate) {
       const baseLaw = parentNames.find(n => /(법|법률)$/.test(n))
@@ -225,8 +225,8 @@ export async function ordinanceRadar(
         out += `\n조별 대조 (조례 조가 인용한 근거법 조 ${cites.length}건: 바뀜 ${r.findings.length} · 같음 ${r.same}${r.unchecked ? ` · 못 봄 ${r.unchecked}` : ""}):\n`
         const fmtYmd = (y: string) => `${y.slice(0, 4)}.${y.slice(4, 6)}.${y.slice(6, 8)}`
         for (const f of r.findings.slice(0, 40)) {
-          const what = f.kind === "deleted" ? "삭제됨" : f.kind === "missing" ? "현행 판에 없음(조 번호 이동·삭제)" : "문구 바뀜"
-          out += `  ⚠️ 조례 ${f.cite.ordArticle} → ${lawLabel(f.cite)}: ${what} (조례 조 기준 ${fmtYmd(f.cite.refDate)} 시행판 ${fmtYmd(f.refEfYd)} 대비)\n`
+          const what = f.kind === "deleted" ? `${fmtYmd(f.when)} 삭제` : f.kind === "missing" ? "현행 판에 없음(조 번호 이동·삭제)" : `${fmtYmd(f.when)} 개정`
+          out += `  ⚠️ 조례 ${f.cite.ordArticle} → ${lawLabel(f.cite)}: ${what} (조례 쪽 기준일 ${fmtYmd(f.cite.refDate)} 뒤)\n`
         }
         if (r.findings.length > 40) out += `  … 외 ${r.findings.length - 40}건\n`
         if (r.findings.length) {

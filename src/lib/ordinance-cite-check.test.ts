@@ -2,13 +2,6 @@
 import { describe, expect, it, vi } from "vitest"
 import type { LawApiClient } from "./api-client.js"
 
-vi.mock("./law-lineage.js", () => ({
-  fetchLineageVersions: vi.fn(async () => ({ versions: [
-    { mst: "300", efYd: "20260227", ancNo: "", ancYd: "", lawNm: "주차장법", rrCls: "" },
-    { mst: "200", efYd: "20180101", ancNo: "", ancYd: "", lawNm: "주차장법", rrCls: "" },
-  ], totalCount: 2, fetchedPages: 1 })),
-  versionInForce: (vs: Array<{ efYd: string }>, ymd: string) => vs.find(v => v.efYd <= ymd),
-}))
 const { extractOrdinanceCites, compareOrdinanceCites } = await import("./ordinance-cite-check.js")
 
 const law = (art12h6: string, art19: string) => JSON.stringify({ 법령: { 조문: { 조문단위: [
@@ -33,13 +26,12 @@ describe("조례 조별 근거법 대조", () => {
     const cites = extractOrdinanceCites([{ 조내용: "제15조(부대시설) ① 시행규칙 제6조제4항에 따른다. <개정 2023.3.2.> ③ 법 제12조제6항에 따른 지역은 10퍼센트 이내로 한다. <신설, 2014. 5. 14.>" }], "주차장법", "20260227")
     expect(cites.map(c => [c.lawName, c.jo, c.hang ?? 0, c.refDate])).toEqual([["주차장법 시행규칙", 6, 4, "20230302"], ["주차장법", 12, 6, "20140514"]])
   })
-  it("그때 판과 오늘 판을 맞대 삭제·변경·같음을 가른다", async () => {
-    const getLawText = vi.fn(async (p: { mst?: string }) => p.mst === "200"
-      ? law("⑥ 사용료를 감면할 수 있다. <개정 2017.1.1>", "제19조(부설주차장의 설치) 설치하여야 한다.")
-      : law("⑥ 삭제 <2026.2.27>", "제19조(부설주차장의 설치) 설치하여야 한다. <개정 2026.2.27>"))
+  it("오늘 판의 그 조·항 개정·삭제 표시가 조례 기준일보다 늦으면 바뀐 것", async () => {
+    const getLawText = vi.fn(async () => law("⑥ 삭제 <2026.2.27>", "제19조(부설주차장의 설치) 설치하여야 한다. <개정 2018.1.1>"))
     const cites = extractOrdinanceCites(articles, "주차장법", "20200101")
     const r = await compareOrdinanceCites({ getLawText } as unknown as LawApiClient, cites, new Map([["주차장법", { lawId: "001234", mst: "300" }]]))
-    expect(r.findings.map(f => [f.cite.ordArticle, f.kind])).toEqual([["제15조", "deleted"]])
+    expect(r.findings.map(f => [f.cite.ordArticle, f.kind, f.when])).toEqual([["제15조", "deleted", "20260227"]])
     expect(r.same).toBe(1)
-  })
+    expect(getLawText).toHaveBeenCalledTimes(1)
+})
 })
