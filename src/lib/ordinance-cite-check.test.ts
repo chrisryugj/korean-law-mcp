@@ -1,0 +1,41 @@
+/** 조례 조별 근거법 대조 (법제처 law-mcp check_ordinance_updates 조별_대조 대조: 광진구 주차장 조례 제15조③ → 주차장법 제12조제6항 삭제) */
+import { describe, expect, it, vi } from "vitest"
+import type { LawApiClient } from "./api-client.js"
+
+vi.mock("./law-lineage.js", () => ({
+  fetchLineageVersions: vi.fn(async () => ({ versions: [
+    { mst: "300", efYd: "20260227", ancNo: "", ancYd: "", lawNm: "주차장법", rrCls: "" },
+    { mst: "200", efYd: "20180101", ancNo: "", ancYd: "", lawNm: "주차장법", rrCls: "" },
+  ], totalCount: 2, fetchedPages: 1 })),
+  versionInForce: (vs: Array<{ efYd: string }>, ymd: string) => vs.find(v => v.efYd <= ymd),
+}))
+const { extractOrdinanceCites, compareOrdinanceCites } = await import("./ordinance-cite-check.js")
+
+const law = (art12h6: string, art19: string) => JSON.stringify({ 법령: { 조문: { 조문단위: [
+  { 조문여부: "조문", 조문번호: "12", 조문내용: "제12조(노외주차장의 설치 등)", 항: [{ 항번호: "①", 항내용: "① 설치한다." }, { 항번호: "⑥", 항내용: art12h6 }] },
+  { 조문여부: "조문", 조문번호: "19", 조문내용: art19 },
+] } } })
+
+describe("조례 조별 근거법 대조", () => {
+  const articles = [
+    { 조내용: "제1조(목적) 이 조례는 「주차장법」에서 위임한 사항을 정한다." },
+    { 조내용: "제15조(사용료) ③ 법 제12조제6항에 따라 사용료를 감면한다. <개정 2019. 3. 7.>" },
+    { 조내용: "제20조(부설주차장) 법 제19조에 따른 부설주차장. <개정 2019. 3. 7.>" },
+  ]
+  it("조마다 마지막 개정일을 기준일로, 법·「」·같은 법 인용을 근거법 조로 뽑는다", () => {
+    const cites = extractOrdinanceCites(articles, "주차장법", "20200101")
+    expect(cites.map(c => [c.ordArticle, c.lawName, c.jo, c.hang ?? 0, c.refDate])).toEqual([
+      ["제15조", "주차장법", 12, 6, "20190307"],
+      ["제20조", "주차장법", 19, 0, "20190307"],
+    ])
+  })
+  it("그때 판과 오늘 판을 맞대 삭제·변경·같음을 가른다", async () => {
+    const getLawText = vi.fn(async (p: { mst?: string }) => p.mst === "200"
+      ? law("⑥ 사용료를 감면할 수 있다. <개정 2017.1.1>", "제19조(부설주차장의 설치) 설치하여야 한다.")
+      : law("⑥ 삭제 <2026.2.27>", "제19조(부설주차장의 설치) 설치하여야 한다. <개정 2026.2.27>"))
+    const cites = extractOrdinanceCites(articles, "주차장법", "20200101")
+    const r = await compareOrdinanceCites({ getLawText } as unknown as LawApiClient, cites, new Map([["주차장법", { lawId: "001234", mst: "300" }]]))
+    expect(r.findings.map(f => [f.cite.ordArticle, f.kind])).toEqual([["제15조", "deleted"]])
+    expect(r.same).toBe(1)
+  })
+})

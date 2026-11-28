@@ -38,7 +38,7 @@ export const LinkedLawsFromOrdinanceSchema = baseLinkageSchema.extend({
 
 // === 범용 XML 파서 (응답 구조 미확정 대응) ===
 
-function parseLinkageXML(xml: string, rootTag: string, itemTag: string) {
+export function parseLinkageXML(xml: string, rootTag: string, itemTag: string) {
   // 루트 태그는 대소문자 무시로 매칭 — 실측상 lnkDepSearch·lnkOrdJoSearch처럼
   // 소문자로 시작해, 대문자 시작을 가정한 종전 코드는 3/4 타깃에서 루트 매칭에
   // 실패해 매 호출 0건(NOT_FOUND)이었다.
@@ -67,7 +67,7 @@ function parseLinkageXML(xml: string, rootTag: string, itemTag: string) {
   return { totalCnt, page, items }
 }
 
-function formatItems(items: Record<string, string>[]): string {
+export function formatItems(items: Record<string, string>[]): string {
   return items.map((item, i) => {
     const lines = Object.entries(item).filter(([, v]) => v).map(([k, v]) => `  ${k}: ${v}`)
     return `${i + 1}. ${lines.join('\n')}`

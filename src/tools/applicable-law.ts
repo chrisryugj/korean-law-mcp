@@ -32,7 +32,7 @@ import type { ToolResponse } from "../lib/types.js"
 export const ApplicableLawSchema = z.object({
   lawName: z.string().describe("법령명 (예: '도로교통법', '근로기준법')"),
   date: z.string().describe("기준일 — 행위·계약·처분 시점 (예: '2023-05-10', '2023.5.10', '20230510')"),
-  jo: z.string().optional().describe("조문 번호 (예: '제44조', '제10조의2'). 지정 시 해당 시점 조문 본문 + 현행 비교 제공"),
+  jo: z.string().optional().describe("조문 번호 (예: '제44조', '제10조의2', 항·호까지 '제44조제1항제2호'). 지정 시 해당 시점 조문 본문 + 현행 비교 제공"),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달"),
 })
 
@@ -59,7 +59,27 @@ export function normalizeDate(input: string): string | null {
 const fmtYmd = formatDateDot
 
 /** eflaw JSON에서 조문 본문 추출 (항·호 평탄화). joCode 지정 시 조문번호·가지번호 일치 검증 */
-function extractJoText(jsonText: string, joCode?: string): string {
+const CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
+
+/** "제44조제1항제2호" → 조 부분과 항·호 번호 */
+export function splitJo(jo: string): { article: string; hang?: number; ho?: number } {
+  const m = jo.replace(/\s+/g, "").match(/^(제?\d+조(?:의\d+)?)(?:제(\d+)항)?(?:제(\d+)호)?$/)
+  return m ? { article: m[1], hang: m[2] ? Number(m[2]) : undefined, ho: m[3] ? Number(m[3]) : undefined } : { article: jo }
+}
+
+/** 조 본문에서 항·호만. 조 머리 줄과 고른 항(그 항 안에서 고른 호) */
+export function pickHangHo(unit: any, hang?: number, ho?: number): string | undefined {
+  if (!hang) return undefined
+  const h = toArray<any>(unit?.항).find(x => String(x?.항번호 ?? "").trim().startsWith(CIRCLED[hang - 1]))
+  if (!h) return undefined
+  const lines = [cleanHtml(String(unit.조문내용 ?? "")).split("\n")[0], cleanHtml(String(h.항내용 ?? ""))]
+  const hos = toArray<any>(h.호)
+  const chosen = ho ? hos.filter(x => parseInt(String(x?.호번호 ?? ""), 10) === ho) : hos
+  for (const x of chosen) lines.push(cleanHtml(String(x?.호내용 ?? "")), ...toArray<any>(x?.목).map(m => cleanHtml(String(m?.목내용 ?? ""))))
+  return lines.map(l => l.trim()).filter(Boolean).join("\n")
+}
+
+function extractJoText(jsonText: string, joCode?: string, hang?: number, ho?: number): string {
   try {
     const json = JSON.parse(jsonText)
     const units = toArray<any>(json?.법령?.조문?.조문단위)
@@ -75,7 +95,7 @@ function extractJoText(jsonText: string, joCode?: string): string {
       return num === wantNum && branch === wantBranch
     })
     if (!found) return ""
-    return formatArticleUnit(found)?.body.trim() || ""
+    return pickHangHo(found, hang, ho) ?? (formatArticleUnit(found)?.body.trim() || "")
   } catch {
     return ""
   }
@@ -288,7 +308,8 @@ export async function applicableLaw(
     addendaJson?.catch(() => {})  // 아래에서 await 하기 전에 실패해도 미처리 거부로 새지 않게
 
     // 3. 조문 비교 (jo 지정 시)
-    const joCode = input.jo ? (/^\d{6}$/.test(input.jo) ? input.jo : buildJO(input.jo)) : undefined
+    const joParts = input.jo ? splitJo(input.jo) : undefined
+    const joCode = joParts ? (/^\d{6}$/.test(joParts.article) ? joParts.article : buildJO(joParts.article)) : undefined
     const joDisplay = joCode ? formatJO(joCode) : undefined
     if (joDisplay && joCode) {
       // eflaw는 MST 단독 조회 불가 — 해당 버전의 efYd 동반 필수 (없으면 "일치하는 법령이 없습니다")
@@ -304,8 +325,8 @@ export async function applicableLaw(
           ? apiClient.getLawText({ mst: current.mst, jo: joCode, efYd: current.efYd, apiKey: input.apiKey }).catch(softFail)
           : Promise.resolve(""),
       ])
-      const thenText = thenJson ? extractJoText(thenJson, joCode) : ""
-      const nowText = nowJson ? extractJoText(nowJson, joCode) : ""
+      const thenText = thenJson ? extractJoText(thenJson, joCode, joParts?.hang, joParts?.ho) : ""
+      const nowText = nowJson ? extractJoText(nowJson, joCode, joParts?.hang, joParts?.ho) : ""
 
       lines.push("")
       lines.push(`▶ 기준일 시점 조문: ${joDisplay}`)

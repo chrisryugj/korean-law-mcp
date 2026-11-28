@@ -25,6 +25,10 @@ import { parseJoCode, ParseJoCodeSchema, getLawAbbreviations, GetLawAbbreviation
 import { compareOldNew, CompareOldNewSchema } from "./tools/comparison.js"
 import { getThreeTier, GetThreeTierSchema } from "./tools/three-tier.js"
 import { searchLawText, SearchLawTextSchema, searchArticlesInLaw, SearchArticlesInLawSchema } from "./tools/law-body-search.js"
+import { getUpcomingChanges, GetUpcomingChangesSchema } from "./tools/upcoming-changes.js"
+import { getDelegatedOrdinances, GetDelegatedOrdinancesSchema } from "./tools/delegated-ordinances.js"
+import { compareOrdinanceWithLaw, CompareOrdinanceWithLawSchema } from "./tools/ordinance-law-compare.js"
+import { explainLegalTerm, ExplainLegalTermSchema } from "./tools/explain-legal-term.js"
 import { searchAdminRule, SearchAdminRuleSchema, getAdminRule, GetAdminRuleSchema, compareAdminRuleOldNew, CompareAdminRuleOldNewSchema } from "./tools/admin-rule.js"
 import { getArticleDetail, GetArticleDetailSchema } from "./tools/article-detail.js"
 import { getAnnexes, GetAnnexesSchema } from "./tools/annex.js"
@@ -104,6 +108,12 @@ export const allTools: McpTool[] = [
     description: "[법령검색] 법령명 배열을 한 번에 조회 — 건당 법령ID·MST·시행일·시행예정만 컴팩트 반환(부분매칭 목록·안내문 없음). previous={법령ID:직전MST} 를 주면 MST가 달라진 법령만 돌려주는 diff 모드 — MST는 개정마다 바뀌므로 그 자체가 변경 감지 키다. ISO 준법 등록부처럼 수십 건의 개정 여부를 주기적으로 확인할 때 search_law 건당 호출 대신 사용.",
     schema: SearchLawBulkSchema,
     handler: searchLawBulk
+  },
+  {
+    name: "get_upcoming_changes",
+    description: "[법령조회] 공포됐지만 아직 시행 전인 개정 목록과, 가장 이른 시행일(efYd 로 고름)에 바뀌는 조·항·호 줄(오늘 문구 대 그날 문구). '이 법 곧 바뀌나', '언제부터 뭐가 달라지나'. 개정 날짜 표시만 바뀐 줄은 뺀다.",
+    schema: GetUpcomingChangesSchema,
+    handler: getUpcomingChanges
   },
   {
     name: "search_law_text",
@@ -200,6 +210,24 @@ export const allTools: McpTool[] = [
     description: "[연계] 법령-자치법규 조문 연계. 법령 조문과 자치법규 조문 간 대응 관계 조회.",
     schema: LinkedOrdinanceArticlesSchema,
     handler: getLinkedOrdinanceArticles
+  },
+  {
+    name: "explain_legal_term",
+    description: "[용어사전] 일상어↔법령용어 바꾸기, 법령용어 뜻, 그 용어가 쓰인 조문을 한 번에. '월세가 법률 용어로 뭐야', '차임이 무슨 뜻이야'.",
+    schema: ExplainLegalTermSchema,
+    handler: explainLegalTerm
+  },
+  {
+    name: "compare_ordinance_with_law",
+    description: "[비교] 조례·규칙 조문과 그 조문이 인용한 근거법 조문(오늘 시행본)을 나란히. '우리 조례 제7조가 근거법과 맞나'. 내용 판정은 하지 않는다. 날짜로 본 정비 필요 여부는 ordinance_radar.",
+    schema: CompareOrdinanceWithLawSchema,
+    handler: compareOrdinanceWithLaw
+  },
+  {
+    name: "get_delegated_ordinances",
+    description: "[연계] 법령이 조례로 정하도록 위임한 조('…조례로 정한다' 문구)와 그 법령에 연결된 조례 조문. region 으로 지자체, jo 로 한 조만. '주차장법에서 조례로 정하라고 한 게 뭐야', '광진구 조례 중 이 위임을 받은 것'.",
+    schema: GetDelegatedOrdinancesSchema,
+    handler: getDelegatedOrdinances
   },
   {
     name: "get_delegated_laws",

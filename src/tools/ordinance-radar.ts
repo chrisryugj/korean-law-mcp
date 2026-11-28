@@ -19,6 +19,7 @@ import { toArray, parseSearchXML, extractTag } from "../lib/xml-parser.js"
 import { normalizeAliasKey, resolveLawAlias } from "../lib/search-normalizer.js"
 import { resolvedLawMatches } from "../lib/law-search.js"
 import { rethrowIfFatal } from "../lib/fatal-errors.js"
+import { extractOrdinanceCites, compareOrdinanceCites } from "../lib/ordinance-cite-check.js"
 
 export const OrdinanceRadarSchema = z.object({
   ordinSeq: z.string().optional().describe("자치법규 일련번호 (ordinSeq)"),
@@ -44,7 +45,7 @@ interface ParentLaw {
 // ("이 조례는 「주차장법」, 같은 법 시행령 및 시행규칙에서 위임한 사항과…").
 // 본문 전체를 스캔하면 별표의 감면대상 정의 등에서 인용된 무관한 법률(공직선거법 등)이
 // 대량 섞여 과잉경보가 나므로, 목적 조문의 인용만 근거법으로 취급한다.
-function findPurposeArticle(articles: Array<Record<string, unknown>>): string {
+export function findPurposeArticle(articles: Array<Record<string, unknown>>): string {
   const byTitle = articles.find(a => /목적/.test(String(a.조제목 || "")))
   const target = byTitle || articles[0]
   return String(target?.조내용 || "")
@@ -53,7 +54,7 @@ function findPurposeArticle(articles: Array<Record<string, unknown>>): string {
 // 목적 조문에서 근거 상위법령 추출.
 // - 「」로 명시 인용된 법령(법/법률/시행령/시행규칙)
 // - "같은 법 시행령/시행규칙" 축약 표현은 직전 base 법률에서 파생
-function extractBasisLaws(purposeText: string, selfName: string): string[] {
+export function extractBasisLaws(purposeText: string, selfName: string): string[] {
   const selfKey = normalizeAliasKey(selfName)
   const result: string[] = []
   const seen = new Set<string>()
@@ -94,7 +95,7 @@ function monthsBetween(fromYmd: string, toYmd: string): number {
 }
 
 // 법령명 → 현행 시행일/공포일/식별자. 정확매칭 우선(가나다순 오매칭 방지).
-async function fetchLawStatus(apiClient: LawApiClient, lawName: string, apiKey?: string): Promise<ParentLaw | null> {
+export async function fetchLawStatus(apiClient: LawApiClient, lawName: string, apiKey?: string): Promise<ParentLaw | null> {
   const xml = await apiClient.searchLaw(lawName, apiKey, 50)
   const nodes = new DOMParser().parseFromString(xml, "text/xml").getElementsByTagName("law")
   const queryKey = normalizeAliasKey(lawName)
@@ -211,9 +212,33 @@ export async function ordinanceRadar(
       }
     }
 
+    // 조별 대조. 조례 조가 인용한 근거법 조를 그 조의 마지막 개정일 판과 오늘 판에서 맞댄다(일부개정 때 손대지 않은 조의 정비 누락)
+    let citeNote = ""
+    if (validOrdDate) {
+      const baseLaw = parentNames.find(n => /(법|법률)$/.test(n))
+      const cites = extractOrdinanceCites(articles, baseLaw, ordEff).filter(c => parentNames.includes(c.lawName))
+      if (cites.length) {
+        const laws = new Map<string, { lawId: string; mst: string }>()
+        parentNames.forEach((n, i) => { const st = statuses[i]; if (st?.lawId) laws.set(n, { lawId: st.lawId, mst: st.mst }) })
+        const r = await compareOrdinanceCites(apiClient, cites, laws, input.apiKey)
+        const lawLabel = (c: { lawName: string; jo: number; branch: number; hang?: number }) => `${c.lawName} 제${c.jo}조${c.branch ? `의${c.branch}` : ""}${c.hang ? `제${c.hang}항` : ""}`
+        out += `\n조별 대조 (조례 조가 인용한 근거법 조 ${cites.length}건: 바뀜 ${r.findings.length} · 같음 ${r.same}${r.unchecked ? ` · 못 봄 ${r.unchecked}` : ""}):\n`
+        const fmtYmd = (y: string) => `${y.slice(0, 4)}.${y.slice(4, 6)}.${y.slice(6, 8)}`
+        for (const f of r.findings.slice(0, 40)) {
+          const what = f.kind === "deleted" ? "삭제됨" : f.kind === "missing" ? "현행 판에 없음(조 번호 이동·삭제)" : "문구 바뀜"
+          out += `  ⚠️ 조례 ${f.cite.ordArticle} → ${lawLabel(f.cite)}: ${what} (조례 조 기준 ${fmtYmd(f.cite.refDate)} 시행판 ${fmtYmd(f.refEfYd)} 대비)\n`
+        }
+        if (r.findings.length > 40) out += `  … 외 ${r.findings.length - 40}건\n`
+        if (r.findings.length) {
+          citeNote = `조별 대조에서 조례 조가 인용한 근거법 조 ${r.findings.length}건이 바뀌었습니다. 조례 문구를 그 조의 현행 문구와 대조하세요.\n`
+        }
+      }
+    }
+
     out += `\n📋 요약: `
-    if (needReview > 0) {
-      out += `근거 상위법 ${parentNames.length}건 중 ${needReview}건이 조례 시행 이후 개정됨 → 정비 검토 대상.\n`
+    if (needReview > 0 || citeNote) {
+      out += citeNote
+      if (needReview > 0) out += `근거 상위법 ${parentNames.length}건 중 ${needReview}건이 조례 시행 이후 개정됨 → 정비 검토 대상.\n`
       out += `개정 내용이 조례 위임사항과 관련되는지 확인 권장 — get_law_text(mst=...)로 개정 조문을, execute_tool(tool_name="compare_old_new", params={mst:"…"})로 신구 대조를 확인하세요.\n`
     } else if (!validOrdDate) {
       out += `조례 시행일을 확인하지 못해 상위법과의 시행일 선후 비교를 할 수 없습니다. 조례 본문에서 시행일을 확인하세요.\n`

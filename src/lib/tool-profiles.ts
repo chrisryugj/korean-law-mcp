@@ -130,10 +130,10 @@ export const TOOL_ALIASES: Record<string, string[]> = {
 export const TOOL_CATEGORIES: Record<string, string[]> = {
   "법령검색": ["search_law", "search_law_bulk", "search_all", "advanced_search", "suggest_law_names", "search_ai_law", "search_law_text"],
   "생활법령": ["search_life_law", "get_life_law"],
-  "법령조회": ["get_law_text", "get_article_detail", "get_batch_articles", "get_article_with_precedents", "get_law_info", "search_articles_in_law"],
+  "법령조회": ["get_law_text", "get_article_detail", "get_batch_articles", "get_article_with_precedents", "get_law_info", "search_articles_in_law", "get_upcoming_changes"],
   "행정규칙": ["search_admin_rule", "get_admin_rule", "compare_admin_rule_old_new"],
   "자치법규": ["search_ordinance", "get_ordinance", "ordinance_radar", "chain_ordinance_compare"],
-  "법령연계": ["get_linked_ordinances", "get_linked_ordinance_articles", "get_delegated_laws", "get_linked_laws_from_ordinance"],
+  "법령연계": ["get_linked_ordinances", "get_linked_ordinance_articles", "get_delegated_laws", "get_linked_laws_from_ordinance", "get_delegated_ordinances", "compare_ordinance_with_law"],
   "비교분석": ["compare_old_new", "get_three_tier", "compare_articles"],
   "개정입안": ["legal_analysis", "amendment_table"],
   "별표서식": ["get_annexes"],
@@ -158,7 +158,7 @@ export const TOOL_CATEGORIES: Record<string, string[]> = {
   "공공기관": ["search_public_institution_rules", "get_public_institution_rule_text"],
   "조약": ["search_treaties", "get_treaty_text"],
   "영문법령": ["search_english_law", "get_english_law_text"],
-  "용어": ["search_legal_terms", "get_legal_term_kb", "get_legal_term_detail", "get_daily_term", "get_daily_to_legal", "get_legal_to_daily", "get_term_articles", "get_related_laws"],
+  "용어": ["search_legal_terms", "get_legal_term_kb", "get_legal_term_detail", "get_daily_term", "get_daily_to_legal", "get_legal_to_daily", "get_term_articles", "get_related_laws", "explain_legal_term"],
   "종합리서치": ["legal_research", "chain_full_research"],
   "불복준비": ["chain_dispute_prep"],
   // 별칭이 직접 겨냥하는 의도 카테고리 3종은 1-hop 진입점(legal_research)을 앞세운다 (#110).

@@ -363,16 +363,16 @@ Full tool reference: [docs/API.md](docs/API.md).
 
 ## Recent updates
 
-Current version **v4.15.30**. All numbers come from the measurements recorded in the [CHANGELOG](CHANGELOG.md).
+Current version **v4.15.31**. All numbers come from the measurements recorded in the [CHANGELOG](CHANGELOG.md).
 
 | Version | What changed | Measured change |
 |---------|--------------|-----------------|
+| 4.15.31 | Re-compared with the official law-mcp at the parameter and behavior level. Precedent date filters now reach the API, citation checks catch deleted articles and wrong penalties or amounts, three-tier and old/new comparisons select one article, and the ordinance radar checks each cited statute article. Adds statute body search, in-law article search, upcoming changes, delegated ordinances, ordinance-vs-statute side by side and legal term explanations | Damages · Supreme Court · 2015 precedents 0 → **98** · Criminal Act art. 241 (deleted) ✓exists → **✗deleted** · three-tier articles 5 → **all** · tools 104 → **110** · 1,526 tests |
 | 4.15.30 | Connects the Easy-to-find Life Law Open API directly. Life-law search now covers ten categories including precedents, appeals, interpretations and local ordinance guides, and `get_life_law` returns full Q&A answers and guides; `region` for local ordinance guides, `lang` for translated guides | “출산” + Yeoncheon → childbirth grant guide · 35 English guides · 15 tests |
 | 4.15.29 | Updates the `hono` and `@hono/node-server` dependencies for six moderate security advisories | `npm audit` 0 · release validation workflow passes |
 | 4.15.28 | Adds `get_penalties` (duty article → penalty clause → fine rows from the decree's annex), a `region` filter for local ordinances in the law hierarchy, and `terms` for everyday questions. A search for “…받는 방법” no longer resolves to the pneumoconiosis act | Labor Standards Act art. 48 → annex 7 “wage statement not issued: 300k/500k/1M won” · Parking Act ordinances for Gwangjin-gu · 1,491 tests |
 | 4.15.27 | Adds `get_law_info`, a law card with departments and phone numbers by task, per-article effective dates, the reason for the latest revision, and scheduled amendments. Chains no longer pick an unrelated base law for everyday questions without a law name (wage-statement fine → child protection act) | Base law right for 22 → **26** of 32 everyday questions, 0 worse · 1,475 tests |
 | 4.15.26 | Adds `search_life_law`, a plain-language guide search. It calls the Ministry of Government Legislation's public life-law MCP and returns excerpts and source links from Easy-to-find Life Law (Q&A, rule explanations, related precedents), no key needed | 6 tests · live question about unpaid wages returned Q&A and a Supreme Court case |
-| 4.15.25 | `get_law_text`: laws with no numbered articles (short presidential decrees) lost their body text and still returned a normal-looking answer; fixed (#185). An answer with no body now says `[EMPTY_BODY]` | Live check: the 「이자제한법 제2조제1항의 최고이자율에 관한 규정」 body now prints · 3 regression tests |
 
 Earlier versions: see [CHANGELOG.md](CHANGELOG.md). Milestones:
 
