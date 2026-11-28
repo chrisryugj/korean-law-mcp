@@ -72,3 +72,16 @@ describe("get_penalties", () => {
     expect(r.content[0].text).toContain("[INVALID_PARAMETER]")
   })
 })
+
+describe("get_penalties: 의무 조문 전문·벌칙 장 밖 과징금", () => {
+  it("duty 조 전문을 함께 싣고, 벌칙 장 밖의 과징금 조도 벌칙 조로 본다", async () => {
+    const json = structuredClone(LAW_JSON) as any
+    json.법령.조문.조문단위.splice(1, 0, { 조문여부: "조문", 조문번호: "74", 조문제목: "과징금", 조문내용: "제74조(과징금) 제48조를 위반하면 과징금을 부과할 수 있다." })
+    const c = client()
+    c.getLawText.mockImplementation(async () => JSON.stringify(json))
+    const t = (await getPenalties(c, { lawName: "근로기준법", duty: "48" })).content[0].text
+    expect(t).toContain("▶ 의무 조문 전문")
+    expect(t).toContain("사용자는 …")
+    expect(t).toContain("제74조")
+  })
+})

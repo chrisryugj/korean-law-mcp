@@ -22,6 +22,8 @@ const CHAPTER_HEAD_RE = /제\s*\d+\s*장/
 const PENALTY_CHAPTER_RE = /벌\s*칙|과\s*태\s*료/
 /** 장 구조가 없는 법령의 대체 선별: 조문 제목 */
 const PENALTY_TITLE_RE = /벌칙|과태료|양벌/
+/** 벌칙 장 밖에 흔히 있는 행정 제재 조. 과징금·이행강제금은 처분 장에 둔다(자동차관리법 제74조 과징금) */
+const SANCTION_TITLE_RE = /과징금|이행강제금|범칙/
 
 /**
  * 벌칙 장(章) 머리 뒤 다음 장 머리 전까지의 조문. 장 구조가 없는 법령은 조문 제목(벌칙·과태료·양벌)으로 고른다.
@@ -40,9 +42,11 @@ export function pickPenaltyUnits(lawJson: unknown): any[] {
       if (CHAPTER_HEAD_RE.test(head)) inPenaltyChapter = PENALTY_CHAPTER_RE.test(head)
       continue
     }
-    if (inPenaltyChapter && u?.조문여부 === "조문") picked.push(u)
+    if (u?.조문여부 !== "조문") continue
+    if (inPenaltyChapter || SANCTION_TITLE_RE.test(String(u.조문제목 || ""))) picked.push(u)
   }
-  return picked.length ? picked : units.filter(u => u?.조문여부 === "조문" && PENALTY_TITLE_RE.test(String(u.조문제목 || "")))
+  const chapterFound = picked.some(u => !SANCTION_TITLE_RE.test(String(u.조문제목 || "")))
+  return chapterFound ? picked : units.filter(u => u?.조문여부 === "조문" && (PENALTY_TITLE_RE.test(String(u.조문제목 || "")) || SANCTION_TITLE_RE.test(String(u.조문제목 || ""))))
 }
 
 /**

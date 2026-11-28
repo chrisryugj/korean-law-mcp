@@ -96,6 +96,11 @@ export async function getPenalties(apiClient: LawApiClient, input: GetPenaltiesI
       if (!found) out.push("", `벌칙 조문에서 제${duty}조를 지목한 항·호를 찾지 못했습니다. "위반" 이 아닌 표현이나 다른 법률로 정한 제재일 수 있으니 없다고 단정하지 마세요.`)
       const joint = units.filter(u => /양벌/.test(u.header)).map(u => u.header)
       if (joint.length) out.push("", `함께 적용될 수 있는 조: ${joint.join(", ")}`)
+      // 의무 조문 전문. 무엇을 어기면 제재인지 같이 본다
+      const [no, br] = duty.split("의").map(Number)
+      const dutyUnit = (json?.법령?.조문?.조문단위 ?? []).find((u: any) => u?.조문여부 === "조문" && Number(u.조문번호) === no && (Number(u.조문가지번호 || 0) || 0) === (br || 0))
+      const dutyFmt = dutyUnit ? formatArticleUnit(dutyUnit) : undefined
+      if (dutyFmt) out.push("", "▶ 의무 조문 전문", dutyFmt.header, dutyFmt.body)
     } else {
       const index = new Map<string, string[]>()
       for (const u of units) {

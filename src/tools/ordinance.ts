@@ -8,16 +8,17 @@ import { cleanHtml } from "../lib/article-parser.js"
 import { buildJO } from "../lib/law-parser.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { formatToolError } from "../lib/errors.js"
-import { toArray } from "../lib/xml-parser.js"
+import { toArray, parseSearchXML, extractTag } from "../lib/xml-parser.js"
 
 export const GetOrdinanceSchema = z.object({
   ordinSeq: z.string().optional().describe("자치법규 일련번호 (검색결과의 [번호])"),
   id: z.string().optional().describe("ordinSeq 별칭 — 검색결과 [번호]. 힌트가 id=로 안내하는 경우 대응"),
-  jo: z.string().optional().describe("조문 번호 (예: '제20조'). 지정 시 해당 조문 본문만 반환"),
+  query: z.string().optional().describe("조례명 (ordinSeq 대신, 지자체명을 넣을 것. 예: '서울특별시 광진구 주차장 설치 및 관리 조례')"),
+  jo: z.string().optional().describe("조문 번호 (예: '제20조', '20'). 지정 시 해당 조문 본문만 반환"),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달")
 }).refine(
-  data => data.ordinSeq || data.id,
-  { message: "ordinSeq(또는 별칭 id) 중 하나는 필수입니다" }
+  data => data.ordinSeq || data.id || data.query,
+  { message: "ordinSeq(또는 별칭 id)·query 중 하나는 필수입니다" }
 )
 
 export type GetOrdinanceInput = z.infer<typeof GetOrdinanceSchema>
@@ -29,6 +30,8 @@ export async function getOrdinance(
   try {
     // jo가 한글이면 JO 코드로 변환하여 API에 전달 (서버 필터링 시도)
     let joCode: string | undefined
+    // 숫자만 준 조 번호("20"·"20의2")도 받는다
+    if (input.jo && /^\s*\d+(?:\s*의\s*\d+)?\s*$/.test(input.jo)) input = { ...input, jo: `제${input.jo.replace(/\s+/g, "").replace("의", "조의")}${/의/.test(input.jo) ? "" : "조"}` }
     if (input.jo) {
       try {
         joCode = /제\d+조/.test(input.jo) ? buildJO(input.jo) : input.jo
@@ -37,7 +40,16 @@ export async function getOrdinance(
       }
     }
 
-    const ordinSeq = input.ordinSeq || input.id!
+    let ordinSeq = input.ordinSeq || input.id
+    if (!ordinSeq) {
+      // 조례명으로 찾는다. 이름이 같으면 그것, 아니면 첫 결과
+      const xml = await apiClient.searchOrdinance({ query: input.query!.replace(/\s+/g, " ").trim(), display: 10, apiKey: input.apiKey })
+      const rows = parseSearchXML(xml, "OrdinSearch", "law", c => ({ seq: extractTag(c, "자치법규일련번호"), name: extractTag(c, "자치법규명") })).items
+      const norm = (x: string) => x.replace(/\s+/g, "")
+      const pick = rows.find(r => norm(r.name) === norm(input.query!)) ?? rows.find(r => norm(r.name).includes(norm(input.query!))) ?? rows[0]
+      if (!pick?.seq) return { content: [{ type: "text", text: `[NOT_FOUND] '${input.query}' 자치법규를 찾지 못했습니다. 지자체명을 넣어 search_ordinance 로 찾으세요.` }], isError: true }
+      ordinSeq = pick.seq
+    }
     const jsonText = await apiClient.getOrdinance(ordinSeq, joCode, input.apiKey)
     const json = JSON.parse(jsonText)
 

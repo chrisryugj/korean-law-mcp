@@ -396,6 +396,12 @@ export class LawApiClient {
     query: string
     display?: number
     apiKey?: string
+    /** 1 자치법규명(기본) · 2 본문 */
+    search?: "1" | "2"
+    page?: number
+    /** 자치법규 종류 코드 (30001 조례 등) */
+    knd?: string
+    sort?: string
   }): Promise<string> {
     const apiParams = new URLSearchParams({
       target: "ordin",
@@ -404,6 +410,10 @@ export class LawApiClient {
       query: params.query,
       display: (params.display || 20).toString(),
     })
+    if (params.search === "2") apiParams.append("search", "2")
+    if (params.page && params.page > 1) apiParams.append("page", String(params.page))
+    if (params.knd) apiParams.append("knd", params.knd)
+    if (params.sort) apiParams.append("sort", params.sort)
 
     const url = `${LAW_API_BASE}/lawSearch.do?${apiParams.toString()}`
     const response = await fetchWithRetry(url, DRF_RETRY)

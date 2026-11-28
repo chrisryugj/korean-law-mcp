@@ -249,7 +249,7 @@ export const allTools: McpTool[] = [
   },
   {
     name: "get_law_tree",
-    description: "[체계] 법령 목차 구조(편·장·절) 조회. 내부 체계 파악용.",
+    description: "[체계] 위임조문 3단비교로 법률 조 → 시행령·시행규칙 조 연결 트리(앞 5개 조 표본, 전체는 get_three_tier 의 jo). 편·장·절 목차는 get_law_text 를 jo 없이 부르면 나온다.",
     schema: GetLawTreeSchema,
     handler: getLawTree
   },

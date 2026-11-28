@@ -17,15 +17,17 @@ import { formatDateDot } from "../lib/schemas.js"
 import { flattenAddendum, normalizeDate } from "./applicable-law.js"
 
 import { MAX_RESPONSE_SIZE, truncateResponse } from "../lib/schemas.js"
+import { findLaws, resolvedLawMatches } from "../lib/law-search.js"
 
 export const GetLawTextSchema = z.object({
   mst: z.string().optional().describe("법령일련번호 (MST)"),
   lawId: z.string().optional().describe("법령ID"),
+  lawName: z.string().optional().describe("법령명 (mst·lawId 대신, 예: '근로기준법'. 이름으로 찾아 현행 법령ID 로 조회)"),
   jo: z.string().optional().describe("조문 번호. 자연어 표기 권장 — '제38조'·'제148조의2'를 그대로 넣으면 서버가 변환한다. 6자리 JO 코드 직접 지정 시 조번호 4자리 zero-pad + 의X 2자리: 제38조→003800, 제10조의2→001002, 제234조의2→023402(234002 아님). '부칙' 이면 부칙 원문(최근 공포부터)"),
   efYd: z.string().optional().describe("기준일 또는 시행일자 (YYYYMMDD). 시행일이면 그 버전, 시행일이 아닌 날짜(건축허가일·사건일 같은 조회 기준일)면 그날 시행 중이던 버전으로 자동 보정한다(제명이 바뀌기 전 버전 포함). 현행 본문은 efYd 없이 조회한다. 시행예정본은 그 시행일을 넣는다."),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달")
-}).refine(data => data.mst || data.lawId, {
-  message: "mst 또는 lawId 중 하나는 필수입니다"
+}).refine(data => data.mst || data.lawId || data.lawName, {
+  message: "mst·lawId·lawName 중 하나는 필수입니다"
 })
 
 export type GetLawTextInput = z.infer<typeof GetLawTextSchema>
@@ -40,6 +42,13 @@ export async function getLawText(
   input: GetLawTextInput
 ): Promise<LawTextResponse> {
   try {
+    if (!input.mst && !input.lawId && input.lawName) {
+      const hits = await findLaws(apiClient, input.lawName, input.apiKey, 3)
+      const hit = hits.find(h => resolvedLawMatches(input.lawName!, h.lawName)) ?? hits[0]
+      if (!hit) return { content: [{ type: "text", text: `[NOT_FOUND] '${input.lawName}' 법령을 찾지 못했습니다. 정식 법령명이나 공식 약칭으로 search_law 로 찾으세요.` }], isError: true }
+      // 법령ID 로 받는다. MST 는 그 공포본의 시행예정 시점 본문이 올 수 있다(도로교통법 2027-04-14)
+      input = hit.lawId ? { ...input, lawId: hit.lawId } : { ...input, mst: hit.mst }
+    }
     return await renderLawText(apiClient, input)
   } catch (error) {
     return formatToolError(error, "get_law_text")
@@ -282,7 +291,14 @@ async function renderLawText(apiClient: LawApiClient, input: GetLawTextInput, re
     // 대형 법령(국가공무원법 등)의 "too large content" 에러 방지
     if (!input.jo && articleUnits.length > 20) {
       const tocItems: string[] = []
+      const tocLines: string[] = []
       for (const unit of articleUnits) {
+        // 편·장·절·관 머리("전문" 단위)도 목차에. 어느 장에 어떤 조가 있는지 본다
+        if (unit.조문여부 === "전문") {
+          const head = String(unit.조문내용 ?? "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim()
+          if (/^제\s*\d+\s*(?:편|장|절|관)/.test(head)) tocLines.push(head.replace(/\s*<(?:개정|신설)[^>]*>\s*$/, ""))
+          continue
+        }
         if (unit.조문여부 !== "조문") continue
         const joNum = unit.조문번호 || ""
         const joBranch = unit.조문가지번호 || ""
@@ -290,12 +306,13 @@ async function renderLawText(apiClient: LawApiClient, input: GetLawTextInput, re
         if (joNum) {
           const displayNum = joBranch && joBranch !== "0" ? `제${joNum}조의${joBranch}` : `제${joNum}조`
           tocItems.push(`${displayNum}${joTitle ? ` ${joTitle}` : ""}`)
+          tocLines.push(`  ${displayNum}${joTitle ? ` ${joTitle}` : ""}`)
         }
       }
 
       let tocText = resultText
       tocText += `목차 (총 ${tocItems.length}개 조문)\n\n`
-      tocText += tocItems.join("\n")
+      tocText += (tocLines.length > tocItems.length ? tocLines : tocItems).join("\n")
       tocText += `\n\n특정 조문 조회: get_law_text(`
       if (input.mst) {
         tocText += `mst="${input.mst}", jo="제XX조")`

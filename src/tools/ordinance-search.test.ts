@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest"
-import { searchOrdinance } from "./ordinance-search.js"
+import { searchOrdinance, SearchOrdinanceSchema } from "./ordinance-search.js"
 import { lawCache } from "../lib/cache.js"
 import { normalizeLawSearchText } from "../lib/search-normalizer.js"
 import type { LawApiClient } from "../lib/api-client.js"
@@ -166,5 +166,14 @@ describe("searchOrdinance: 공백 덩어리 질의 (리뷰 C3)", () => {
     const r = await searchOrdinance(client, { query: "서울" + " ".repeat(100_000) + "주차 제12조", display: 20 })
     expect(performance.now() - t0).toBeLessThan(500)
     expect(r.isError).toBe(true)
+  })
+})
+
+describe("search_ordinance 필터", () => {
+  it("종류·본문 검색·페이지·정렬을 법제처 인자로 넘긴다", async () => {
+    const seen: Array<Record<string, unknown>> = []
+    const api = { searchOrdinance: async (p: Record<string, unknown>) => { seen.push(p); return `<OrdinSearch><totalCnt>1</totalCnt><law><자치법규일련번호>1</자치법규일련번호><자치법규명>서울특별시 광진구 주차장 설치 및 관리 조례</자치법규명><지자체기관명>서울특별시 광진구</지자체기관명></law></OrdinSearch>` } }
+    await searchOrdinance(api as unknown as LawApiClient, SearchOrdinanceSchema.parse({ query: "주차장", kind: "조례", bodySearch: true, page: 2, sort: "effectiveDesc" }))
+    expect(seen[0]).toMatchObject({ knd: "30001", search: "2", page: 2, sort: "efdes" })
   })
 })

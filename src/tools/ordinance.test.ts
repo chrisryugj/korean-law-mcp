@@ -33,3 +33,17 @@ describe("getOrdinance: 공포일자를 제정일로 표기하지 않는다 (D11
     expect(t).not.toContain("제정일:")
   })
 })
+
+describe("getOrdinance: 조례명·숫자 조 번호", () => {
+  it("query 로 찾아 같은 이름의 일련번호로 받고, jo='2' 도 받는다", async () => {
+    const asked: string[] = []
+    const client = {
+      searchOrdinance: async () => `<OrdinSearch><totalCnt>2</totalCnt><law><자치법규일련번호>111</자치법규일련번호><자치법규명>서울특별시 강남구 민영주차장 설치자금 융자 및 보조금 지원 조례</자치법규명></law><law><자치법규일련번호>1589887</자치법규일련번호><자치법규명>서울특별시 강남구 민영주차장 설치자금 융자 및 보조금 시행규칙</자치법규명></law></OrdinSearch>`,
+      getOrdinance: async (seq: string) => { asked.push(seq); return ORDIN_JSON },
+    } as unknown as LawApiClient
+    const r = await getOrdinance(client, GetOrdinanceSchema.parse({ query: "서울특별시 강남구 민영주차장 설치자금 융자 및 보조금 시행규칙", jo: "2" }))
+    expect(asked[0]).toBe("1589887")
+    expect(r.content[0].text).toContain("심의위원회 구성")
+    expect(r.content[0].text).not.toContain("제1조(목적)")
+  })
+})

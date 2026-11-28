@@ -19,6 +19,11 @@ import { formatToolError } from "../lib/errors.js"
 export const SearchOrdinanceSchema = z.object({
   query: z.string().describe("검색할 자치법규명 (예: '서울', '환경')"),
   display: z.number().min(1).max(100).default(20).describe("페이지당 결과 개수 (기본값: 20, 최대: 100)"),
+  page: z.number().min(1).optional().describe("페이지 (기본 1)"),
+  kind: z.enum(["조례", "규칙", "훈령", "예규", "고시", "의회규칙", "기타"]).optional().describe("자치법규 종류만"),
+  bodySearch: z.boolean().optional().describe("이름이 아니라 본문에서 찾기 (예: 조문에 '전동킥보드' 가 든 조례)"),
+  sort: z.enum(["name", "nameDesc", "promulgated", "promulgatedDesc", "effective", "effectiveDesc"]).optional()
+    .describe("정렬: 이름 가나다(name)·공포일(promulgated)·시행일(effective), Desc 는 내림차순"),
   verifyArticleRelevance: z.boolean().optional()
     .describe("질의에 조문 번호가 있을 때 상위 후보의 본문을 열어 그 조문을 인용하는지 확인 (기본 false — 건당 업스트림 1회·약 1초가 추가된다)"),
   relevanceLimit: z.number().min(1).max(30).optional()
@@ -27,6 +32,10 @@ export const SearchOrdinanceSchema = z.object({
 })
 
 export type SearchOrdinanceInput = z.infer<typeof SearchOrdinanceSchema>
+
+/** 법제처 자치법규 목록 API 의 종류 코드·정렬 값 */
+const ORDIN_KIND: Record<string, string> = { 조례: "30001", 규칙: "30002", 훈령: "30003", 예규: "30004", 기타: "30006", 고시: "30010", 의회규칙: "30011" }
+const ORDIN_SORT: Record<string, string> = { name: "lasc", nameDesc: "ldes", promulgated: "dasc", promulgatedDesc: "ddes", effective: "efasc", effectiveDesc: "efdes" }
 
 export async function searchOrdinance(
   apiClient: LawApiClient,
@@ -42,10 +51,17 @@ export async function searchOrdinance(
     const normalizedQuery = normalizeLawSearchText(collapsedQuery)
 
     // 1차 검색 시도
+    const filters = {
+      search: input.bodySearch ? "2" as const : undefined,
+      page: input.page,
+      knd: input.kind ? ORDIN_KIND[input.kind] : undefined,
+      sort: input.sort ? ORDIN_SORT[input.sort] : undefined,
+    }
     let xmlText = await apiClient.searchOrdinance({
       query: normalizedQuery,
       display: input.display || 20,
-      apiKey: input.apiKey
+      apiKey: input.apiKey,
+      ...filters,
     })
 
     // parseSearchXML 사용 (rootTag: OrdinSearch, itemTag: law)
@@ -71,7 +87,8 @@ export async function searchOrdinance(
         xmlText = await apiClient.searchOrdinance({
           query: expandedQuery,
           display: input.display || 20,
-          apiKey: input.apiKey
+          apiKey: input.apiKey,
+          ...filters,
         })
 
         parsed = parseSearchXML(
