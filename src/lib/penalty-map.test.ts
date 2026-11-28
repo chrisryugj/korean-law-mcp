@@ -81,3 +81,22 @@ describe("부과기준 별표 행", () => {
     expect(annexRowsFor(PIPE_ANNEX, "99")).toBeUndefined()
   })
 })
+
+describe("annexRowsFor. 번호 없는 행이 맨 위 단계인 표", () => {
+  it("번호 없는 머리 행 아래 가나다 금액 행을 같은 묶음으로 낸다 (자동차관리법 시행령 별표 3)", () => {
+    const annex = [
+      "<table>",
+      "<tr><th>범칙행위</th><th>해당법조문</th><th>범칙금액</th></tr>",
+      "<tr><td>법 제12조제1항에 따른 이전등록을 신청하지 않은 경우</td><td>법 제80조제1호</td><td></td></tr>",
+      "<tr><td>가. 신청 지연기간이 10일 이내인 경우</td><td></td><td>10</td></tr>",
+      "<tr><td>나. 신청 지연기간이 10일 초과 49일 이내인 경우</td><td></td><td>10만원에 11일째부터 계산하여 1일마다 1만원을 더한 금액</td></tr>",
+      "<tr><td>다. 신청 지연기간이 50일 이상인 경우</td><td></td><td>50</td></tr>",
+      "<tr><td>법 제13조제1항에 따른 말소등록을 신청하지 않은 경우</td><td>법 제84조제2항</td><td>5</td></tr>",
+      "</table>",
+    ].join("\n")
+    const out = annexRowsFor(annex, "12")!
+    expect(out).toContain("| 가. 신청 지연기간이 10일 이내인 경우 |  | 10 |")
+    expect(out).toContain("| 다. 신청 지연기간이 50일 이상인 경우 |  | 50 |")
+    expect(out).not.toContain("말소등록")
+  })
+})

@@ -24,6 +24,7 @@ import { getLawText, GetLawTextSchema } from "./tools/law-text.js"
 import { parseJoCode, ParseJoCodeSchema, getLawAbbreviations, GetLawAbbreviationsSchema } from "./tools/utils.js"
 import { compareOldNew, CompareOldNewSchema } from "./tools/comparison.js"
 import { getThreeTier, GetThreeTierSchema } from "./tools/three-tier.js"
+import { searchLawText, SearchLawTextSchema, searchArticlesInLaw, SearchArticlesInLawSchema } from "./tools/law-body-search.js"
 import { searchAdminRule, SearchAdminRuleSchema, getAdminRule, GetAdminRuleSchema, compareAdminRuleOldNew, CompareAdminRuleOldNewSchema } from "./tools/admin-rule.js"
 import { getArticleDetail, GetArticleDetailSchema } from "./tools/article-detail.js"
 import { getAnnexes, GetAnnexesSchema } from "./tools/annex.js"
@@ -103,6 +104,18 @@ export const allTools: McpTool[] = [
     description: "[법령검색] 법령명 배열을 한 번에 조회 — 건당 법령ID·MST·시행일·시행예정만 컴팩트 반환(부분매칭 목록·안내문 없음). previous={법령ID:직전MST} 를 주면 MST가 달라진 법령만 돌려주는 diff 모드 — MST는 개정마다 바뀌므로 그 자체가 변경 감지 키다. ISO 준법 등록부처럼 수십 건의 개정 여부를 주기적으로 확인할 때 search_law 건당 호출 대신 사용.",
     schema: SearchLawBulkSchema,
     handler: searchLawBulk
+  },
+  {
+    name: "search_law_text",
+    description: "[법령검색] 조문 본문에 낱말이 나오는 법령 목록(이름에 없는 낱말로 찾기, 예: '전동킥보드'). 법령명 가나다순이라 관련도 순이 아니다. 그 법령 안 조문은 search_articles_in_law.",
+    schema: SearchLawTextSchema,
+    handler: searchLawText
+  },
+  {
+    name: "search_articles_in_law",
+    description: "[법령조회] 한 법령 안에서 낱말이 나오는 조문(제목·본문·항·호·목)과 발췌. lawId·mst·lawName 중 하나. 조문 번호를 모를 때 쓰고, 전문은 get_law_text(jo).",
+    schema: SearchArticlesInLawSchema,
+    handler: searchArticlesInLaw
   },
   {
     name: "get_law_text",
@@ -216,7 +229,7 @@ export const allTools: McpTool[] = [
   },
   {
     name: "get_three_tier",
-    description: "[비교] 3단비교(법률-시행령-시행규칙) 위임조문/인용조문.",
+    description: "[비교] 3단비교(법률-시행령-시행규칙) 위임조문/인용조문. jo 로 한 조만(예: '제9조'), lawName 으로 바로 조회.",
     schema: GetThreeTierSchema,
     handler: getThreeTier
   },

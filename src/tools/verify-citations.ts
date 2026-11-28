@@ -48,6 +48,51 @@ interface ParsedCitation {
   joCode: string
   displayArticle: string
   claimTitle?: string
+  /** 인용 바로 뒤 같은 문장(숫자 대조용) */
+  claimText?: string
+}
+
+/** 수량 단위. 형량·기간·금액·비율. 같은 단위끼리 값으로 견준다 */
+const QUANTITY_REGEX = /(\d[\d,]*(?:\.\d+)?)\s*(천|백)?\s*(만|억)?\s*(천|백)?\s*(원|년|개월|월|일|시간|퍼센트|%|배)/g
+const UNIT_CLASS: Record<string, string> = { 원: "원", 년: "년", 개월: "월", 월: "월", 일: "일", 시간: "시간", 퍼센트: "%", "%": "%", 배: "배" }
+
+/** 글 속 수량(값·단위). "5천만원" 과 "5,000만 원" 은 같은 값 */
+export function quantitiesOf(text: string): Array<{ raw: string; key: string }> {
+  const out: Array<{ raw: string; key: string }> = []
+  QUANTITY_REGEX.lastIndex = 0
+  let m: RegExpExecArray | null
+  while ((m = QUANTITY_REGEX.exec(text)) !== null) {
+    // 조문 번호·날짜("제3조"·"2016. 1. 6.")에 붙은 수는 수량이 아니다
+    const before = text[m.index - 1] ?? ""
+    if (before === "제") continue
+    let v = parseFloat(m[1].replace(/,/g, ""))
+    if (m[2]) v *= m[2] === "천" ? 1000 : 100
+    if (m[3]) v *= m[3] === "만" ? 1e4 : 1e8
+    if (m[4]) v *= m[4] === "천" ? 1000 : 100
+    out.push({ raw: m[0].replace(/\s+/g, ""), key: `${v}${UNIT_CLASS[m[5]]}` })
+  }
+  return out
+}
+
+/** 조문 전문(조문내용·항·호·목) */
+function articleFullText(unit: any): string {
+  const parts: string[] = [String(unit?.조문내용 ?? "")]
+  for (const h of toArray<any>(unit?.항)) {
+    parts.push(String(h?.항내용 ?? ""))
+    for (const ho of toArray<any>(h?.호)) {
+      parts.push(String(ho?.호내용 ?? ""))
+      for (const mok of toArray<any>(ho?.목)) parts.push(String(mok?.목내용 ?? ""))
+    }
+  }
+  return parts.join("\n")
+}
+
+/** 삭제된 조문인가. 본문이 "제N조 삭제 <2016. 1. 6.>" 꼴이고 항이 없다 */
+function deletedArticle(unit: any): string | undefined {
+  const body = String(unit?.조문내용 ?? "").replace(/\s+/g, " ").trim()
+  const m = body.match(/^(?:제\s*\d+\s*조(?:의\s*\d+)?\s*)?(?:\([^)]*\)\s*)?삭제\s*(<[^>]*>)?\s*$/)
+  if (!m || toArray<any>(unit?.항).some((h: any) => String(h?.항내용 ?? "").trim())) return undefined
+  return m[1] ? m[1].replace(/[<>]/g, "").trim() : ""
 }
 
 // 조문 인용 패턴 — "제N조", "제N조의M", "제N조 제K항 제L호"
@@ -214,6 +259,10 @@ export function parseCitations(text: string, maxCitations: number): ParsedCitati
     // 조문 번호 바로 뒤 "(제목)" 캡처 — 내용검증(matchCitationContent)용
     const afterIdx = m.index + raw.length
     const claimTitle = extractClaimTitle(text.slice(afterIdx, afterIdx + 45))
+    // 같은 문장. 마침표·줄바꿈·다음 조문 인용 앞까지(150자 안)
+    const tail = text.slice(afterIdx, afterIdx + 150)
+    const stop = tail.search(/[.。!?\n]|제\s*\d+\s*조/)
+    const claimText = stop >= 0 ? tail.slice(0, stop) : tail
 
     citations.push({
       raw: raw.trim(),
@@ -225,6 +274,7 @@ export function parseCitations(text: string, maxCitations: number): ParsedCitati
       joCode,
       displayArticle,
       claimTitle,
+      claimText,
     })
   }
   return citations
@@ -491,6 +541,19 @@ async function verifyOne(
     const joTitle = found.조문제목 ? `(${found.조문제목})` : ""
     const officialLabel = `${chosen.lawName} ${cite.displayArticle}`
 
+    // 삭제된 조문. 번호는 남아 있어도 현행 조문이 아니다(형법 제241조 간통죄 <2016. 1. 6.>)
+    const deleted = deletedArticle(found)
+    if (deleted !== undefined) {
+      return `✗ ${officialLabel}. [DELETED] 삭제된 조문${deleted ? ` (${deleted})` : ""}. 현행 법령에 없는 조문이므로 인용에서 빼거나 옛 조문임을 밝힐 것`
+    }
+    // 인용문의 수량(형량·기간·금액·비율)이 조문 원문에 있는가. 인용 바로 뒤 같은 문장만 본다
+    const claimed = quantitiesOf(cite.claimText ?? "")
+    const actualKeys = new Set(quantitiesOf(articleFullText(found)).map(q => q.key))
+    const missing = claimed.filter(q => !actualKeys.has(q.key)).map(q => q.raw)
+    const numberCheck = (ok: string): string => missing.length
+      ? `⚠ ${officialLabel}${joTitle} 실존, [NUMBER_MISMATCH] 인용문의 수량 ${[...new Set(missing)].map(x => `'${x}'`).join(", ")} 이(가) 조문 원문에 없음. 원문과 대조해 고칠 것`
+      : ok
+
     // 내용검증: 인용한 조문 제목이 실제 조문제목과 일치하는지 (lexdiff matchCitationContent 이식).
     // "존재하는 조문에 엉뚱한 제목 붙인 환각"(예: 제750조(계약해제) ← 실제 불법행위) 탐지.
     if (cite.claimTitle && found.조문제목) {
@@ -508,7 +571,7 @@ async function verifyOne(
         .filter((n: number) => !isNaN(n))
 
       if (hangNumbers.includes(cite.hang)) {
-        return `✓ ${officialLabel}${joTitle} 제${cite.hang}항 실존`
+        return numberCheck(`✓ ${officialLabel}${joTitle} 제${cite.hang}항 실존`)
       }
       // 항번호가 하나도 없으면 항으로 나뉘지 않은 조문이다(실측: 한 문장 조문은 항 필드가 없고,
       // 호만 있는 조문은 항번호 없는 항 객체에 호만 담긴다). 응답 이상이 아니다
@@ -527,7 +590,7 @@ async function verifyOne(
       return `✗ ${officialLabel}${joTitle} — [NOT_FOUND] 제${cite.hang}항 없음 (최대 제${maxHang}항)`
     }
 
-    return `✓ ${officialLabel}${joTitle} 실존${cite.claimTitle ? " · 제목 일치" : ""}`
+    return numberCheck(`✓ ${officialLabel}${joTitle} 실존${cite.claimTitle ? " · 제목 일치" : ""}`)
   } catch (e) {
     return `⚠ ${formatCitationLabel(cite, chosen.lawName)} — 조문 조회 실패: ${e instanceof Error ? e.message : String(e)}`
   }

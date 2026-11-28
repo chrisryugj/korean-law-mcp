@@ -1,6 +1,6 @@
 # Korean Law MCP - API Reference
 
-> **v4.13.0** | 10개 노출 도구 (내부 104개, 미노출 도구는 execute_tool 또는 직접 호출로 접근)
+> **v4.13.0** | 10개 노출 도구 (내부 106개, 미노출 도구는 execute_tool 또는 직접 호출로 접근)
 
 도구 구조는 [README.md](../README.md) 참조.
 상세 파라미터는 각 도구의 Zod 스키마(`src/tools/*.ts`) 참조.

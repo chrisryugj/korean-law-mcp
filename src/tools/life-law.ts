@@ -17,6 +17,9 @@ export const searchAiLawSchema = z.object({
   lawTypes: z.array(z.string()).optional().describe(
     "법령종류 필터 (예: ['법률', '대통령령', '총리령,부령']). 지정 시 해당 종류만 반환."
   ),
+  terms: z.array(z.string()).optional().describe(
+    "쟁점 법률용어 (예: ['부당해고']). 주면 그 용어로도 찾아 앞에 놓는다. 확신이 없으면 비울 것(틀린 용어는 결과를 나쁘게 한다)"
+  ),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달"),
 });
 
@@ -185,6 +188,13 @@ function renderAiLawSearchResult(
         output += `   ${content.substring(0, 200)}${content.length > 200 ? "..." : ""}\n`;
       }
       output += `   시행: ${formatDateDot(item.시행일자)} | ${item.소관부처명 || item.발령기관명 || ""}\n`;
+      // 후속 본문 조회용 식별자. get_law_text(lawId, jo) 로 바로 전문을 받는다(종전엔 법령명으로 한 번 더 찾아야 했다)
+      if (item.법령ID && item.조문번호) {
+        const jo = `${item.조문번호.replace(/^0+(?=\d)/, "")}${item.조문가지번호 && item.조문가지번호 !== "00" ? `의${parseInt(item.조문가지번호)}` : ""}`
+        output += `   본문: get_law_text(lawId="${item.법령ID}", jo="제${jo}조")\n`;
+      } else if (item.행정규칙ID) {
+        output += `   행정규칙ID: ${item.행정규칙ID}\n`;
+      }
     } else {
       output += `${item.법령명 || item.행정규칙명}\n`;
       output += `   [${item.별표서식구분명 || "별표/서식"}] ${item.별표서식제목 || ""}\n`;
@@ -219,7 +229,22 @@ export async function searchAiLawStructured(
     apiKey: args.apiKey,
   });
 
-  const { totalCount, items, articleSignals } = parseAiLawSearchXml(xmlText, searchType);
+  let { totalCount, items, articleSignals } = parseAiLawSearchXml(xmlText, searchType);
+  // 쟁점 용어로 한 번 더. 상황 문장만으로는 단어만 겹친 조문이 위에 오는 일이 많다("회사가 그만두라고 함" → 부당해고 조문이 밑).
+  // 용어 결과를 앞에, 같은 조문은 한 번만
+  const terms = (args.terms ?? []).map(t => t.trim()).filter(Boolean)
+  if (terms.length) {
+    const termXml = await apiClient.fetchApi({
+      endpoint: "lawSearch.do", target: "aiSearch",
+      extraParams: { query: terms.join(" "), search: searchType, display: "10", page: "1" }, apiKey: args.apiKey,
+    });
+    const extra = parseAiLawSearchXml(termXml, searchType);
+    const keyOf = (i: AiLawParsedItem) => `${i.법령ID || i.행정규칙ID || i.법령명 || i.행정규칙명}:${i.조문번호 ?? ""}:${i.조문가지번호 ?? ""}:${i.별표서식번호 ?? ""}`;
+    const seen = new Set(extra.items.map(keyOf));
+    items = [...extra.items, ...items.filter(i => !seen.has(keyOf(i)))];
+    totalCount = Math.max(totalCount, items.length);
+    articleSignals = [...extra.articleSignals, ...articleSignals];
+  }
 
   return {
     response: renderAiLawSearchResult(args, searchType, totalCount, items),

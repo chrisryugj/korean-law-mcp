@@ -79,3 +79,20 @@ describe("제목검색 소량 적중 안내", () => {
     }
   })
 })
+
+describe("선고일 범위는 법제처에 넘긴다 (prncYd)", () => {
+  it("fromDate·toDate 를 prncYd 로 보내고, 한쪽만 주면 열린 끝을 채운다", async () => {
+    const { fetchApi, client } = api()
+    await searchPrecedentsStructured(client, { query: "손해배상", court: "대법원", fromDate: "20150101", toDate: "2015-12-31", display: 20, page: 1 })
+    expect(fetchApi.mock.calls[0][0].extraParams.prncYd).toBe("20150101~20151231")
+    const second = api()
+    await searchPrecedentsStructured(second.client, { query: "손해배상", fromDate: "20240101", display: 20, page: 1 })
+    expect(second.fetchApi.mock.calls[0][0].extraParams.prncYd).toMatch(/^20240101~\d{8}$/)
+  })
+
+  it("기간을 안 주면 prncYd 를 보내지 않는다", async () => {
+    const { fetchApi, client } = api()
+    await searchPrecedentsStructured(client, { query: "손해배상", display: 20, page: 1 })
+    expect(fetchApi.mock.calls[0][0].extraParams.prncYd).toBeUndefined()
+  })
+})

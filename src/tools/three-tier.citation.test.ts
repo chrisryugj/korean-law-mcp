@@ -35,3 +35,28 @@ describe("get_three_tier: advertised citation mode", () => {
     expect(r.content[0].text).toContain("신청 요건")
   })
 })
+
+describe("get_three_tier: 조 고르기 (jo)", () => {
+  beforeEach(() => lawCache.clear())
+  const seven = JSON.stringify({ ThdCmpLawXService: {
+    기본정보: { 법령명: "검토법", 시행령명: "검토법 시행령" },
+    인용조문삼단비교: { 법률조문: Array.from({ length: 7 }, (_, i) => ({
+      조번호: String(i + 1).padStart(4, "0"), 조가지번호: "00", 조제목: `제${i + 1}조(조${i + 1})`, 조내용: `본문${i + 1}`,
+      시행령조문목록: { 시행령조문: { 조번호: String(i + 10).padStart(4, "0"), 조제목: `제${i + 10}조(세부)`, 조내용: `세부${i + 1}` } },
+    })) },
+  } })
+  it("jo 없이 부르면 앞 5개 조와 나머지 조 번호를 알리고, jo 로 그 조만 준다", async () => {
+    let calls = 0
+    const client = { getThreeTier: async () => { calls++; return seven } } as unknown as LawApiClient
+    const head = (await getThreeTier(client, { mst: "seven", knd: "1" })).content[0].text
+    expect(head).toContain("나머지 조: 제6조, 제7조")
+    expect(head).not.toContain("본문7")
+    const one = (await getThreeTier(client, { mst: "seven", knd: "1", jo: "7" })).content[0].text
+    expect(one).toContain("본문7")
+    expect(one).toContain("세부7")
+    expect(one).not.toContain("본문1\n")
+    expect(calls).toBe(1) // 파싱 결과 캐시. 조를 골라도 다시 받지 않는다
+    const none = (await getThreeTier(client, { mst: "seven", knd: "1", jo: "제99조" })).content[0].text
+    expect(none).toContain("3단비교가 있는 조: 제1조")
+  })
+})

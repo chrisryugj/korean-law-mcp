@@ -106,6 +106,11 @@ function isDateInRange(date: string | undefined, fromDate?: string, toDate?: str
   return true
 }
 
+function todayYmd(): string {
+  const d = new Date(Date.now() + 9 * 3600 * 1000) // 한국 시각
+  return d.toISOString().slice(0, 10).replace(/-/g, "")
+}
+
 function hasDateRange(args: SearchPrecedentsInput): boolean {
   return !!(args.fromDate || args.toDate)
 }
@@ -161,6 +166,9 @@ async function runPrecedentSearchOnce(
   if (input.caseNumber) extraParams.nb = input.caseNumber
   if (args.court) extraParams.curt = args.court
   if (args.sort) extraParams.sort = args.sort
+  // 선고일 범위는 법제처에 넘긴다(prncYd). 종전엔 받아 온 한 페이지 안에서만 걸러, 오래된 기간을 물으면 최신 판례 한 페이지가
+  // 다 걸러지고 「기간 밖 대체 결과」만 남았다(손해배상·대법원·2015년: 법제처 98건 → 우리 0건). 기간을 푼 재시도는 넘기지 않는다
+  if (hasDateRange(args) && !input.relaxDateRange) extraParams.prncYd = `${args.fromDate?.replace(/\D/g, "") || "19000101"}~${args.toDate?.replace(/\D/g, "") || todayYmd()}`
 
   const xmlText = await apiClient.fetchApi({
     endpoint: "lawSearch.do",

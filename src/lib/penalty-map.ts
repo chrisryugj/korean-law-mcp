@@ -101,6 +101,8 @@ function headerNames(rows: string[]): string[] {
 
 const NUM_HEAD_RE = /^\d+(?:의\d+)?\.\s/
 const HANGUL_HEAD_RE = /^[가-힣](?:의\d+)?\.\s/
+/** 번호 없는 행이 맨 위 단계인 표. 번호·가나다·괄호 번호로 열지 않은 글 행이 묶음 머리다 */
+const PLAIN_HEAD_RE = /^(?!\d+(?:의\d+)?[.)]\s|[가-힣](?:의\d+)?[.)]\s|\(\d+\)|\([가-힣]\))\S/
 
 interface ParsedTable { names: string[]; rows: string[][] }
 
@@ -139,7 +141,9 @@ function pipeTables(text: string): ParsedTable[] {
 
 /**
  * 부과기준 별표 본문(HTML 표 또는 GFM 표)에서 duty 가 나오는 행 묶음을 표 머리와 함께 마크다운 표로.
- * 묶음 머리는 표의 맨 위 단계 번호다: 첫 데이터 행이 "1."·"3의2." 꼴이면 숫자, "가." 꼴이면 가나다.
+ * 묶음 머리는 표의 맨 위 단계 번호다: 첫 데이터 행이 "1."·"3의2." 꼴이면 숫자, "가." 꼴이면 가나다, 번호 없는 글이면
+ * 번호 없는 글 행(자동차관리법 시행령 별표 3 "법 제12조제1항에 따른 이전등록을…" 아래 "가. 신청 지연기간이…" 금액 행들. 종전엔 가나다를
+ * 머리로 잡아 금액 행이 떨어져 나가 빈 머리 행만 남았다).
  * 그보다 아래 단계("가."·"1)")와 첫 칸이 빈 행은 앞 묶음에 딸린다(도로교통법 시행령 별표 7 "3. 법 제32조부터…" 아래 "가. 어린이보호구역…")
  */
 export function annexRowsFor(annexText: string, duty: string): string | undefined {
@@ -148,7 +152,7 @@ export function annexRowsFor(annexText: string, duty: string): string | undefine
     const groups: string[][][] = []
     let head: RegExp | undefined
     for (const cells of rows) {
-      head ??= NUM_HEAD_RE.test(cells[0] ?? "") ? NUM_HEAD_RE : HANGUL_HEAD_RE
+      head ??= NUM_HEAD_RE.test(cells[0] ?? "") ? NUM_HEAD_RE : HANGUL_HEAD_RE.test(cells[0] ?? "") ? HANGUL_HEAD_RE : PLAIN_HEAD_RE
       if (!groups.length || head.test(cells[0] ?? "")) groups.push([])
       groups[groups.length - 1].push(cells)
     }
