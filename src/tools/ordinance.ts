@@ -15,6 +15,7 @@ export const GetOrdinanceSchema = z.object({
   id: z.string().optional().describe("ordinSeq 별칭 — 검색결과 [번호]. 힌트가 id=로 안내하는 경우 대응"),
   query: z.string().optional().describe("조례명 (ordinSeq 대신, 지자체명을 넣을 것. 예: '서울특별시 광진구 주차장 설치 및 관리 조례')"),
   jo: z.string().optional().describe("조문 번호 (예: '제20조', '20'). 지정 시 해당 조문 본문만 반환"),
+  full: z.boolean().optional().describe("조문이 20개를 넘어도 목차 대신 전 조문 (응답 길이 상한 안에서)"),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달")
 }).refine(
   data => data.ordinSeq || data.id || data.query,
@@ -108,7 +109,7 @@ export async function getOrdinance(
             if (article.조내용) resultText += `${cleanHtml(String(article.조내용))}\n\n`
           }
         }
-      } else if (articles.length > 20) {
+      } else if (articles.length > 20 && !input.full) {
         // 대형 조례(20개 초과): TOC 반환 (law-text.ts 패턴)
         const tocItems: string[] = []
         for (const article of articles) {
@@ -116,7 +117,7 @@ export async function getOrdinance(
         }
         resultText += `목차 (총 ${articles.length}개 조문)\n\n`
         resultText += tocItems.join("\n")
-        resultText += `\n\n특정 조문 조회: execute_tool(tool_name="get_ordinance", params={ordinSeq:"${ordinSeq}", jo:"제XX조"})`
+        resultText += `\n\n특정 조문 조회: execute_tool(tool_name="get_ordinance", params={ordinSeq:"${ordinSeq}", jo:"제XX조"}) · 전 조문: params 에 full:true`
       } else {
         for (const article of articles) {
           if (article.조제목) {

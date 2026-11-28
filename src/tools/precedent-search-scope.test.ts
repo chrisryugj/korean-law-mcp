@@ -96,3 +96,11 @@ describe("선고일 범위는 법제처에 넘긴다 (prncYd)", () => {
     expect(fetchApi.mock.calls[0][0].extraParams.prncYd).toBeUndefined()
   })
 })
+
+describe("참조 법령 필터", () => {
+  it("refLaw 를 JO 로 넘긴다", async () => {
+    const { fetchApi, client } = api()
+    await searchPrecedentsStructured(client, { query: "해고", refLaw: "근로기준법", display: 20, page: 1 })
+    expect(fetchApi.mock.calls[0][0].extraParams.JO).toBe("근로기준법")
+  })
+})

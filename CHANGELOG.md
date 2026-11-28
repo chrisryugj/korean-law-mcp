@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [4.15.34] - 2026-11-28
+
+법제처 law-mcp 대조(4.15.31)에서 남긴 차이를 더 채웠다.
+
+### Added
+
+- 판례 `search_precedents` 의 `refLaw`(참조 법령명, 법제처 판례 목록 JO), `get_precedent_text` 의 `court`(같은 사건번호가 여러 법원에 있을 때)
+- `legal_research` time_travel: `date`(그날 시행된 판과 그 직전 판 비교, 이번 개정으로 무엇이 바뀌었나), `toDate` 를 비우면 오늘
+- `search_law` 의 `page`, `get_law_text` 목차의 `offset`·`limit`(조 기준, 장 머리는 그 장 첫 조와 함께)
+- `get_ordinance` 의 `full`: 20조 넘는 조례도 목차 대신 전 조문. 자연어 「조례 전문 보여줘」 도 full 로 간다
+
 ## [4.15.33] - 2026-11-28
 
 ### Fixed

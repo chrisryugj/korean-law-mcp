@@ -34,6 +34,7 @@ export const searchPrecedentsSchema = z.object({
   page: z.number().min(1).default(1).describe("페이지 번호 (기본:1)"),
   sort: z.enum(["lasc", "ldes", "dasc", "ddes", "nasc", "ndes"]).optional()
     .describe("정렬: lasc/ldes(법령명), dasc/ddes(날짜), nasc/ndes(사건번호)"),
+  refLaw: z.string().optional().describe("참조 법령명 (예: '근로기준법'). 판결이 참조조문으로 든 법령으로 거름"),
   fromDate: z.string().optional().describe("선고일 시작 (YYYYMMDD)"),
   toDate: z.string().optional().describe("선고일 종료 (YYYYMMDD)"),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달"),
@@ -144,6 +145,7 @@ export async function searchPrecedents(
 export const getPrecedentTextSchema = z.object({
   id: z.string().optional().describe("판례일련번호 (search_precedents 결과에서 획득)"),
   caseNumber: z.string().optional().describe("사건번호 (id 대신, 예: '2013다61381'). 사건번호로 찾아 그 판례를 준다"),
+  court: z.string().optional().describe("caseNumber 와 함께: 같은 사건번호가 여러 법원에 있을 때 법원명 (예: '대법원', '서울고등법원')"),
   caseName: z.string().optional().describe("사건명 (선택, 검증용)"),
   full: z.boolean().optional().describe("true=전문 그대로. 미지정 시 '전문' 섹션을 계단식 축약 (판시/요지/참조는 항상 full)"),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달"),
@@ -512,8 +514,9 @@ export async function getPrecedentText(
       // 사건번호로 판례일련번호를 찾는다 (같은 사건번호만)
       const nb = rawArgs.caseNumber.replace(/\s+/g, "")
       const xml = await apiClient.fetchApi({ endpoint: "lawSearch.do", target: "prec", extraParams: { nb, display: "5" }, apiKey: rawArgs.apiKey })
-      const rows = [...xml.matchAll(/<prec\b[\s\S]*?<\/prec>/g)].map(m => ({ id: m[0].match(/<판례일련번호>(\d+)</)?.[1], no: (m[0].match(/<사건번호>([^<]+)</)?.[1] ?? "").replace(/\s+/g, "") }))
-      id = (rows.find(r => r.no === nb) ?? rows.find(r => r.no.split(/[,·]/).includes(nb)))?.id
+      const rows = [...xml.matchAll(/<prec\b[\s\S]*?<\/prec>/g)].map(m => ({ id: m[0].match(/<판례일련번호>(\d+)</)?.[1], no: (m[0].match(/<사건번호>([^<]+)</)?.[1] ?? "").replace(/\s+/g, ""), court: m[0].match(/<법원명>([^<]+)</)?.[1] ?? "" }))
+      const same = rows.filter(r => r.no === nb || r.no.split(/[,·]/).includes(nb))
+      id = (rawArgs.court ? same.find(r => r.court.replace(/\s+/g, "").includes(rawArgs.court!.replace(/\s+/g, ""))) : same[0])?.id
       if (!id) return { content: [{ type: "text", text: `[NOT_FOUND] 사건번호 '${rawArgs.caseNumber}' 판례를 찾지 못했습니다. 법원 표기·부호(다·도·두·헌가 등)를 확인하세요.` }], isError: true }
     }
     if (!id) return { content: [{ type: "text", text: "[INVALID_INPUT] id(판례일련번호) 또는 caseNumber(사건번호) 가 필요합니다." }], isError: true }

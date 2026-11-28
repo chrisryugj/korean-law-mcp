@@ -16,6 +16,7 @@ import { findFormerName } from "../lib/law-lineage.js"
 export const SearchLawSchema = z.object({
   query: z.string().describe("검색할 법령명 (예: '관세법', 'fta특례법', '화관법')"),
   display: z.number().optional().default(50).describe("최대 결과 개수 (기본 50 — 짧은 법령명 정확매칭 누락 방지)"),
+  page: z.number().min(1).optional().describe("페이지 (기본 1). 결과가 많을 때 다음 페이지"),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달")
 })
 
@@ -40,7 +41,7 @@ export async function searchLaw(
 ): Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }> {
   try {
     // 캐시 키에 apiKey 해시 미포함 — 법제처는 키로 결과를 분기하지 않음
-    const cacheKey = `search:${input.query.toLowerCase().trim()}:${input.display}`
+    const cacheKey = `search:${input.query.toLowerCase().trim()}:${input.display}:${input.page ?? 1}`
     const cached = lawCache.get<string>(cacheKey)
     if (cached) {
       return {
@@ -57,7 +58,7 @@ export async function searchLaw(
     // 넘겨 같은 eflaw 검색을 두 번 치지 않는다. catch 는 주 검색이 먼저 실패할 때 미처리 거부 방지용.
     const upcomingForQuery = fetchUpcomingLaws(apiClient, input.query, input.apiKey)
     upcomingForQuery.catch(() => {})
-    let xmlText = await apiClient.searchLaw(input.query, input.apiKey, upstreamDisplay)
+    let xmlText = await apiClient.searchLaw(input.query, input.apiKey, upstreamDisplay, "law", undefined, input.page)
     let laws = parseLawsXml(xmlText)
     let usedQuery = input.query
 

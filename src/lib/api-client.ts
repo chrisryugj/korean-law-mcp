@@ -135,7 +135,7 @@ export class LawApiClient {
    * @param target "law"=현행법령(기본), "eflaw"=시행일 기준(시행예정 포함)
    * @param nw eflaw 전용 현행연혁 필터 (1=연혁, 2=시행예정, 3=현행). 미지정이면 전체
    */
-  async searchLaw(query: string, apiKey?: string, display?: number, target: "law" | "eflaw" = "law", nw?: "1" | "2" | "3"): Promise<string> {
+  async searchLaw(query: string, apiKey?: string, display?: number, target: "law" | "eflaw" = "law", nw?: "1" | "2" | "3", page?: number): Promise<string> {
     // 공백 연속을 먼저 하나로 뭉친다. normalizeLawSearchText(LexDiff 원본, 수정 금지)의 정규식이
     // 공백 연속에 O(k²) 로 백트래킹해 10만 자 공백이면 15초가 걸렸다(2026-09-23 리뷰 C3).
     // 30만 건 차등 퍼징에서 출력 차이 0건.
@@ -151,6 +151,7 @@ export class LawApiClient {
     })
     if (display && display > 0) params.append("display", String(display))
     if (nw) params.append("nw", nw)
+    if (page && page > 1) params.append("page", String(page))
 
     const url = `${LAW_API_BASE}/lawSearch.do?${params.toString()}`
     const response = await fetchWithRetry(url, DRF_RETRY)

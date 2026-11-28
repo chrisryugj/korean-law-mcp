@@ -11,7 +11,7 @@
  */
 import type { ScenarioContext, ScenarioResult, ScenarioSection } from "./types.js"
 import type { HistoricalVersion } from "../../lib/historical-utils.js"
-import { fetchLawVersions, sameLawName, wholeRevisionLabel, wholeRevisionsBetween } from "../../lib/law-lineage.js"
+import { fetchLawVersions, sameLawName, todayKst, wholeRevisionLabel, wholeRevisionsBetween } from "../../lib/law-lineage.js"
 import { dateSchema } from "../../lib/schemas.js"
 import {
   changeExcerpt, diffArticles, displayJo, dot, excerptBudget, extractLawSnapshot,
@@ -67,14 +67,17 @@ export async function runTimeTravelScenario(ctx: ScenarioContext): Promise<Scena
   const sections: ScenarioSection[] = []
   const suggestedActions: string[] = []
 
-  const fromDate = ctx.extras?.fromDate as string | undefined
-  const toDate = ctx.extras?.toDate as string | undefined
+  // date: 그날 시행된 판과 직전 판 (연혁 전체를 받아 고른다)
+  const pointDate = ctx.extras?.date as string | undefined
+  const fromDate = (ctx.extras?.fromDate as string | undefined) || (pointDate ? "19000101" : undefined)
+  // toDate 를 비우면 오늘. "2023년이랑 지금이랑 뭐가 달라" (법제처 law-mcp compare_law_versions 와 같은 기본)
+  const toDate = (ctx.extras?.toDate as string | undefined) || pointDate || (fromDate ? todayKst() : undefined)
   const lawName = ctx.law?.lawName || ctx.query
 
   if (!fromDate || !toDate) {
     sections.push({
       title: "Time Travel — 시점 비교 (v4.0)",
-      content: "⚠️ fromDate(YYYYMMDD)와 toDate(YYYYMMDD)가 모두 필요합니다.\n예: chain_amendment_track query='관세법' scenario='time_travel' fromDate='20240101' toDate='20251101'",
+      content: "⚠️ fromDate(YYYYMMDD)가 필요합니다(toDate 를 비우면 오늘).\n예: chain_amendment_track query='관세법' scenario='time_travel' fromDate='20240101' toDate='20251101'",
     })
     return { sections, suggestedActions }
   }
@@ -114,8 +117,10 @@ export async function runTimeTravelScenario(ctx: ScenarioContext): Promise<Scena
     return { sections, suggestedActions }
   }
 
-  const oldVer = pickVersion(versions, fromDate)
   const newVer = pickVersion(versions, toDate)
+  const oldVer = pointDate && !ctx.extras?.fromDate && newVer
+    ? versions.slice(versions.indexOf(newVer) + 1).find(v => v.efYd < newVer.efYd)
+    : pickVersion(versions, fromDate)
 
   if (!oldVer || !newVer) {
     const earliest = versions[versions.length - 1]

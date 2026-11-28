@@ -40,3 +40,17 @@ describe("time_travel 날짜와 역구간", () => {
     expect(text).toContain("시점 B: 2024.01.01 시행 | MST old")
   })
 })
+
+describe("time_travel date·toDate 기본", () => {
+  it("date 는 그날 시행판과 직전 판을, toDate 를 비우면 오늘을 쓴다", async () => {
+    const ctx = context("", "")
+    ctx.extras = { date: "20250101" }
+    const text = (await runTimeTravelScenario(ctx)).sections.map(s => s.content).join("\n")
+    expect(text).toContain("MST old")
+    expect(text).toContain("MST new")
+    const today = context("20240601", "")
+    today.extras = { fromDate: "20240601" }
+    const t2 = (await runTimeTravelScenario(today)).sections.map(s => s.content).join("\n")
+    expect(t2).not.toContain("모두 필요합니다")
+  })
+})

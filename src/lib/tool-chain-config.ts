@@ -88,5 +88,7 @@ export const SEARCH_DETAIL_CHAINS: Record<string, SearchDetailChain> = {
     detailTool: "get_ordinance",
     detailParam: "ordinSeq",
     idRegex: BRACKET_ID,
+    // full = 20조 넘는 조례도 목차 대신 전 조문
+    supportsFull: true,
   },
 }

@@ -28,5 +28,9 @@ describe("get_law_text lawName·목차", () => {
     expect(t).toContain("목차 (총 24개 조문)")
     expect(t).toMatch(/제1장 총칙\n  제1조 조1/)
     expect(t).toMatch(/제2장 근로계약\n  제13조 조13/)
+    const part = (await getLawText(client, { lawName: "근로기준법", offset: 12, limit: 2 })).content[0].text
+    expect(part).toContain("12번째부터 2개")
+    expect(part).toMatch(/제2장 근로계약\n  제13조 조13\n  제14조 조14/)
+    expect(part).not.toContain("제1조 조1\n")
   })
 })

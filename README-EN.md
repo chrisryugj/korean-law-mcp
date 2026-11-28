@@ -363,7 +363,7 @@ Full tool reference: [docs/API.md](docs/API.md).
 
 ## Recent updates
 
-Current version **v4.15.33**. All numbers come from the measurements recorded in the [CHANGELOG](CHANGELOG.md).
+Current version **v4.15.34**. All numbers come from the measurements recorded in the [CHANGELOG](CHANGELOG.md).
 
 | Version | What changed | Measured change |
 |---------|--------------|-----------------|

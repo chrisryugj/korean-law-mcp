@@ -168,10 +168,10 @@ describe("#120 full 미지원 도구에서 의도가 무음 소멸하지 않는�
     expect(JSON.stringify(r.pipeline)).toContain("\"full\":true")
   })
 
-  it("full 을 받지 못하는 상세도구면 경고 표면화를 위해 표시를 남긴다", () => {
-    // 자치법규 상세(get_ordinance)는 full 을 받지 않는다
+  it("자치법규 상세(get_ordinance)는 full 을 받는다 (4.15.34): 조례 전문 요청이 전 조문으로 간다", () => {
     const r = routeQuery("서울시 주차 조례 전문 보여줘")
-    expect(r.unsupportedParams).toContain("full")
+    expect(r.unsupportedParams ?? []).not.toContain("full")
+    expect(JSON.stringify(r.pipeline)).toContain("\"full\":true")
   })
 })
 

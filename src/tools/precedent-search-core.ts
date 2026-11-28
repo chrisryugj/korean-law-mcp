@@ -165,6 +165,8 @@ async function runPrecedentSearchOnce(
   if (input.search === 2) extraParams.search = "2"
   if (input.caseNumber) extraParams.nb = input.caseNumber
   if (args.court) extraParams.curt = args.court
+  // 참조 법령(법제처 판례 목록 JO: 참조법령명). 판결 참조조문에 그 법령이 든 판례만
+  if (args.refLaw) extraParams.JO = args.refLaw
   if (args.sort) extraParams.sort = args.sort
   // 선고일 범위는 법제처에 넘긴다(prncYd). 종전엔 받아 온 한 페이지 안에서만 걸러, 오래된 기간을 물으면 최신 판례 한 페이지가
   // 다 걸러지고 「기간 밖 대체 결과」만 남았다(손해배상·대법원·2015년: 법제처 98건 → 우리 0건). 기간을 푼 재시도는 넘기지 않는다

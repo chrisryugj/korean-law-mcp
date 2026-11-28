@@ -656,6 +656,8 @@ export const chainAmendmentTrackSchema = z.object({
     .describe("[time_travel 전용] 비교 시작 시점 YYYYMMDD (예: '20240101')"),
   toDate: z.string().regex(/^\d{8}$/).optional()
     .describe("[time_travel 전용] 비교 종료 시점 YYYYMMDD (예: '20251101')"),
+  date: z.string().regex(/^\d{8}$/).optional()
+    .describe("[time_travel] 이 날 시행된 판과 그 직전 판을 비교 (fromDate·toDate 대신)"),
   includeHistory: z.boolean().optional().default(false)
     .describe("조문별 개정 이력(제정 시점부터 조문×개정 전건)을 함께 실을지. 기본 false — 실무에서 필요한 건 대개 최근 개정의 신구대조인데, 이 섹션이 응답 상한을 먼저 소진해 신구대조표가 잘린다 (#158)"),
   apiKey: z.string().optional(),
@@ -701,6 +703,7 @@ export async function chainAmendmentTrack(
     const extras: Record<string, unknown> = {}
     if (input.fromDate) extras.fromDate = input.fromDate
     if (input.toDate) extras.toDate = input.toDate
+    if (input.date) extras.date = input.date
 
     const [oldNew, history, sr] = await Promise.all([
       raceDeadline(dl, callTool(compareOldNew, apiClient, { ...id, apiKey: input.apiKey })),

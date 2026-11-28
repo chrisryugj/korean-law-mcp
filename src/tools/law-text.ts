@@ -24,6 +24,8 @@ export const GetLawTextSchema = z.object({
   lawId: z.string().optional().describe("법령ID"),
   lawName: z.string().optional().describe("법령명 (mst·lawId 대신, 예: '근로기준법'. 이름으로 찾아 현행 법령ID 로 조회)"),
   jo: z.string().optional().describe("조문 번호. 자연어 표기 권장 — '제38조'·'제148조의2'를 그대로 넣으면 서버가 변환한다. 6자리 JO 코드 직접 지정 시 조번호 4자리 zero-pad + 의X 2자리: 제38조→003800, 제10조의2→001002, 제234조의2→023402(234002 아님). '부칙' 이면 부칙 원문(최근 공포부터)"),
+  offset: z.number().min(0).optional().describe("목차(jo 없이 부를 때) 몇 번째 조부터 (0부터, 큰 법령 목차를 나눠 볼 때)"),
+  limit: z.number().min(1).max(2000).optional().describe("목차에 낼 조 수"),
   efYd: z.string().optional().describe("기준일 또는 시행일자 (YYYYMMDD). 시행일이면 그 버전, 시행일이 아닌 날짜(건축허가일·사건일 같은 조회 기준일)면 그날 시행 중이던 버전으로 자동 보정한다(제명이 바뀌기 전 버전 포함). 현행 본문은 efYd 없이 조회한다. 시행예정본은 그 시행일을 넣는다."),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달")
 }).refine(data => data.mst || data.lawId || data.lawName, {
@@ -79,7 +81,7 @@ async function renderLawText(apiClient: LawApiClient, input: GetLawTextInput, re
     // Check cache first (efYd 정규화: 미지정 → 'current'로 통일)
     // mst·lawId 는 번호 체계가 달라 같은 값이 다른 법령이다(001706: mst=사방사업법, lawId=민법) — 접두로 가른다
     // 보정 재조회(resolved)는 현행성 표기가 달라 직접 조회와 캐시를 나눈다
-    const cacheKey = `lawtext:${input.mst ? `m${input.mst}` : `i${input.lawId}`}:${wantAddenda ? "addenda" : joCode || 'full'}:${input.efYd || 'current'}${resolved ? `:${resolved}` : ""}`
+    const cacheKey = `lawtext:${input.mst ? `m${input.mst}` : `i${input.lawId}`}:${wantAddenda ? "addenda" : joCode || 'full'}:${input.efYd || 'current'}${resolved ? `:${resolved}` : ""}${input.offset !== undefined || input.limit !== undefined ? `:toc${input.offset ?? 0}-${input.limit ?? ""}` : ""}`
     // MST·efYd 는 버전을 못박으므로 하루를 둔다. lawId 만 준 "현행" 조회는 개정 시행일을 넘기면
     // 다른 본문이 현행이 되므로 1시간만 둔다(24시간이면 시행일 당일 옛 본문이 나갔다, 리뷰 A8).
     const cacheTtl = input.mst || input.efYd ? 24 * 60 * 60 * 1000 : 60 * 60 * 1000
@@ -311,8 +313,23 @@ async function renderLawText(apiClient: LawApiClient, input: GetLawTextInput, re
       }
 
       let tocText = resultText
-      tocText += `목차 (총 ${tocItems.length}개 조문)\n\n`
-      tocText += (tocLines.length > tocItems.length ? tocLines : tocItems).join("\n")
+      // offset·limit 은 조 기준. 장 머리 줄은 그 장의 첫 조와 함께 나온다
+      const lines = tocLines.length > tocItems.length ? tocLines : tocItems
+      let shown = lines
+      if (input.offset !== undefined || input.limit !== undefined) {
+        const from = input.offset ?? 0, to = from + (input.limit ?? tocItems.length)
+        let k = -1
+        const pendingHeads: string[] = []
+        shown = []
+        for (const l of lines) {
+          if (!/^\s*제\s*\d+\s*조/.test(l)) { pendingHeads.push(l); continue }
+          k++
+          if (k >= from && k < to) { shown.push(...pendingHeads, l) }
+          pendingHeads.length = 0
+        }
+      }
+      tocText += `목차 (총 ${tocItems.length}개 조문${shown !== lines ? `, ${input.offset ?? 0}번째부터 ${shown.filter(l => /^\s*제\s*\d+\s*조/.test(l)).length}개` : ""})\n\n`
+      tocText += shown.join("\n")
       tocText += `\n\n특정 조문 조회: get_law_text(`
       if (input.mst) {
         tocText += `mst="${input.mst}", jo="제XX조")`

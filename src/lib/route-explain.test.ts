@@ -8,8 +8,8 @@ import { parseDateRange } from "./date-parser.js"
 
 describe("#142 설명기가 CLI 본 출력과 같은 정보를 보여준다", () => {
   it("미지원 파라미터를 표시한다", () => {
-    // 자치법규 상세(get_ordinance)는 full 을 받지 않는다
-    const q = "서울시 주차 조례 전문 보여줘"
+    // 법령해석례 상세(get_interpretation_text)는 full 을 받지 않는다 (자치법규 상세는 4.15.34 부터 받는다)
+    const q = "근로기준법 해석례 전문 보여줘"
     expect(routeQuery(q).unsupportedParams).toContain("full")
     expect(explainRoute(q)).toContain("full")
   })
