@@ -98,9 +98,13 @@ describe("선고일 범위는 법제처에 넘긴다 (prncYd)", () => {
 })
 
 describe("참조 법령 필터", () => {
-  it("refLaw 를 JO 로 넘긴다", async () => {
+  it("refLaw 를 JO 로 넘기고, 검색어는 넘기지 않고 받아 온 판례 사건명에서 거른다", async () => {
     const { fetchApi, client } = api()
-    await searchPrecedentsStructured(client, { query: "해고", refLaw: "근로기준법", display: 20, page: 1 })
-    expect(fetchApi.mock.calls[0][0].extraParams.JO).toBe("근로기준법")
+    const r = await searchPrecedentsStructured(client, { query: "퇴직금", refLaw: "근로기준법", display: 20, page: 1 })
+    const p = fetchApi.mock.calls[0][0].extraParams
+    expect(p.JO).toBe("근로기준법")
+    expect(p.query).toBeUndefined()
+    expect(p.display).toBe("100")
+    expect(r.hits.map(h => h.title)).toEqual(["퇴직금"])
   })
 })

@@ -157,11 +157,14 @@ async function runPrecedentSearchOnce(
   args: SearchPrecedentsInput,
   input: SearchOnceInput
 ): Promise<SearchOnceResult> {
+  // 참조 법령과 검색어를 함께 넘기면 법제처가 둘을 엉뚱하게 섞는다(해고+근로기준법 → 1970년 판례 1건, 참조 법령만이면 3,141건).
+  // 참조 법령이 있으면 검색어는 넘기지 않고, 받아 온 판례(100건)의 사건명에서 거른다
+  const refFilter = args.refLaw && input.query && !input.caseNumber ? input.query.trim().split(/\s+/).filter(Boolean) : undefined
   const extraParams: Record<string, string> = {
-    display: String(args.display || 20),
+    display: refFilter ? "100" : String(args.display || 20),
     page: String(args.page || 1),
   }
-  if (input.query) extraParams.query = input.query
+  if (input.query && !args.refLaw) extraParams.query = input.query
   if (input.search === 2) extraParams.search = "2"
   if (input.caseNumber) extraParams.nb = input.caseNumber
   if (args.court) extraParams.curt = args.court
@@ -181,7 +184,9 @@ async function runPrecedentSearchOnce(
   const parsed = parsePrecedentXML(xmlText)
   const items = input.caseNumber
     ? parsed.items.filter(item => fieldHasExactCase(item.사건번호 || "", input.caseNumber!))
-    : parsed.items
+    : refFilter
+      ? parsed.items.filter(item => refFilter.every(w => (item.판례명 || "").includes(w))).slice(0, args.display || 20)
+      : parsed.items
   const rawHits = items.map(item => toHit(item, input.query, input.search, input.semanticAnchor))
   const hits = input.relaxDateRange || !hasDateRange(args)
     ? markDateRelaxed(rawHits, args)
@@ -194,7 +199,7 @@ async function runPrecedentSearchOnce(
     fromDate: args.fromDate,
     toDate: args.toDate,
     reason: input.reason,
-    totalCount: input.caseNumber ? items.length : parsed.totalCnt,
+    totalCount: input.caseNumber || refFilter ? items.length : parsed.totalCnt,
     hitCount: hits.length,
     success: hits.length > 0,
     outOfRequestedDateRange: input.relaxDateRange ? hits.some(hit => hit.outOfRequestedDateRange) : undefined,
